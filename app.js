@@ -8,7 +8,7 @@ const S = {
   niveau:'Terminale', matiere:null, qcmIdx:0, qcmRep:undefined, qcmJustes:0, qcmSerie:0,
   voirClassement:false, voirDiagnostic:false, voirDefi:false, voirBadges:false,
   util:{nom:'', tel:'', pin:'', connecte:false},
-  form:{nom:'', tel:'', pin:''}, erreur:'',
+  form:{nom:'', tel:'', pin:'', pin2:'', couleur:''}, codeVisible:false, erreur:'',
   abo:{actif:true, formule:'Semaine gratuite', echeance:'encore 7 jours'},
   theme:'sombre', sessionCounter:0, cahierDepuisGrille:false,
   modal:null, modalDejaVu:false,
@@ -153,6 +153,17 @@ function sonFaux(){
   o.connect(g); g.connect(a.destination);
   o.start(t); o.stop(t + 0.32);
 }
+function signalCandidat(txt){
+  const z = document.getElementById('annonce');
+  if(z) z.textContent = txt;
+  const b = document.createElement('div');
+  b.className = 'message-flottant';
+  b.textContent = txt;
+  document.body.appendChild(b);
+  setTimeout(() => b.classList.add('vu'), 20);
+  setTimeout(() => { b.classList.remove('vu'); setTimeout(() => b.remove(), 400); }, 3600);
+}
+
 function annonceTemps(txt){
   const z = document.getElementById('sonnerie');
   if(!z) return;
@@ -466,6 +477,13 @@ function ecranResultat(){
 const CORRESPONDANCE = { 'Sciences de la vie':'SVT', 'Institutions et AES':'Institutions' };
 const nomApp = n => CORRESPONDANCE[n] || n;
 
+function melangerComposition(){
+  for(let i = S.grille.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [S.grille[i], S.grille[j]] = [S.grille[j], S.grille[i]];
+  }
+}
+
 async function chargerQuestions(){
   if(!base) return;
   try{
@@ -584,8 +602,8 @@ async function creerCompte(nom, tel, pin){
   const { data, error } = await base.auth.signUp({
     email: adresseTechnique(tel),
     password: motDePasse(tel, pin),
-    options: { data: { nom, telephone: tel, niveau: S.niveau.toLowerCase()
-      .normalize('NFD').replace(/[\u0300-\u036f]/g,'') } }
+    options: { data: { nom, telephone: tel, couleur: (S.form.couleur||'').toLowerCase(),
+      niveau: S.niveau.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'') } }
   });
   if(error){
     if(/already registered|already been/i.test(error.message))
@@ -637,33 +655,44 @@ const BASE_URL = 'https://uonhpsumbfuahipbdjnu.supabase.co';
 const BASE_CLE = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVvbmhwc3VtYmZ1YWhpcGJkam51Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYxMjg1MTQsImV4cCI6MjEwMTcwNDUxNH0.UR2CSJaK0AyyIRDzDBoALcU7OeE9SdQESHI9ASZMYIk';
 
 let base = null;
-try{
-  if(typeof supabase !== 'undefined' && supabase.createClient){
-    base = supabase.createClient(BASE_URL, BASE_CLE, { auth: { persistSession: false } });
-  }
-}catch(e){ base = null; }
+
+/* La base arrive après le premier affichage : l'application est
+   utilisable immédiatement, sans attendre le réseau. */
+function brancherBase(){
+  if(base) return;
+  try{
+    if(typeof supabase === 'undefined' || !supabase.createClient) return;
+    base = supabase.createClient(BASE_URL, BASE_CLE, { auth: { persistSession: true } });
+  }catch(e){ base = null; return; }
+
+  /* on étale les appels pour ne pas saturer une connexion lente */
+  ouvrirSessionObservation();
+  chargerActualites();
+  reprendreSession();
+  setTimeout(chargerQuestions, 400);
+  setTimeout(chargerRessources, 1200);
+}
 
 
 /* =====================================================================
    OBSERVATION — collecte des événements
-   Rien de personnel n'est enregistré : ni saisie, ni mot de passe,
-   ni position. Seulement ce qui est fait, où, et quand.
+   Rien de personnel : ni saisie, ni mot de passe, ni position.
    ===================================================================== */
-const VERSION_APP = 'v8-analytics';
+const VERSION_APP = 'v10';
 
 const O = {
-  session: null,
-  precedent: null,
-  dernierTemps: Date.now(),
-  entreeEcran: Date.now(),
-  file: [],
-  actif: true,
-  dureeActive: 0,
-  nbEcrans: 0,
-  nbActions: 0,
-  demarree: false
+  session: null, precedent: null, dernierTemps: Date.now(), entreeEcran: Date.now(),
+  dernierEcran: null, file: [], actif: true, dureeActive: 0,
+  nbEcrans: 0, nbActions: 0, demarree: false, rattachee: false
 };
 
+function identifiant(){
+  try{ if(window.crypto && crypto.randomUUID) return crypto.randomUUID(); }catch(e){}
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random()*16|0, v = c === 'x' ? r : (r&0x3|0x8);
+    return v.toString(16);
+  });
+}
 function appareil(){
   const l = window.innerWidth;
   if(l < 700) return 'mobile';
@@ -689,52 +718,40 @@ function systeme(){
   return 'autre';
 }
 
-function identifiant(){
-  try{ if(crypto && crypto.randomUUID) return crypto.randomUUID(); }catch(e){}
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-    const r = Math.random()*16|0, v = c === 'x' ? r : (r&0x3|0x8);
-    return v.toString(16);
-  });
-}
-
 async function ouvrirSessionObservation(){
   if(!base || O.demarree) return;
   O.demarree = true;
   O.session = identifiant();
   try{
     await base.from('sessions').insert({
-      id: O.session,
-      appareil: appareil(), navigateur: navigateur(), systeme: systeme(),
-      version_app: VERSION_APP, langue: navigator.language,
-      largeur: window.innerWidth, premiere_visite: !document.referrer,
-      source: document.referrer ? 'lien' : 'direct'
+      id: O.session, appareil: appareil(), navigateur: navigateur(), systeme: systeme(),
+      version_app: VERSION_APP, langue: navigator.language, largeur: window.innerWidth,
+      premiere_visite: !document.referrer, source: document.referrer ? 'lien' : 'direct'
     });
-  }catch(e){ /* l'application continue sans observation */ }
+  }catch(e){}
   pister(document.referrer ? 'USER_RETURNED' : 'USER_FIRST_VISIT');
   pister('SESSION_STARTED');
 }
 
-/* dépôt d'un événement — jamais bloquant */
 function pister(nom, meta, element){
-  if(!base) return;
   const maintenant = Date.now();
   const delta = maintenant - O.dernierTemps;
   O.dernierTemps = maintenant;
   O.nbActions++;
-
   O.file.push({
     cree_le: new Date(maintenant).toISOString(),
     session_id: O.session, nom: nom, ecran: S.ecran,
     element: element || (meta && meta.element) || null,
-    meta: meta || null, precedent: O.precedent, delta_ms: Math.min(delta, 3600000),
-    version_app: VERSION_APP
+    meta: meta || null, precedent: O.precedent,
+    delta_ms: Math.min(delta, 3600000), version_app: VERSION_APP
   });
   O.precedent = nom;
-  if(O.file.length >= 8) viderFile();
+  if(O.file.length > 200) O.file.splice(0, O.file.length - 200);
+  if(base && O.file.length >= 8) viderFile();
 }
 
 async function viderFile(){
-  if(!base || !O.file.length) return;
+  if(!base || !O.file.length || !O.session) return;
   const lot = O.file.splice(0, O.file.length);
   try{
     const { data } = await base.auth.getSession();
@@ -744,27 +761,23 @@ async function viderFile(){
       base.from('sessions').update({ user_id: uid }).eq('id', O.session);
     }
     await base.from('evenements').insert(lot.map(e => ({ ...e, user_id: uid, session_id: O.session })));
-  }catch(e){ /* on abandonne ce lot plutôt que de gêner le candidat */ }
+  }catch(e){}
 }
 
-/* fermeture propre */
 function fermerSession(){
   pister('SESSION_ENDED', { duree_active_s: Math.round(O.dureeActive/1000) });
   if(base && O.session){
     try{
-      const charge = JSON.stringify({ evenements: O.file, session: O.session });
-      navigator.sendBeacon && navigator.sendBeacon('data:,' + encodeURIComponent(charge));
+      base.from('sessions').update({
+        fin_le: new Date().toISOString(),
+        duree_active_s: Math.round(O.dureeActive/1000),
+        nb_ecrans: O.nbEcrans, nb_actions: O.nbActions
+      }).eq('id', O.session);
     }catch(e){}
-    base.from('sessions').update({
-      fin_le: new Date().toISOString(),
-      duree_active_s: Math.round(O.dureeActive/1000),
-      nb_ecrans: O.nbEcrans, nb_actions: O.nbActions
-    }).eq('id', O.session);
   }
   viderFile();
 }
 
-/* activité réelle : un onglet ouvert ne veut pas dire qu'on lit */
 setInterval(() => {
   if(document.visibilityState === 'visible' && O.actif) O.dureeActive += 5000;
 }, 5000);
@@ -777,13 +790,10 @@ document.addEventListener('visibilitychange', () => {
 });
 window.addEventListener('pagehide', fermerSession);
 setInterval(viderFile, 15000);
-
-/* erreurs techniques */
 window.addEventListener('error', e => {
-  pister('ERROR_OCCURRED', { message: String(e.message).slice(0,200), fichier: 'app' });
+  pister('ERROR_OCCURRED', { message: String(e.message).slice(0,200) });
 });
 
-/* profondeur de défilement */
 let profondeurVue = 0;
 document.addEventListener('scroll', () => {
   const v = document.getElementById('vue');
@@ -808,7 +818,6 @@ async function utilisateurCourant(){
   }catch(e){ return null; }
 }
 
-/* une réponse à une question, quel que soit l'endroit */
 async function noterTentative(contexte, enonce, choix, correcte, tempsMs, position){
   if(!base) return;
   try{
@@ -825,9 +834,9 @@ async function noterTentative(contexte, enonce, choix, correcte, tempsMs, positi
         user_id: uid, question_id: q.id, origine: contexte,
         revoir_le: new Date().toISOString().slice(0,10),
         derniere_erreur: new Date().toISOString()
-      }, { onConflict: 'user_id,question_id', ignoreDuplicates: false });
+      }, { onConflict: 'user_id,question_id' });
     }
-    if(uid) await marquerAssiduite();
+    if(uid) marquerAssiduite();
   }catch(e){}
 }
 
@@ -847,7 +856,6 @@ async function ajouterPoints(motif, reference){
   catch(e){}
 }
 
-/* composition : ouverture, avancement, remise */
 let ouvertureEnCours = false;
 async function ouvrirComposition(){
   if(ouvertureEnCours || S.compositionId) return;
@@ -875,17 +883,18 @@ async function majComposition(){
 
 async function cloturerComposition(note){
   if(!base || !S.compositionId) return;
+  const id = S.compositionId;
   try{
     await base.from('compositions').update({
       fin_le: new Date().toISOString(), terminee: true, score: note,
-      nb_traitees: Object.keys(S.reponses).length,
-      duree_secondes: 1500 - S.chrono
-    }).eq('id', S.compositionId);
-    await ajouterPoints('composition', S.compositionId);
+      nb_traitees: Object.keys(S.reponses).length, duree_secondes: 1500 - S.chrono
+    }).eq('id', id);
+    await ajouterPoints('composition', id);
     await marquerAssiduite();
   }catch(e){}
   S.compositionId = null;
 }
+
 
 async function chargerActualites(){
   if(!base) return;
@@ -998,6 +1007,8 @@ function ecranAujourdhui(){
       <span class="sous-titre">National et international · 3 min</span>
     </div>
 
+    <div class="colonnes">
+    <div>
     ${enCours?`
     <button class="reprise-compo" data-go="grille">
       <div class="rc-tete">Vous avez une composition en cours</div>
@@ -1014,6 +1025,8 @@ function ecranAujourdhui(){
       <button class="voirplus" data-go="actualite">VOIR PLUS →</button>
     </div>
 
+    </div>
+    <div>
     <div class="bloc">
       <div class="libelle">Vos tâches du jour<span class="num">${f}/3</span></div>
       <div class="carte">
@@ -1040,7 +1053,8 @@ function ecranAujourdhui(){
         : (!S.taches[1] ? `<button class="cta" data-go="grille" style="margin-top:12px">Passer l'examen national<small>Tâche 2 sur 3 · la composition</small></button>`
         : `<button class="cta" data-cahierfreq="1" style="margin-top:12px">Revoir mes erreurs fréquentes<small>Tâche 3 sur 3</small></button>`)}
     </div>
-
+    </div>
+    </div>
   </div>`;
 }
 
@@ -1840,7 +1854,8 @@ function ecranCopie(){
     </div>
 
     <button class="cta" data-erreursdusoir="1" style="margin-top:16px">Voir mes erreurs<small>${ouvertes()} en attente, celles d'aujourd'hui d'abord</small></button>
-    <button class="cta creux" data-recommencer="1" style="margin-top:9px">Recomposer la Grille</button>
+    <button class="cta creux" data-recommencer="meme" style="margin-top:9px">Refaire la composition<small>Le même sujet, pour corriger tes erreurs</small></button>
+    <button class="cta creux" data-recommencer="neuve" style="margin-top:9px">Refaire une nouvelle composition<small>Un autre tirage de questions</small></button>
   </div>`;
 }
 
@@ -1882,7 +1897,7 @@ function ecranCahier(){
           <div class="pied">
             <span class="echeance ${j===0?'du':''}">${j===0?'À REPRENDRE AUJOURD\'HUI':'DANS '+j+' JOUR'+(j>1?'S':'')}</span>
             <span class="acquis">${[0,1,2].map(i=>`<i class="${i<e.suite?'on':''}"></i>`).join('')}</span>
-            <button class="reprendre" data-reprise="${idx}">${j===0?'Reprendre':'Anticiper'}</button>
+            <button class="reprendre ${j===0?'':'valider'}" data-reprise="${idx}">${j===0?'Reprendre':'Valider'}</button>
           </div>
         </div>`;
       }).join('')}
@@ -2180,37 +2195,81 @@ function basculerTheme(){
 }
 
 /* --- surcouche d'inscription différée --- */
+const COULEURS = ['Rouge','Bleu','Vert','Jaune','Orange','Noir','Blanc','Marron','Violet'];
+
 function surcouche(){
   const v = document.getElementById('voile');
-  if(!S.modal){ v.hidden = true; v.innerHTML=''; return; }
-  const inscription = S.modal === 'inscription';
+  if(!S.modal || (S.util.connecte && S.modal !== 'oubli')){ v.hidden = true; v.innerHTML=''; return; }
+
+  const mode = S.modal;                       // inscription · connexion · oubli
+  const titres = { inscription:'Inscription', connexion:'Connexion', oubli:'Code oublié' };
+  const intros = {
+    inscription:"Crée ton compte pour garder tes erreurs, ton classement et ta progression. C'est gratuit et ça prend trente secondes.",
+    connexion:"Entre ton numéro et ton code pour retrouver ta progression.",
+    oubli:"Donne ton numéro et la couleur choisie à l'inscription, puis choisis un nouveau code."
+  };
+
   v.hidden = false;
   v.innerHTML = `
-  <div class="panneau" role="dialog" aria-modal="true" aria-label="${inscription?'Créer un compte':'Se connecter'}">
+  <div class="panneau" role="dialog" aria-modal="true" aria-label="${titres[mode]}">
     <div class="poignee"></div>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">${logoSvg(30)}
       <span style="font-family:var(--d);font-weight:800;font-size:15px">MON <i style="font-style:normal;color:var(--laterite)">CONCOURS</i></span></div>
-    <h3>${inscription?'Garde ton résultat':'Content de te revoir'}</h3>
-    <p class="intro">${inscription
-      ? 'Crée ton compte pour retrouver tes erreurs, ton classement et ta série sur n\'importe quel téléphone.'
-      : 'Ton compte te rend ta progression exactement là où tu l\'avais laissée.'}</p>
+
+    <div class="titre-panneau">${titres[mode]}</div>
+    <p class="intro">${intros[mode]}</p>
 
     ${S.erreur?`<div class="alerte" role="alert">${S.erreur}</div>`:''}
 
-    ${inscription?`
-    <div class="champ"><label for="m-nom">Nom et prénom</label>
-      <input id="m-nom" type="text" value="${S.form.nom}" placeholder="Kantagba Jean" oninput="maj('nom',this.value)" autocomplete="name"></div>`:''}
+    ${mode === 'inscription' ? `
+      <div class="champ"><label for="m-nom">Nom et prénom</label>
+        <input id="m-nom" type="text" value="${S.form.nom}" placeholder="Kantagba Jean" oninput="maj('nom',this.value)" autocomplete="name"></div>` : ''}
+
     <div class="champ"><label for="m-tel">Numéro de téléphone</label>
       <div class="prefixe"><span class="ind">+226</span>
         <input id="m-tel" type="tel" inputmode="numeric" maxlength="8" value="${S.form.tel}" placeholder="70 00 00 00" oninput="maj('tel',this.value)" autocomplete="tel"></div></div>
-    <div class="champ"><label for="m-pin">Code secret à 4 chiffres</label>
-      <input id="m-pin" type="password" inputmode="numeric" maxlength="4" value="${S.form.pin}" placeholder="••••" oninput="maj('pin',this.value)"></div>
 
-    <button class="cta" data-${inscription?'inscrire':'connecter'}="1">${inscription?'Créer mon compte':'Me connecter'}<small>Semaine gratuite · aucune carte bancaire</small></button>
-    <button class="lien" data-bascule="${inscription?'connexion':'inscription'}">${inscription?"J'ai déjà un compte":'Créer un compte'}</button>
-    <button class="plustard" data-plustard="1">Plus tard</button>
+    ${mode === 'oubli' ? `
+      <div class="champ"><label for="m-couleur">Ta couleur préférée</label>
+        <select id="m-couleur" onchange="maj('couleur',this.value)">
+          <option value="">— choisis —</option>
+          ${COULEURS.map(c=>`<option value="${c}" ${S.form.couleur===c?'selected':''}>${c}</option>`).join('')}
+        </select></div>` : ''}
+
+    <div class="champ"><label for="m-pin">${mode==='oubli'?'Nouveau code à 4 chiffres':'Code secret à 4 chiffres'}</label>
+      <div class="avec-oeil">
+        <input id="m-pin" type="${S.codeVisible?'text':'password'}" inputmode="numeric" maxlength="4"
+          value="${S.form.pin}" placeholder="••••" oninput="maj('pin',this.value)">
+        <button class="oeil" data-oeil="1" aria-label="${S.codeVisible?'Masquer le code':'Afficher le code'}">${S.codeVisible?'masquer':'voir'}</button>
+      </div></div>
+
+    ${(mode === 'inscription' || mode === 'oubli') ? `
+      <div class="champ"><label for="m-pin2">Confirme le code</label>
+        <input id="m-pin2" type="${S.codeVisible?'text':'password'}" inputmode="numeric" maxlength="4"
+          value="${S.form.pin2||''}" placeholder="••••" oninput="maj('pin2',this.value)"></div>` : ''}
+
+    ${mode === 'inscription' ? `
+      <div class="champ"><label for="m-couleur">Ta couleur préférée</label>
+        <select id="m-couleur" onchange="maj('couleur',this.value)">
+          <option value="">— choisis —</option>
+          ${COULEURS.map(c=>`<option value="${c}" ${S.form.couleur===c?'selected':''}>${c}</option>`).join('')}
+        </select>
+        <div class="aide">Elle servira à retrouver ton code si tu l'oublies. Choisis-en une dont tu te souviendras.</div></div>` : ''}
+
+    <button class="cta" data-${mode === 'inscription' ? 'inscrire' : mode === 'connexion' ? 'connecter' : 'reinitialiser'}="1">
+      ${mode === 'inscription' ? 'Créer mon compte' : mode === 'connexion' ? 'Me connecter' : 'Changer mon code'}
+      ${mode === 'inscription' ? '<small>Gratuit · aucune carte bancaire</small>' : ''}</button>
+
+    ${mode === 'inscription'
+      ? `<button class="lien" data-bascule="connexion">J'ai déjà un compte</button>`
+      : mode === 'connexion'
+        ? `<button class="lien" data-bascule="inscription">Créer un compte</button>
+           <button class="lien" data-bascule="oubli">J'ai oublié mon code</button>`
+        : `<button class="lien" data-bascule="connexion">Revenir à la connexion</button>`}
   </div>`;
 }
+
+
 function ecranApparence(){
   vue().innerHTML = `
   <div class="pad">
@@ -2225,11 +2284,12 @@ function ecranApparence(){
     </button>
     <button class="theme-carte ${S.theme==='clair'?'on':''}" data-theme-choix="clair" aria-pressed="${S.theme==='clair'}">
       ${S.theme==='clair'?'<span class="coche">ACTIF</span>':''}
-      <div class="demo"><i style="background:#F7F1E2"></i><i style="background:#FFFFFF"></i><i style="background:#C4552E"></i></div>
-      <b>Mode clair</b><span>Fond crème, cartes blanches, texte noir, mêmes couleurs</span>
+      <div class="demo"><i style="background:#F3F0E8"></i><i style="background:#FFFDFA"></i><i style="background:#A8401E"></i></div>
+      <b>Mode clair</b><span>Fond crème, cartes claires, texte noir, mêmes couleurs</span>
     </button>
   </div>`;
 }
+
 function rendre(){
   appliquerTheme();
   if(typeof pister === 'function' && S.ecran !== O.dernierEcran){
@@ -2251,7 +2311,7 @@ function rendre(){
 }
 
 document.addEventListener('click', ev=>{
-  const t = ev.target.closest('[data-lire],[data-telecharger],[data-apercu],[data-saut],[data-compotab],[data-bascule-theme],[data-modal],[data-entrer],[data-bascule],[data-plustard],[data-deconnecter],[data-theme-choix],[data-erreursdusoir],[data-cible],[data-cours],[data-inscrire],[data-connecter],[data-oubli],[data-formule],[data-operateur],[data-payer],[data-paiefin],[data-paieannul],[data-go],[data-toutcahier],[data-actu],[data-niv],[data-mat],[data-qcm],[data-qsuiv],[data-cahierfreq],[data-classement],[data-diagnostic],[data-defi],[data-duel],[data-badges],[data-phase],[data-conc],[data-dep],[data-test],[data-tb],[data-tremettre],[data-retest],[data-seance],[data-rep],[data-suivante],[data-b],[data-remettre],[data-recommencer],[data-reprise],[data-rr],[data-fin-reprise]');
+  const t = ev.target.closest('[data-oeil],[data-reinitialiser],[data-lire],[data-telecharger],[data-apercu],[data-saut],[data-compotab],[data-bascule-theme],[data-modal],[data-entrer],[data-bascule],[data-plustard],[data-deconnecter],[data-theme-choix],[data-erreursdusoir],[data-cible],[data-cours],[data-inscrire],[data-connecter],[data-oubli],[data-formule],[data-operateur],[data-payer],[data-paiefin],[data-paieannul],[data-go],[data-toutcahier],[data-actu],[data-niv],[data-mat],[data-qcm],[data-qsuiv],[data-cahierfreq],[data-classement],[data-diagnostic],[data-defi],[data-duel],[data-badges],[data-phase],[data-conc],[data-dep],[data-test],[data-tb],[data-tremettre],[data-retest],[data-seance],[data-rep],[data-suivante],[data-b],[data-remettre],[data-recommencer],[data-reprise],[data-rr],[data-fin-reprise]');
   if(!t) return;
   const d = t.dataset;
 
@@ -2269,9 +2329,12 @@ document.addEventListener('click', ev=>{
 
   if(d.inscrire){
     const f = S.form, tel = f.tel.replace(/\D/g,''), pin = f.pin.replace(/\D/g,'');
+    const pin2 = (f.pin2 || '').replace(/\D/g,'');
     if(f.nom.trim().length < 3) S.erreur = "Écris ton nom et ton prénom.";
     else if(tel.length !== 8) S.erreur = "Le numéro doit comporter 8 chiffres.";
     else if(pin.length !== 4) S.erreur = "Le code secret doit comporter 4 chiffres.";
+    else if(pin !== pin2) S.erreur = "Les deux codes ne sont pas identiques.";
+    else if(!f.couleur) S.erreur = "Choisis ta couleur préférée : elle servira si tu oublies ton code.";
     else {
       S.erreur = 'Création du compte…'; surcouche();
       creerCompte(f.nom.trim(), tel, pin).then(r => {
@@ -2326,7 +2389,27 @@ document.addEventListener('click', ev=>{
     return;
   }
   if(d.bascule){ S.modal = d.bascule; S.erreur=''; return surcouche(); }
-  if(d.plustard){ S.modal = null; S.erreur=''; return surcouche(); }
+  if(d.oeil){ S.codeVisible = !S.codeVisible; return surcouche(); }
+  if(d.reinitialiser){
+    const tel = S.form.tel.replace(/\D/g,''), pin = S.form.pin.replace(/\D/g,''), pin2 = (S.form.pin2||'').replace(/\D/g,'');
+    if(tel.length !== 8) S.erreur = "Le numéro doit comporter 8 chiffres.";
+    else if(!S.form.couleur) S.erreur = "Choisis la couleur donnée à l'inscription.";
+    else if(pin.length !== 4) S.erreur = "Le nouveau code doit comporter 4 chiffres.";
+    else if(pin !== pin2) S.erreur = "Les deux codes ne sont pas identiques.";
+    else {
+      S.erreur = 'Vérification…'; surcouche();
+      base.rpc('reinitialiser_code', { p_telephone: tel, p_couleur: S.form.couleur, p_nouveau: pin })
+        .then(r => {
+          const d2 = r.data || {};
+          if(!d2.ok){ S.erreur = d2.message || "Impossible de changer le code."; return surcouche(); }
+          S.erreur = ''; S.modal = 'connexion'; S.form.pin = ''; S.form.pin2 = '';
+          surcouche();
+          signalCandidat('Code changé. Connecte-toi avec le nouveau code.');
+        });
+      return;
+    }
+    return surcouche();
+  }
   if(d.toutcahier){ S.cahierFiltre=false; S.cahierDepuisGrille=false; return rendre(); }
   if(d.actu){ S.actuOnglet = d.actu; return rendre(); }
   if(d.niv){ S.niveau = d.niv; S.ressources = null; chargerRessources(); return rendre(); }
@@ -2443,7 +2526,14 @@ document.addEventListener('click', ev=>{
   if(d.remettre) return remettre();
 
   if(d.recommencer){
-    S.reponses={}; S.corrige=false; S.chrono=1500; S.grilleNote=null; S.compoTab='feuille'; S.sujetVu=false; S.apercu=null; return aller('grille');
+    S.reponses={}; S.corrige=false; S.chrono=1500; S.grilleNote=null;
+    S.compoTab='feuille'; S.sujetVu=false; S.apercu=null; S.compositionId=null;
+    pister('COMPOSITION_RESTARTED', { type: d.recommencer });
+    if(d.recommencer === 'neuve'){
+      melangerComposition();
+      signalCandidat('Nouveau tirage de questions.');
+    }
+    return aller('grille');
   }
 
   if(d.reprise !== undefined){ repriseIdx=+d.reprise; repriseRep=undefined; return rendre(); }
@@ -2468,8 +2558,3 @@ document.addEventListener('click', ev=>{
 });
 
 rendre();
-ouvrirSessionObservation();
-chargerActualites();
-chargerQuestions();
-chargerRessources();
-reprendreSession();
