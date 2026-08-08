@@ -514,10 +514,11 @@ async function chargerQuestions(){
       }
     }
 
-    /* --- la banque de révisions --- */
+    /* --- la banque de révisions, au niveau choisi --- */
+    const niv = S.niveau.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
     const { data: qs } = await base.from('questions')
       .select('enonce, explication, matieres(nom), question_options(position, texte, est_correcte)')
-      .eq('statut', 'publie').eq('source', 'cours').limit(500);
+      .eq('statut', 'publie').eq('source', 'cours').eq('niveau', niv).limit(500);
 
     if(qs && qs.length){
       const parMatiere = {};
@@ -2412,7 +2413,12 @@ document.addEventListener('click', ev=>{
   }
   if(d.toutcahier){ S.cahierFiltre=false; S.cahierDepuisGrille=false; return rendre(); }
   if(d.actu){ S.actuOnglet = d.actu; return rendre(); }
-  if(d.niv){ S.niveau = d.niv; S.ressources = null; chargerRessources(); return rendre(); }
+  if(d.niv){
+    S.niveau = d.niv; S.ressources = null;
+    chargerRessources(); chargerQuestions();
+    pister('LEVEL_CHANGED', { niveau: d.niv });
+    return rendre();
+  }
   if(d.lire){ S.ressourceOuverte = d.lire; pister('COURSE_OPENED'); return aller('lecture'); }
   if(d.telecharger){ telechargerRessource(d.telecharger); return; }
   if(d.mat){
