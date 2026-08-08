@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mon Concours — administration</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="admin.css">
+</head>
+<body>
+
+<!-- ---------- écran de connexion ---------- -->
+<div class="portail" id="portail">
+  <div class="carte-portail">
+    <div class="marque">
+      <svg width="38" height="38" viewBox="0 0 34 34" aria-hidden="true">
+        <rect x="1" y="1" width="32" height="32" rx="9" fill="#C4552E"/>
+        <circle cx="11" cy="11" r="4.1" fill="#0F1513"/>
+        <circle cx="23" cy="11" r="4.1" fill="none" stroke="#0F1513" stroke-width="1.7"/>
+        <circle cx="11" cy="23" r="4.1" fill="none" stroke="#0F1513" stroke-width="1.7"/>
+        <circle cx="23" cy="23" r="4.1" fill="#0F1513"/>
+      </svg>
+      <div><div class="mot">MON <i>CONCOURS</i></div>
+        <div class="devise">Espace d'administration</div></div>
+    </div>
+
+    <h1>Connexion</h1>
+    <p class="aide">Réservé à l'équipe éditoriale. Chaque publication est enregistrée sous votre nom.</p>
+
+    <div class="alerte" id="err-connexion" hidden></div>
+
+    <label for="email">Adresse e-mail</label>
+    <input id="email" type="email" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="vous@monconcours.bf">
+
+    <label for="motdepasse">Mot de passe</label>
+    <input id="motdepasse" type="password" autocomplete="current-password" placeholder="••••••••">
+
+    <button class="cta" id="btn-connexion">Me connecter</button>
+    <p class="aide petit">Pas encore de compte ? Créez-le dans Supabase, puis attribuez-vous le rôle administrateur.<br><span id="version" style="font-family:var(--m);font-size:10px;letter-spacing:.1em;color:var(--laterite)">version non chargée</span></p>
+  </div>
+</div>
+
+<!-- ---------- application ---------- -->
+<div class="admin" id="admin" hidden>
+  <header class="tete">
+    <div class="marque">
+      <svg width="26" height="26" viewBox="0 0 34 34" aria-hidden="true">
+        <rect x="1" y="1" width="32" height="32" rx="9" fill="#C4552E"/>
+        <circle cx="11" cy="11" r="4.1" fill="#0F1513"/>
+        <circle cx="23" cy="11" r="4.1" fill="none" stroke="#0F1513" stroke-width="1.7"/>
+        <circle cx="11" cy="23" r="4.1" fill="none" stroke="#0F1513" stroke-width="1.7"/>
+        <circle cx="23" cy="23" r="4.1" fill="#0F1513"/>
+      </svg>
+      <span class="mot">MON <i>CONCOURS</i></span>
+      <span class="etiquette">administration</span>
+    </div>
+    <div class="droite">
+      <span class="qui" id="qui"></span>
+      <button class="lien" id="btn-deconnexion">Se déconnecter</button>
+    </div>
+  </header>
+
+  <div class="signal" id="signal"></div>
+
+  <div class="corps">
+    <nav class="menu" id="menu" aria-label="Sections">
+      <button data-vue="apercu" class="on">Vue d'ensemble</button>
+      <button data-vue="depot">Le dépôt <i class="pastille" id="pastille-depot" hidden></i></button>
+      <button data-vue="import">Import en masse</button>
+      <button data-vue="bibliotheque">Bibliothèque</button>
+      <button data-vue="validation">File de validation <i class="pastille" id="pastille-validation" hidden></i></button>
+      <button data-vue="questions">Questions</button>
+      <button data-vue="actualites">Actualités</button>
+      <button data-vue="referentiel">Référentiel</button>
+      <button data-vue="journal">Journal</button>
+    </nav>
+
+    <main class="vue" id="vue" tabindex="-1"></main>
+  </div>
+</div>
+
+<!-- bibliothèque Supabase, avec deux adresses de secours si la première est inaccessible -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  if(!window.supabase){
+    document.write('<scr'+'ipt src="https://unpkg.com/@supabase/supabase-js@2"><\/scr'+'ipt>');
+  }
+</script>
+<script>
+  if(!window.supabase){
+    document.write('<scr'+'ipt src="https://cdn.skypack.dev/@supabase/supabase-js@2"><\/scr'+'ipt>');
+  }
+</script>
+<script src="admin.js"></script>
+</body>
+</html>
