@@ -1,4 +1,26 @@
 /* =====================================================================
+   MÉMOIRE LOCALE
+   Le téléphone se souvient du candidat. Celui qui a déjà créé son
+   compte ne revoit jamais « Étape 1 sur 3 » : il retombe directement
+   sur l'actualité, avant même que le réseau ait répondu.
+   ===================================================================== */
+const MEMOIRE = 'monconcours.candidat';
+
+function lireMemoire(){
+  try{ return JSON.parse(localStorage.getItem(MEMOIRE) || 'null'); }
+  catch(e){ return null; }
+}
+function ecrireMemoire(o){
+  try{ localStorage.setItem(MEMOIRE, JSON.stringify(Object.assign({dejaVenu:true}, o))); }
+  catch(e){}
+}
+/* À la déconnexion on oublie l'identité, jamais le fait d'être déjà venu. */
+function oublierIdentite(){
+  const m = lireMemoire() || {};
+  ecrireMemoire({ niveau: m.niveau || null });
+}
+
+/* =====================================================================
    ÉTAT
    ===================================================================== */
 const S = {
@@ -192,6 +214,20 @@ function programmer(e, juste){
 const ouvertes = () => S.cahier.filter(e => e.suite < 3).length;
 const dues = () => S.cahier.filter(e => e.suite < 3 && joursRestants(e) === 0).length;
 const aReprendre = () => S.cahier.filter(e => e.suite < 3);
+
+/* Avant le premier dessin : si ce téléphone connaît déjà le candidat,
+   on ouvre l'application sur l'actualité et non sur l'engagement. */
+(function accueilDirect(){
+  const m = lireMemoire();
+  if(!m || !m.dejaVenu) return;
+  S.ecran = 'aujourdhui';
+  S.modalDejaVu = true;                       // pas de relance d'inscription
+  if(m.niveau) S.niveau = m.niveau;
+  if(m.nom) S.util = { nom:m.nom, tel:m.tel || '', pin:'', connecte:true };
+})();
+
+/* Écrans de première visite : on n'y renvoie plus personne par accident. */
+const ECRANS_DECOUVERTE = ['engagement','testIntro','test','resultat'];
 
 function aller(e){
   if(S.timer && e!=='grille'){clearInterval(S.timer);S.timer=null;}
@@ -635,14 +671,21 @@ async function ouvrirSession(tel, pin){
 async function reprendreSession(){
   if(!base) return;
   const { data } = await base.auth.getSession();
-  if(!data || !data.session) return;
+  if(!data || !data.session){
+    /* La session du serveur a expiré : on corrige l'affichage optimiste,
+       mais le candidat reste sur l'application, pas sur les trois étapes. */
+    if(S.util.connecte){ S.util = {nom:'', tel:'', pin:'', connecte:false}; oublierIdentite(); rendre(); }
+    return;
+  }
   const uid = data.session.user.id;
   const { data: profil } = await base.from('profils')
     .select('nom, telephone, niveau').eq('id', uid).maybeSingle();
   if(profil){
     S.util = { nom: profil.nom, tel: profil.telephone || '', pin: '', connecte: true };
     S.modalDejaVu = true;
-    if(S.ecran === 'compte' || S.ecran === 'aujourdhui') rendre();
+    ecrireMemoire({ nom: profil.nom, tel: profil.telephone || '', niveau: S.niveau });
+    if(ECRANS_DECOUVERTE.includes(S.ecran)) return aller('aujourdhui'), chargerProgression();
+    rendre();
     chargerProgression();
   }
 }
@@ -2341,6 +2384,7 @@ document.addEventListener('click', ev=>{
       creerCompte(f.nom.trim(), tel, pin).then(r => {
         if(r.erreur){ S.erreur = r.erreur; return surcouche(); }
         S.erreur = ''; S.util = {nom:f.nom.trim(), tel:tel, pin:'', connecte:true};
+        ecrireMemoire({ nom:f.nom.trim(), tel:tel, niveau:S.niveau });
         pister('ACCOUNT_CREATED', { niveau: S.niveau });
         S.modal = null; chargerProgression(); aller('aujourdhui');
       });
@@ -2356,6 +2400,7 @@ document.addEventListener('click', ev=>{
     ouvrirSession(tel, pin).then(async r => {
       if(r.erreur){ S.erreur = r.erreur; return surcouche(); }
       S.erreur = ''; S.util = { nom:'Candidat', tel:tel, pin:'', connecte:true };
+      ecrireMemoire({ nom:'Candidat', tel:tel, niveau:S.niveau });
       S.modal = null;
       await reprendreSession();
       await chargerProgression();
@@ -2463,8 +2508,10 @@ document.addEventListener('click', ev=>{
     if(base) base.auth.signOut();
     S.util = {nom:'', tel:'', pin:'', connecte:false};
     S.form = {nom:'', tel:'', pin:''};
-    S.modalDejaVu = false;
-    return aller('engagement');
+    oublierIdentite();
+    const connu = !!(lireMemoire() || {}).dejaVenu;
+    S.modalDejaVu = connu;                    // on ne relance pas l'inscription d'un habitué
+    return aller(connu ? 'aujourdhui' : 'engagement');
   }
   if(d.cible){ S.matiere = d.cible; S.qcmIdx=0; S.qcmRep=undefined; S.qcmSerie=0; return aller('qcm'); }
   if(d.phase){ S.phase = +d.phase; return rendre(); }
