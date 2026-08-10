@@ -31,6 +31,13 @@
     background:#C4552E;animation:facadeGlisse 1.05s ease-in-out infinite}
   @keyframes facadeGlisse{0%{transform:translateX(-100%)}100%{transform:translateX(250%)}}
   #facade.parti{opacity:0;pointer-events:none}
+  #facade .secours{display:none;flex-direction:column;align-items:center;gap:12px;margin-top:22px}
+  #facade.perdu .secours{display:flex}
+  #facade.perdu u{display:none}
+  #facade .secours p{color:#8A9490;font-size:12.5px;text-align:center;margin:0;padding:0 30px;line-height:1.5}
+  #facade .secours button{font:inherit;font-size:14px;font-weight:600;padding:12px 26px;border-radius:999px;
+    border:1px solid #C4552E;background:#C4552E;color:#fff;cursor:pointer}
+  #facade .secours button.b2{background:transparent;color:#EFE9DA;border-color:#2A3A34}
 </style>
 
 <!-- les polices ne bloquent plus l'affichage : le texte s'affiche tout de suite -->
@@ -58,7 +65,48 @@
   <b>MON CONCOURS</b>
   <i>Progresser vers l'obtention de votre concours</i>
   <u></u>
+  <div class="secours">
+    <p>Le chargement prend plus de temps que prévu. Votre connexion est peut-être faible, ou une ancienne version est restée en mémoire.</p>
+    <button onclick="reparerEtRecharger()">Réparer et recharger</button>
+    <button class="b2" onclick="document.getElementById('facade').classList.add('parti')">Continuer quand même</button>
+  </div>
 </div>
+
+<script>
+/* FILET DE SÉCURITÉ — indépendant de app.js.
+   Si l'application n'a rien dessiné au bout de huit secondes, on ne
+   laisse jamais le candidat devant un logo figé : on lui donne une
+   sortie. Ce script ne dépend d'aucun autre fichier. */
+(function(){
+  var f = document.getElementById('facade');
+  if(!f) return;
+  setTimeout(function(){
+    if(!f.parentNode) return;
+    var vue = document.getElementById('vue');
+    if(vue && vue.innerHTML.length > 80){ f.classList.add('parti'); return; }
+    f.classList.add('perdu');
+  }, 8000);
+})();
+
+/* Vide le cache, retire les anciens service workers, puis recharge. */
+function reparerEtRecharger(){
+  var fini = function(){ location.reload(true); };
+  try{
+    var taches = [];
+    if(window.caches && caches.keys)
+      taches.push(caches.keys().then(function(k){
+        return Promise.all(k.map(function(n){ return caches.delete(n); }));
+      }));
+    if(navigator.serviceWorker && navigator.serviceWorker.getRegistrations)
+      taches.push(navigator.serviceWorker.getRegistrations().then(function(rs){
+        return Promise.all(rs.map(function(r){ return r.unregister(); }));
+      }));
+    if(!taches.length) return fini();
+    Promise.all(taches).then(fini).catch(fini);
+    setTimeout(fini, 3000);
+  }catch(e){ fini(); }
+}
+</script>
 
 <div class="app">
   <header class="apptete" id="apptete"></header>

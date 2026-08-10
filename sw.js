@@ -3,7 +3,7 @@
    Un candidat en 2G ne doit pas repayer le chargement à chaque visite,
    et un candidat sans réseau doit pouvoir relire ses cours.
    ===================================================================== */
-const VERSION = 'mc-v3';
+const VERSION = 'mc-v4';
 const COQUE   = VERSION + '-coque';   // les fichiers de l'application
 const DONNEES = VERSION + '-donnees'; // les réponses de la base
 
@@ -48,6 +48,22 @@ self.addEventListener('fetch', e => {
         rend l'ouverture instantanée en 2G — et on va chercher la version
         fraîche en arrière-plan. Quand elle arrive, le service worker neuf
         prend la main et la page se recharge une fois, toute seule. */
+  /* index.html et app.js doivent toujours voyager ensemble : on va les
+     chercher sur le réseau en priorité, le cache ne sert qu'en secours.
+     Sans cela, un ancien app.js peut se retrouver avec un index.html neuf. */
+  if(url.origin === self.location.origin && /\/(index\.html)?$|app\.js|styles\.css|sw\.js/.test(url.pathname)){
+    e.respondWith(
+      fetch(req).then(rep => {
+        if(rep && rep.status === 200){
+          const copie = rep.clone();
+          caches.open(COQUE).then(c => c.put(req, copie));
+        }
+        return rep;
+      }).catch(() => caches.match(req).then(r => r || caches.match('/index.html')))
+    );
+    return;
+  }
+
   if(url.origin === self.location.origin){
     e.respondWith(
       caches.match(req).then(enCache => {
