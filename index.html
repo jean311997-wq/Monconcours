@@ -85,8 +85,13 @@
     var vue = document.getElementById('vue');
     if(vue && vue.innerHTML.length > 80){ f.classList.add('parti'); return; }
     f.classList.add('perdu');
-  }, 8000);
+  }, 6000);
 })();
+
+function facadePerdue(){
+  var f = document.getElementById('facade');
+  if(f) f.classList.add('perdu');
+}
 
 /* Vide le cache, retire les anciens service workers, puis recharge. */
 function reparerEtRecharger(){
@@ -118,7 +123,7 @@ function reparerEtRecharger(){
 <div class="sr" id="annonce" aria-live="polite" role="status"></div>
 
 <!-- l'application s'affiche immédiatement, sans attendre le réseau -->
-<script src="app.js"></script>
+<script src="app.js" onerror="facadePerdue()"></script>
 
 <!-- la base est servie par le site : un domaine de moins à joindre en 2G -->
 <script>

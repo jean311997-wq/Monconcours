@@ -1003,19 +1003,19 @@ body.en-transition *{transition:background-color .4s ease, color .4s ease, borde
 @keyframes pulseMusique{0%,100%{opacity:1}50%{opacity:.45}}
 
 /* ---------- ANIMATIONS D'ENTRÉE ----------
-   Discrètes : elles guident l'œil, elles ne le retiennent pas. */
-.pad>*,.copie>*{animation:monte .34s cubic-bezier(.22,.8,.3,1) both}
-.pad>*:nth-child(1),.copie>*:nth-child(1){animation-delay:.01s}
-.pad>*:nth-child(2),.copie>*:nth-child(2){animation-delay:.05s}
-.pad>*:nth-child(3),.copie>*:nth-child(3){animation-delay:.09s}
-.pad>*:nth-child(4),.copie>*:nth-child(4){animation-delay:.13s}
-.pad>*:nth-child(n+5),.copie>*:nth-child(n+5){animation-delay:.16s}
-@keyframes monte{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:none}}
-.cachet-note{animation:tampon .42s cubic-bezier(.2,1.5,.4,1) both;animation-delay:.18s}
-@keyframes tampon{from{opacity:0;transform:scale(.82) rotate(-3deg)}to{opacity:1;transform:none}}
-@media(prefers-reduced-motion:reduce){
-  .pad>*,.copie>*,.cachet-note,.bouton-tete.actif svg{animation:none}
+   RÈGLE ABSOLUE : aucun contenu ne doit dépendre d'une animation pour
+   être visible. En mode économie de batterie, Android coupe les
+   animations : un bloc parti d'une opacité nulle ne réapparaîtrait
+   jamais. Tout est donc visible par défaut, l'animation se contente
+   d'un léger glissement. */
+.pad>*,.copie>*{opacity:1}
+@media(prefers-reduced-motion:no-preference){
+  .pad>*,.copie>*{animation:monte .3s cubic-bezier(.22,.8,.3,1)}
+  .cachet-note{animation:tampon .4s cubic-bezier(.2,1.5,.4,1)}
 }
+@keyframes monte{from{transform:translateY(8px)}to{transform:none}}
+@keyframes tampon{from{transform:scale(.86) rotate(-3deg)}to{transform:none}}
+.cachet-note{opacity:1}
 
 /* ---------- BOUTON COMPOSITION : LE CŒUR DE LA BARRE ----------
    Il est au milieu, il est plus gros, il appelle le doigt. */
@@ -1030,7 +1030,7 @@ body.en-transition *{transition:background-color .4s ease, color .4s ease, borde
 .nav button.pivot:active .g{transform:scale(.93)}
 .nav button.pivot.on .g{box-shadow:0 0 0 3px var(--or-bord),0 8px 22px -6px rgba(196,85,46,.8)}
 .nav button.pivot.on::before{display:none}
-.nav button.pivot::after{content:'';position:absolute;top:-4px;left:50%;transform:translateX(-50%);
+.nav button.pivot::after{content:'';pointer-events:none;position:absolute;top:-4px;left:50%;transform:translateX(-50%);
   width:56px;height:56px;border-radius:50%;border:2px solid var(--laterite);
   opacity:0;animation:halo 3.2s ease-out infinite;pointer-events:none}
 @keyframes halo{0%{opacity:.5;transform:translateX(-50%) scale(1)}

@@ -3,7 +3,7 @@
    Un candidat en 2G ne doit pas repayer le chargement à chaque visite,
    et un candidat sans réseau doit pouvoir relire ses cours.
    ===================================================================== */
-const VERSION = 'mc-v4';
+const VERSION = 'mc-v5';
 const COQUE   = VERSION + '-coque';   // les fichiers de l'application
 const DONNEES = VERSION + '-donnees'; // les réponses de la base
 
@@ -11,6 +11,15 @@ const FICHIERS = [
   '/', '/index.html', '/app.js', '/styles.css',
   '/supabase-js.min.js', '/manifest.webmanifest', '/favicon.png', '/icone-192.png'
 ];
+
+/* Un fichier absent doit rester absent. Ne JAMAIS renvoyer la page
+   d'accueil à la place d'un script ou d'une feuille de style : le
+   navigateur recevrait du HTML là où il attend du code, et l'écran
+   resterait noir. Seule une vraie navigation peut retomber sur l'accueil. */
+function reponseVide(req){
+  if(req.mode === 'navigate') return caches.match('/index.html');
+  return new Response('', { status: 504, statusText: 'Hors ligne' });
+}
 
 self.addEventListener('install', e => {
   e.waitUntil(
@@ -59,7 +68,7 @@ self.addEventListener('fetch', e => {
           caches.open(COQUE).then(c => c.put(req, copie));
         }
         return rep;
-      }).catch(() => caches.match(req).then(r => r || caches.match('/index.html')))
+      }).catch(() => caches.match(req).then(r => r || reponseVide(req)))
     );
     return;
   }
@@ -73,7 +82,7 @@ self.addEventListener('fetch', e => {
             caches.open(COQUE).then(c => c.put(req, copie));
           }
           return rep;
-        }).catch(() => enCache || caches.match('/index.html'));
+        }).catch(() => enCache || reponseVide(req));
         return enCache || reseau;
       })
     );

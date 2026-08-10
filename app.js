@@ -28,7 +28,7 @@ function lireReglages(){
   try{ return JSON.parse(localStorage.getItem(REGLAGES) || '{}') || {}; }catch(e){ return {}; }
 }
 function sauverTaches(){
-  ecrireReglage('taches', S.taches);
+  ecrireReglage('taches', Array.from(S.taches || []));
   ecrireReglage('tachesJour', new Date().toDateString());
 }
 function ecrireReglage(cle, valeur){
@@ -342,8 +342,10 @@ window.addEventListener('beforeunload', e => {
 (function reprendreReglages(){
   const r = lireReglages();
   if(r.theme === 'sombre' || r.theme === 'clair') S.theme = r.theme;
-  if(r.taches && typeof r.taches === 'object' && r.tachesJour === new Date().toDateString()){
-    S.taches = Object.assign({}, S.taches, r.taches);
+  /* S.taches est un TABLEAU. Object.assign en aurait fait un objet,
+     qui n'a pas de .filter : l'accueil plantait et l'écran restait noir. */
+  if(Array.isArray(r.taches) && r.tachesJour === new Date().toDateString()){
+    S.taches = S.taches.map((v, i) => !!r.taches[i]);
   }
   if(r.qcmPos && typeof r.qcmPos === 'object') S.qcmPos = r.qcmPos;
   if(r.musique) S.musiqueVoulue = true;   // relancée au premier geste du candidat
@@ -3096,15 +3098,32 @@ function rendre(){
     profondeurVue = 0;
     pister('SCREEN_VIEWED');
   }
-  ({engagement:ecranEngagement, testIntro:ecranTestIntro, test:ecranTest, resultat:ecranResultat,
+  const dessiner = ({engagement:ecranEngagement, testIntro:ecranTestIntro, test:ecranTest, resultat:ecranResultat,
     inscription:ecranInscription, connexion:ecranConnexion,
     abonnement:ecranAbonnement, paiement:ecranPaiement,
     apparence:ecranApparence,
     aujourdhui:ecranAujourdhui, actualite:ecranActualite,
     revisions:ecranRevisions, cours:ecranCours, lecture:ecranLecture, qcm:ecranQcm,
     seance:()=>ecranSeance(undefined), grille:ecranGrille, copie:ecranCopie,
-    cahier:ecranCahier, compte:ecranCompte}[S.ecran] || ecranAujourdhui)();
-  nav(); apptete(); annoncer(); surcouche();
+    cahier:ecranCahier, compte:ecranCompte}[S.ecran] || ecranAujourdhui);
+
+  /* FILET — une erreur dans un seul écran ne doit plus jamais laisser
+     le candidat devant une page noire. On affiche ce qui s'est passé
+     et on lui donne un chemin de sortie. */
+  try{
+    dessiner();
+  }catch(err){
+    try{ pister('SCREEN_ERROR', { ecran:S.ecran, message:String(err && err.message) }); }catch(e){}
+    console.error('Écran ' + S.ecran + ' :', err);
+    vue().innerHTML = `
+      <div class="pad" style="text-align:center;padding-top:60px">
+        <h2 class="titre" style="font-size:22px">Cet écran n'a pas pu s'ouvrir</h2>
+        <p class="sous" style="margin:10px 0 18px">Le reste de l'application fonctionne. Revenez à l'actualité, ou rechargez.</p>
+        <button class="cta" data-go="aujourdhui">Revenir à l'actualité</button>
+        <button class="cta creux" style="margin-top:9px" onclick="location.reload()">Recharger</button>
+      </div>`;
+  }
+  try{ nav(); apptete(); annoncer(); surcouche(); }catch(e){ console.error(e); }
 }
 
 document.addEventListener('click', ev=>{
