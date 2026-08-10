@@ -4,6 +4,40 @@
    compte ne revoit jamais « Étape 1 sur 3 » : il retombe directement
    sur l'actualité, avant même que le réseau ait répondu.
    ===================================================================== */
+/* Tout texte venu de la base ou d'un candidat passe par ici avant
+   d'entrer dans la page. Sans cela, un nom ou un énoncé contenant une
+   balise deviendrait du code exécuté. */
+function E(v){
+  if(v === null || v === undefined) return '';
+  return String(v)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+/* Coordonnées publiques du projet */
+const CONTACT = {
+  canal:    'https://whatsapp.com/channel/0029Vb9boQ990x32o1rJTm07',
+  facebook: 'https://www.facebook.com/share/18zvk8fdA3/',
+  adminTel: '77959848',
+  site:     'https://monconcours.vercel.app'
+};
+
+const REGLAGES = 'monconcours.reglages';
+
+function lireReglages(){
+  try{ return JSON.parse(localStorage.getItem(REGLAGES) || '{}') || {}; }catch(e){ return {}; }
+}
+function sauverTaches(){
+  ecrireReglage('taches', S.taches);
+  ecrireReglage('tachesJour', new Date().toDateString());
+}
+function ecrireReglage(cle, valeur){
+  try{
+    const r = lireReglages(); r[cle] = valeur;
+    localStorage.setItem(REGLAGES, JSON.stringify(r));
+  }catch(e){}
+}
+
 const MEMOIRE = 'monconcours.candidat';
 
 function lireMemoire(){
@@ -33,7 +67,7 @@ const S = {
   form:{nom:'', tel:'', pin:'', pin2:'', couleur:''}, codeVisible:false, erreur:'',
   abo:{actif:true, formule:'Semaine gratuite', echeance:'encore 7 jours'},
   theme:'sombre', sessionCounter:0, cahierDepuisGrille:false,
-  modal:null, modalDejaVu:false,
+  modal:null, modalDejaVu:false, matiereOuverte:null, sync:null, bloque:false, qcmPos:{}, rechercheCours:'', compositions:[], dateConcours:null, nomConcours:null, typeEpreuve:'Concours direct · épreuve écrite',
   choixFormule:'annuelle', operateur:'orange', paieTel:'', paieEtape:0,
   semaines:17, depart:null, concours:'ENAREF cycle C',
   score:71, seuilScore:90,
@@ -194,6 +228,40 @@ function annonceTemps(txt){
   z._t = setTimeout(()=>z.classList.remove('vu'), 4000);
 }
 const nombreFr = n => (n ?? 0).toLocaleString('fr-FR');
+
+/* La date du jour et le compte à rebours viennent de l'horloge, plus du code.
+   S.dateConcours est renseignée depuis la base quand elle existe. */
+function dateDuJour(){
+  const d = new Date();
+  const t = d.toLocaleDateString('fr-FR', { weekday:'long', day:'numeric', month:'long' });
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+function joursAvantConcours(){
+  if(!S.dateConcours) return null;
+  const cible = new Date(S.dateConcours + 'T08:00:00');
+  const reste = Math.ceil((cible - new Date()) / 86400000);
+  return reste >= 0 ? reste : null;
+}
+
+/* Un message court, en bas de l'écran. Sert aussi bien à confirmer
+   qu'à prévenir que le réseau est tombé. */
+let minuteurToast = null;
+function toast(message, duree){
+  let z = document.getElementById('toast');
+  if(!z){
+    z = document.createElement('div');
+    z.id = 'toast'; z.setAttribute('role','status'); z.setAttribute('aria-live','polite');
+    document.body.appendChild(z);
+  }
+  z.textContent = message;
+  z.classList.add('on');
+  clearTimeout(minuteurToast);
+  minuteurToast = setTimeout(() => z.classList.remove('on'), duree || 3800);
+}
+
+window.addEventListener('offline', () =>
+  toast('Réseau perdu. Vous pouvez continuer à lire et à composer : tout sera envoyé au retour.', 6000));
+window.addEventListener('online', () => toast('Réseau retrouvé.'));
 const mmss = s => String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');
 const PALIERS = [3, 7, 21];               // jours entre deux reprises
 const JOUR = 86400000;
@@ -215,6 +283,72 @@ const ouvertes = () => S.cahier.filter(e => e.suite < 3).length;
 const dues = () => S.cahier.filter(e => e.suite < 3 && joursRestants(e) === 0).length;
 const aReprendre = () => S.cahier.filter(e => e.suite < 3);
 
+/* =====================================================================
+   C1 — LA COMPOSITION EN COURS EST GARDÉE SUR LE TÉLÉPHONE
+   Fermer l'application, perdre le réseau, actualiser par erreur : le
+   candidat retrouve sa feuille exactement où il l'a laissée.
+   ===================================================================== */
+const EPREUVE = 'monconcours.epreuve';
+
+function sauverEpreuve(){
+  try{
+    if(S.corrige || !Object.keys(S.reponses || {}).length){ localStorage.removeItem(EPREUVE); return; }
+    localStorage.setItem(EPREUVE, JSON.stringify({
+      reponses: S.reponses, chrono: S.chrono,
+      compositionId: S.compositionId || null, le: Date.now()
+    }));
+  }catch(e){}
+}
+function effacerEpreuve(){ try{ localStorage.removeItem(EPREUVE); }catch(e){} }
+
+(function reprendreEpreuve(){
+  try{
+    const e = JSON.parse(localStorage.getItem(EPREUVE) || 'null');
+    if(!e || !e.reponses) return;
+    /* au-delà de vingt-quatre heures la copie est abandonnée */
+    if(Date.now() - (e.le || 0) > 86400000){ localStorage.removeItem(EPREUVE); return; }
+    S.reponses = e.reponses;
+    if(typeof e.chrono === 'number') S.chrono = e.chrono;
+    if(e.compositionId) S.compositionId = e.compositionId;
+  }catch(err){}
+})();
+
+/* On prévient avant de quitter une composition en cours. La copie est
+   sauvegardée, mais le chronomètre du serveur, lui, continue de tourner. */
+window.addEventListener('keydown', e => {
+  if(e.ctrlKey || e.metaKey || e.altKey) return;
+  const champ = document.activeElement;
+  if(champ && /INPUT|TEXTAREA|SELECT/.test(champ.tagName)) return;
+  const lettre = (e.key || '').toUpperCase();
+  const rang = 'ABCD'.indexOf(lettre);
+  const chiffre = '1234'.indexOf(e.key);
+  const i = rang >= 0 ? rang : chiffre;
+  if(i < 0) return;
+  /* on clique la proposition correspondante de la question à l'écran */
+  const cible = document.querySelector(
+    S.ecran === 'qcm'  ? `[data-qcm="${i}"]` :
+    S.ecran === 'test' ? `[data-tb$="-${i}"]` : null);
+  if(cible && !cible.disabled){ e.preventDefault(); cible.click(); }
+});
+
+window.addEventListener('beforeunload', e => {
+  if(S.ecran === 'grille' && !S.corrige && Object.keys(S.reponses || {}).length){
+    e.preventDefault(); e.returnValue = '';
+  }
+});
+
+/* Réglages gardés d'une visite à l'autre : thème, tâches cochées,
+   position dans un QCM. Le candidat ne recommence rien. */
+(function reprendreReglages(){
+  const r = lireReglages();
+  if(r.theme === 'sombre' || r.theme === 'clair') S.theme = r.theme;
+  if(r.taches && typeof r.taches === 'object' && r.tachesJour === new Date().toDateString()){
+    S.taches = Object.assign({}, S.taches, r.taches);
+  }
+  if(r.qcmPos && typeof r.qcmPos === 'object') S.qcmPos = r.qcmPos;
+  if(r.musique) S.musiqueVoulue = true;   // relancée au premier geste du candidat
+})();
+
 /* Avant le premier dessin : si ce téléphone connaît déjà le candidat,
    on ouvre l'application sur l'actualité et non sur l'engagement. */
 (function accueilDirect(){
@@ -230,6 +364,9 @@ const aReprendre = () => S.cahier.filter(e => e.suite < 3);
 const ECRANS_DECOUVERTE = ['engagement','testIntro','test','resultat'];
 
 function aller(e){
+  if(['revisions','qcm','grille','cours'].includes(e)) chargerQuestions();
+  if(e === 'compte') chargerCompositions();
+  if(e !== 'lecture') S.matiereOuverte = null;
   if(S.timer && e!=='grille'){clearInterval(S.timer);S.timer=null;}
   if(S.testTimer && e!=='test'){clearInterval(S.testTimer);S.testTimer=null;}
   S.ecran = e; rendre(); vue().scrollTop = 0;
@@ -258,7 +395,8 @@ function nav(){
       || (o.id==='aujourdhui'&&S.ecran==='actualite')
       || (o.id==='revisions'&&(S.ecran==='qcm'||S.ecran==='cours'))) ? 'on':'';
     const p = (o.id==='cahier' && ouvertes()) ? `<i class="pastille num">${ouvertes()}</i>`:'';
-    return `<button class="${on}" data-go="${o.id}"${on?' aria-current="page"':''}>${p}<span class="g">${ico(o.g,19)}</span>${o.l}</button>`;
+    const centre = o.id === 'grille' ? ' pivot' : '';
+    return `<button class="${on}${centre}" data-go="${o.id}"${on?' aria-current="page"':''}>${p}<span class="g">${ico(o.g, o.id==='grille'?26:19)}</span>${o.l}</button>`;
   }).join('');
   r.innerHTML = ONGLETS.map(o=>{
     const on = (o.id===S.ecran || (o.id==='grille'&&S.ecran==='copie')
@@ -367,7 +505,7 @@ function ecranTest(){
       ${TEST.map((g,qi)=>{
         const r = S.testRep[qi] || [];
         return `<div class="gr-q">
-          <div class="en"><div class="no">${String(qi+1).padStart(2,'0')}</div><div class="tx">${g.q}</div></div>
+          <div class="en"><div class="no">${String(qi+1).padStart(2,'0')}</div><div class="tx">${E(g.q)}</div></div>
           <div class="reponses">
             ${g.o.map((o,i)=>{
               const choisi = r.includes(i);
@@ -377,8 +515,8 @@ function ecranTest(){
                 if(i===g.i) l = 'juste-rep';
               }
               return `<button class="rep ${l}" data-tb="${qi}-${i}" ${choisi&&!S.testCorrige?'disabled':''}
-                aria-label="Question ${qi+1}, réponse ${'ABCD'[i]} : ${o}" aria-pressed="${choisi}">
-                <span class="bulle ${c}">${'ABCD'[i]}</span><span class="lib">${o}</span></button>`;
+                aria-label="Question ${qi+1}, réponse ${'ABCD'[i]} : ${E(o)}" aria-pressed="${choisi}">
+                <span class="bulle ${c}">${'ABCD'[i]}</span><span class="lib">${E(o)}</span></button>`;
             }).join('')}
           </div>
         </div>`;
@@ -520,8 +658,10 @@ function melangerComposition(){
   }
 }
 
+let banqueChargee = false;
 async function chargerQuestions(){
-  if(!base) return;
+  if(!base || banqueChargee) return;
+  banqueChargee = true;
   try{
     /* --- le sujet de composition --- */
     const { data: sujet } = await base.from('sujets')
@@ -582,6 +722,33 @@ async function chargerQuestions(){
 /* =====================================================================
    RELIRE SA PROGRESSION
    ===================================================================== */
+async function chargerConcours(){
+  if(!base) return;
+  try{
+    const { data } = await base.from('concours')
+      .select('nom, sigle, date_ecrit, type_epreuve, seuil_dernier_admis')
+      .eq('actif', true).not('date_ecrit','is',null)
+      .order('date_ecrit').limit(1);
+    if(data && data[0]){
+      S.dateConcours = data[0].date_ecrit;
+      S.nomConcours  = data[0].sigle || data[0].nom;
+      S.typeEpreuve  = data[0].type_epreuve || S.typeEpreuve;
+      if(S.ecran === 'aujourdhui') rendre();
+    }
+  }catch(e){}
+}
+
+async function chargerCompositions(){
+  if(!base || !S.util.connecte) return;
+  try{
+    const { data } = await base.from('compositions')
+      .select('id, debut_le, score, nb_traitees, nb_questions, terminee')
+      .order('debut_le', { ascending:false }).limit(20);
+    S.compositions = data || [];
+    if(S.ecran === 'compte') rendre();
+  }catch(e){}
+}
+
 async function chargerProgression(){
   if(!base) return;
   const uid = await utilisateurCourant();
@@ -683,6 +850,12 @@ async function reprendreSession(){
   if(profil){
     S.util = { nom: profil.nom, tel: profil.telephone || '', pin: '', connecte: true };
     S.modalDejaVu = true;
+    /* le candidat voit d'abord le programme de sa propre classe */
+    const classes = { troisieme:'Troisième', terminale:'Terminale', licence:'Licence' };
+    if(profil.niveau && classes[profil.niveau] && classes[profil.niveau] !== S.niveau){
+      S.niveau = classes[profil.niveau];
+      chargerRessources();
+    }
     ecrireMemoire({ nom: profil.nom, tel: profil.telephone || '', niveau: S.niveau });
     if(ECRANS_DECOUVERTE.includes(S.ecran)) return aller('aujourdhui'), chargerProgression();
     rendre();
@@ -713,8 +886,10 @@ function brancherBase(){
   ouvrirSessionObservation();
   chargerActualites();
   reprendreSession();
-  setTimeout(chargerQuestions, 400);
+  /* U7 — on ne rapatrie plus la banque entière au démarrage : elle arrive
+     quand le candidat ouvre réellement les révisions ou la composition. */
   setTimeout(chargerRessources, 1200);
+  setTimeout(chargerConcours, 300);
 }
 
 
@@ -925,14 +1100,36 @@ async function majComposition(){
   }catch(e){}
 }
 
-async function cloturerComposition(note){
+async function synchroniserChrono(){
+  if(!base || !S.compositionId || S.corrige) return;
+  try{
+    const { data } = await base.rpc('temps_composition', { p_composition: S.compositionId });
+    if(!data || !data.ok) return;
+    if(data.termine){ effacerEpreuve(); return; }
+    const ecart = Math.abs((data.restant || 0) - S.chrono);
+    if(ecart > 3){                       // on ne corrige que les vrais décalages
+      S.chrono = data.restant;
+      if(S.ecran === 'grille') rendre();
+    }
+    if(S.chrono <= 0 && !S.corrige && typeof remettre === 'function') remettre();
+  }catch(e){}
+}
+
+async function cloturerComposition(){
+  if(S.sync){ clearInterval(S.sync); S.sync = null; }
+  effacerEpreuve();
   if(!base || !S.compositionId) return;
   const id = S.compositionId;
   try{
-    await base.from('compositions').update({
-      fin_le: new Date().toISOString(), terminee: true, score: note,
-      nb_traitees: Object.keys(S.reponses).length, duree_secondes: 1500 - S.chrono
-    }).eq('id', id);
+    /* Le téléphone envoie ses réponses. C'est le serveur qui compte les
+       points : une note fabriquée dans le navigateur n'a plus d'effet. */
+    const { data } = await base.rpc('remettre_composition', {
+      p_composition: id, p_reponses: S.reponses, p_duree: 1500 - S.chrono
+    });
+    if(data && data.ok && typeof data.note === 'number' && data.note !== S.grilleNote){
+      S.grilleNote = data.note;      // le serveur fait foi
+      if(S.ecran === 'copie') rendre();
+    }
     await ajouterPoints('composition', id);
     await marquerAssiduite();
   }catch(e){}
@@ -1042,8 +1239,13 @@ function ecranAujourdhui(){
   vue().innerHTML = `
   <div class="pad">
     <div class="tete-jour">
-      <span class="eyebrow">Samedi 25 juillet</span>
-      <span class="pastille-j"><b class="num">J−320</b> avant les concours 2027</span>
+      <span class="eyebrow">${dateDuJour()}</span>
+      ${(() => {
+        const j = joursAvantConcours();
+        return j === null
+          ? `<span class="pastille-j"><b class="num">${new Date().getFullYear()}</b> session en préparation</span>`
+          : `<span class="pastille-j"><b class="num">J−${j}</b> avant ${E(S.nomConcours || 'les concours')}</span>`;
+      })()}
     </div>
     <h2 class="titre">Actualité du matin</h2>
     <div class="ligne-direct">
@@ -1103,12 +1305,12 @@ function ecranAujourdhui(){
 }
 
 function ecranActualite(){
-  S.taches[0] = true;
+  S.taches[0] = true; sauverTaches();
   pister('NEWS_LIST_VIEWED', { onglet: S.actuOnglet });
   const liste = ACTU.filter(a=>a.c===S.actuOnglet);
   vue().innerHTML = `
   <div class="pad">
-    <button class="retourhaut" data-go="aujourdhui">← Aujourd'hui</button>
+    <button class="retourhaut" data-go="aujourdhui">Aujourd'hui</button>
     <h2 class="titre">Actualité<br>du matin</h2>
     <p class="sous" style="margin-top:6px">Seules les informations utiles au concours entrent ici : grandes décisions nationales, organisations internationales, dates et chiffres. Un fait divers local n'y a pas sa place.</p>
 
@@ -1136,6 +1338,7 @@ function ico(n, t){
   const o = `width="${t}" height="${t}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"`;
   const p = {
     actualite:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h6M7 13h10M7 17h7"/>',
+    musique:'<path d="M9 18V5l10-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/>',
     revisions:'<path d="M4 6a2 2 0 0 1 2-2h5v16H6a2 2 0 0 1-2-2z"/><path d="M20 6a2 2 0 0 0-2-2h-5v16h5a2 2 0 0 0 2-2z"/>',
     grille:'<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="2" fill="currentColor" stroke="none"/><circle cx="15.5" cy="8.5" r="2"/><circle cx="8.5" cy="15.5" r="2"/><circle cx="15.5" cy="15.5" r="2" fill="currentColor" stroke="none"/>',
     erreurs:'<path d="M4 5a2 2 0 0 1 2-2h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M14 3v5h5"/><path d="M9 12l3 3m0-3l-3 3"/>',
@@ -1157,13 +1360,31 @@ function ico(n, t){
   return `<svg ${o}>${p}</svg>`;
 }
 
+/* Le logo reprend exactement la feuille de réponses de l'icône :
+   une plaque crème, quatre bulles A B C D, deux noircies deux vides. */
 function logoSvg(t){
-  return `<svg class="logo" width="${t}" height="${t}" viewBox="0 0 34 34" aria-hidden="true">
-    <rect x="1" y="1" width="32" height="32" rx="9" fill="var(--laterite)"/>
-    <circle cx="11" cy="11" r="4.1" fill="#0F1513"/>
-    <circle cx="23" cy="11" r="4.1" fill="none" stroke="#0F1513" stroke-width="1.7"/>
-    <circle cx="11" cy="23" r="4.1" fill="none" stroke="#0F1513" stroke-width="1.7"/>
-    <circle cx="23" cy="23" r="4.1" fill="#0F1513"/></svg>`;
+  const id = 'lg' + Math.random().toString(36).slice(2, 7);
+  return `<svg class="logo" width="${t}" height="${t}" viewBox="0 0 64 64" aria-hidden="true">
+    <defs>
+      <linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#F2EADB"/><stop offset="1" stop-color="#DED3BE"/>
+      </linearGradient>
+    </defs>
+    <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#${id})"/>
+    <rect x="2.9" y="2.9" width="58.2" height="58.2" rx="15.2" fill="none" stroke="#00000018"/>
+    <circle cx="22" cy="22" r="10.4" fill="#FBFAF7" stroke="#C9BEA9" stroke-width="1.1"/>
+    <text x="22" y="26.4" text-anchor="middle" font-family="Helvetica,Arial,sans-serif"
+          font-size="12.5" fill="#8A8378">A</text>
+    <circle cx="42" cy="22" r="10.4" fill="#1C1C1C"/>
+    <text x="42" y="26.4" text-anchor="middle" font-family="Helvetica,Arial,sans-serif"
+          font-size="12.5" fill="#FBFAF7">B</text>
+    <circle cx="22" cy="42" r="10.4" fill="#1C1C1C"/>
+    <text x="22" y="46.4" text-anchor="middle" font-family="Helvetica,Arial,sans-serif"
+          font-size="12.5" fill="#FBFAF7">C</text>
+    <circle cx="42" cy="42" r="10.4" fill="#FBFAF7" stroke="#C9BEA9" stroke-width="1.1"/>
+    <text x="42" y="46.4" text-anchor="middle" font-family="Helvetica,Arial,sans-serif"
+          font-size="12.5" fill="#8A8378">D</text>
+  </svg>`;
 }
 function maj(champ, val){ S.form[champ] = val; }
 function majPaie(val){ S.paieTel = val; }
@@ -1223,6 +1444,16 @@ function ecranConnexion(){
     <button class="cta" style="margin-top:6px" data-connecter="1">Me connecter</button>
     <button class="lien" data-go="inscription">Créer un compte</button>
     <button class="lien" data-oubli="1">Code oublié ?</button>
+
+    ${S.bloque ? `
+    <div class="carte" style="margin-top:14px;text-align:left">
+      <div class="libelle" style="margin-bottom:6px">Vous n'arrivez pas à entrer ?</div>
+      <p class="sous" style="margin:0 0 10px">Retrouvez votre compte avec votre numéro et la couleur choisie à l'inscription. Si cela ne marche toujours pas, écrivez à l'administrateur.</p>
+      <button class="cta creux" data-oubli="1">Retrouver mon compte<small>Numéro + couleur</small></button>
+      <a class="cta creux" style="display:block;margin-top:8px;text-decoration:none"
+         href="https://wa.me/226${CONTACT.adminTel}?text=${encodeURIComponent("Bonjour, je n'arrive pas à me connecter à Mon Concours.")}"
+         target="_blank" rel="noopener">Écrire à l'administrateur<small>WhatsApp ${CONTACT.adminTel}</small></a>
+    </div>` : ''}
   </div>`;
 }
 
@@ -1236,7 +1467,7 @@ const FORMULES = {
 function ecranAbonnement(){
   vue().innerHTML = `
   <div class="pad">
-    <button class="retourhaut" data-go="compte">← Mon compte</button>
+    <button class="retourhaut" data-go="compte">Mon compte</button>
     <h2 class="titre">Profitez d'une<br>semaine gratuite</h2>
     <p class="sous" style="margin:10px 0 18px">Tout est ouvert pendant sept jours. Choisissez ensuite la formule qui vous convient.</p>
 
@@ -1277,15 +1508,15 @@ function ecranPaiement(){
   if(S.paieEtape===2){
     vue().innerHTML = `
     <div class="pad" style="padding-top:44px;text-align:center">
-      <div class="cachet-note admis" style="max-width:230px">
-        <div class="n" style="font-size:34px">✓</div>
-        <div class="l">paiement confirmé</div>
+      <div class="cachet-note" style="max-width:230px">
+        <div class="n" style="font-size:34px">…</div>
+        <div class="l">paiement en vérification</div>
       </div>
-      <h2 class="titre" style="font-size:24px">Formule ${f.n}<br>activée</h2>
-      <p class="sous" style="margin:12px 0 6px">Tout est débloqué : les huit matières, le cahier complet, le classement et les duels. Prochain prélèvement le 25 août.</p>
+      <h2 class="titre" style="font-size:24px">Nous vérifions<br>votre paiement</h2>
+      <p class="sous" style="margin:12px 0 6px">La confirmation de l'opérateur peut prendre quelques minutes. Votre formule s'ouvrira dès qu'elle sera reçue. Vous gardez l'accès à tout ce qui est déjà ouvert.</p>
       <div class="carte" style="margin-top:16px;text-align:left">
-        <div class="mat"><div class="nom">Reçu envoyé par SMS<em>Au +226 ${S.paieTel}</em></div><div class="val">✓</div></div>
-        <div class="mat"><div class="nom">Formule<em>${f.n} · ${f.per}</em></div><div class="val num">${f.prix}</div></div>
+        <div class="mat"><div class="nom">Numéro déclaré<em>Au +226 ${S.paieTel}</em></div><div class="val">✓</div></div>
+        <div class="mat"><div class="nom">Formule demandée<em>${f.n} · ${f.per}</em></div><div class="val num">${f.prix}</div></div>
       </div>
       <button class="cta" style="margin-top:18px" data-go="revisions">Ouvrir mes révisions</button>
       <button class="cta creux" style="margin-top:9px" data-go="compte">Retour à mon compte</button>
@@ -1294,7 +1525,7 @@ function ecranPaiement(){
   }
   vue().innerHTML = `
   <div class="pad">
-    <button class="retourhaut" data-go="abonnement">← Formules</button>
+    <button class="retourhaut" data-go="abonnement">Formules</button>
     <h2 class="titre">Paiement</h2>
     <p class="sous" style="margin:8px 0 18px">Formule ${f.n} · ${f.prix} ${f.per}. Aucun compte bancaire nécessaire.</p>
 
@@ -1472,21 +1703,48 @@ function ecranRevisions(){
 }
 
 /* --- les fascicules de cours --- */
+let minuteurRecherche = null;
+window.filtrerCours = function(v){
+  S.rechercheCours = v;
+  clearTimeout(minuteurRecherche);
+  minuteurRecherche = setTimeout(() => {
+    if(S.ecran !== 'cours') return;
+    const champ = document.getElementById('rech-cours');
+    const pos = champ ? champ.selectionStart : null;
+    ecranCours();
+    const neuf = document.getElementById('rech-cours');
+    if(neuf){ neuf.focus(); if(pos !== null) try{ neuf.setSelectionRange(pos, pos); }catch(e){} }
+  }, 180);
+};
+
 function ecranCours(){
-  const dispo = S.ressources;
+  const q = (S.rechercheCours || '').trim().toLowerCase();
+  const dispo = !q ? S.ressources : (S.ressources || []).filter(r =>
+    ((r.titre || '') + ' ' + (r.matiere || '') + ' ' + (r.theme || '') + ' ' + (r.texte || ''))
+      .toLowerCase().includes(q));
   const parMatiere = {};
+  const ordreMatieres = [];                 /* on garde l'ordre du programme */
   (dispo || []).forEach(r => {
     const m = r.matiere || 'Autres documents';
-    (parMatiere[m] = parMatiere[m] || []).push(r);
+    if(!parMatiere[m]){ parMatiere[m] = []; ordreMatieres.push(m); }
+    parMatiere[m].push(r);
   });
   const TYPES = { cours:'Cours', exercices:'Exercices', corrige:'Corrigé',
                   fiche:'Fiche de révision', annale:'Ancien sujet', autre:'Document' };
 
   vue().innerHTML = `
   <div class="pad">
-    <button class="retourhaut" data-go="revisions">← Mes révisions</button>
+    <button class="retourhaut" data-go="revisions">Mes révisions</button>
     <h2 class="titre">Les cours</h2>
     <p class="sous" style="margin:8px 0 16px">Les documents au programme ${S.niveau.toLowerCase()}. À lire ici, ou à télécharger une fois pour travailler sans connexion.</p>
+
+    <div class="champ" style="margin-bottom:12px">
+      <input id="rech-cours" type="search" inputmode="search" value="${E(S.rechercheCours)}"
+        placeholder="Chercher un cours, un chapitre, un mot…"
+        aria-label="Rechercher dans les cours"
+        oninput="filtrerCours(this.value)" autocomplete="off">
+    </div>
+    ${q ? `<p class="sous" style="margin:-4px 0 12px">${(dispo||[]).length} résultat${(dispo||[]).length>1?'s':''} pour « ${E(S.rechercheCours)} » · <button class="lien" style="display:inline" onclick="filtrerCours('')">effacer</button></p>` : ''}
 
     <div class="niveaux" role="group" aria-label="Niveau">
       ${['Troisième','Terminale','Licence'].map(n=>`<button class="${S.niveau===n?'on':''}" data-niv="${n}" aria-pressed="${S.niveau===n}">${n}</button>`).join('')}
@@ -1498,36 +1756,446 @@ function ecranCours(){
       ? `<div class="carte"><p class="sous">Chargement de la bibliothèque…</p></div>`
       : !dispo.length
         ? `<div class="carte"><p class="sous">Aucun document n'est encore disponible pour ce niveau. Reviens bientôt : la bibliothèque se remplit au fur et à mesure.</p></div>`
-        : Object.keys(parMatiere).map(m => `
+        : ordreMatieres.map(m => `
           <div class="bloc" style="margin-top:14px">
             <div class="libelle">${m}<span class="num">${parMatiere[m].length}</span></div>
-            ${parMatiere[m].map(r => `
+            <button class="cta" style="margin:10px 0 8px" data-matiere="${encodeURIComponent(m)}">
+              📖 Lire le cours complet<small>Tout ${E(m)} en une seule lecture · ${parMatiere[m].length} partie${parMatiere[m].length>1?'s':''}</small></button>
+            <button class="cta creux" style="margin:0 0 6px" data-cible="${E(m)}">
+              📝 Faire les QCM du cours<small>Les questions qui portent sur ce cours</small></button>
+            <p class="sous" style="margin:2px 0 0;font-size:12.5px">Au programme : ${
+              parMatiere[m].slice(0,4).map(r => E(r.titre)).join(' · ')
+            }${parMatiere[m].length > 4 ? ' · et ' + (parMatiere[m].length - 4) + ' autre' + (parMatiere[m].length-4>1?'s':'') : ''}</p>
+            ${parMatiere[m].filter(r => r.fichier_chemin && !r.texte).map(r => `
               <div class="fascicule">
-                <div class="ligne1"><span class="ic">${(r.matiere||'DO').slice(0,2).toUpperCase()}</span>
-                  <div class="co"><b>${r.titre}</b>
-                    <span>${TYPES[r.type_ressource] || 'Document'}${r.theme ? ' · ' + r.theme : ''}${r.taille_octets ? ' · ' + Math.round(r.taille_octets/1024) + ' Ko' : ''}</span></div>
-                </div>
-                <div class="paire">
-                  ${r.texte ? `<button class="mini" data-lire="${r.id}">Lire ici</button>` : ''}
-                  ${r.fichier_chemin ? `<button class="mini" data-telecharger="${r.id}">Télécharger</button>` : ''}
-                  ${(!r.texte && !r.fichier_chemin) ? `<span class="sous" style="font-size:12px">Document en préparation</span>` : ''}
-                </div>
+                <div class="ligne1"><span class="ic">PDF</span>
+                  <div class="co"><b>${E(r.titre)}</b><span>Document à télécharger</span></div></div>
+                <div class="paire"><button class="mini" data-telecharger="${r.id}">Télécharger</button></div>
               </div>`).join('')}
           </div>`).join('')}
   </div>`;
 }
 
+/* Met en forme le texte brut d'un cours : titres de section, listes
+   numerotees, formules isolees. Le candidat doit lire sans effort. */
+function miseEnPage(texte){
+  const estTitre = l => l.length < 70 && /[A-ZÀ-ÞŒ]/.test(l) && l === l.toUpperCase();
+  const html = [];
+  let liste = [];
+  const viderListe = () => {
+    if(liste.length){ html.push('<ol>' + liste.join('') + '</ol>'); liste = []; }
+  };
+  (texte || '').split('\n').forEach(brut => {
+    const l = brut.trim().replace(/</g,'&lt;');
+    if(!l){ viderListe(); return; }
+    if(estTitre(l)){
+      viderListe();
+      const cible = /CONCOURS|BEPC|BAC/.test(l) ? ' class="cible"' : '';
+      html.push('<h3' + cible + '>' + l + '</h3>');
+      return;
+    }
+    const num = l.match(/^(\d+)\.\s+(.*)$/);
+    if(num){ liste.push('<li>' + num[2] + '</li>'); return; }
+    viderListe();
+    if(l.length <= 46 && / = /.test(l)){ html.push('<div class="formule">' + l + '</div>'); return; }
+    html.push('<p>' + l + '</p>');
+  });
+  viderListe();
+  return html.join('');
+}
+
+/* =====================================================================
+   PARTAGE
+   ===================================================================== */
+function texteDePartage(quoi){
+  if(quoi === 'performance' && S.classement)
+    return `Je suis ${nombreFr(S.classement.rang)}e sur ${nombreFr(S.classement.population)} candidats sur Mon Concours, avec ${nombreFr(S.classement.points)} points. Prépare les concours directs avec moi.`;
+  if(quoi === 'cours' && S.matiereOuverte)
+    return `Je révise ${S.matiereOuverte} sur Mon Concours, pour les concours directs du Burkina Faso.`;
+  return "Mon Concours : révisions, compositions et cahier d'erreurs pour les concours directs du Burkina Faso.";
+}
+
+/* Feuille de partage : les vrais logos, pas un bouton anonyme. */
+function ouvrirPartage(quoi){
+  const t = texteDePartage(quoi), lien = CONTACT.site;
+  const complet = encodeURIComponent(t + ' ' + lien);
+  S.modal = 'partage';
+  document.getElementById('voile').hidden = false;
+  document.getElementById('voile').innerHTML = `
+  <div class="feuille" role="dialog" aria-label="Partager">
+    <div class="poignee"></div>
+    <h3 class="titre" style="font-size:20px;margin:0 0 4px">Partager</h3>
+    <p class="sous" style="margin:0 0 14px">${E(t)}</p>
+
+    <div class="partages">
+      <a class="pt wa" href="https://wa.me/?text=${complet}" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor" aria-hidden="true"><path d="M17.47 14.38c-.3-.15-1.75-.86-2.02-.96-.27-.1-.47-.15-.67.15-.2.3-.77.96-.94 1.16-.17.2-.35.22-.64.08-.3-.15-1.25-.46-2.38-1.47-.88-.78-1.48-1.75-1.65-2.05-.17-.3-.02-.46.13-.6.14-.14.3-.35.45-.53.15-.18.2-.3.3-.5.1-.2.05-.38-.02-.53-.08-.15-.67-1.6-.92-2.2-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.8.37-.27.3-1.04 1.02-1.04 2.48s1.07 2.88 1.22 3.08c.15.2 2.1 3.2 5.08 4.49.71.3 1.26.49 1.69.63.71.22 1.36.19 1.87.12.57-.09 1.75-.72 2-1.41.25-.7.25-1.29.17-1.42-.07-.13-.27-.2-.57-.35z"/><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.86 9.86 0 0 0 4.79 1.22h.01c5.46 0 9.91-4.45 9.91-9.91A9.85 9.85 0 0 0 12.04 2zm0 18.02h-.01a8.2 8.2 0 0 1-4.18-1.15l-.3-.18-3.11.82.83-3.04-.2-.31a8.19 8.19 0 0 1-1.26-4.37c0-4.54 3.7-8.23 8.24-8.23 2.2 0 4.27.86 5.82 2.42a8.16 8.16 0 0 1 2.41 5.82c0 4.54-3.69 8.22-8.24 8.22z"/></svg>
+        <span>WhatsApp</span></a>
+
+      <a class="pt fb" href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(lien)}&quote=${encodeURIComponent(t)}" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor" aria-hidden="true"><path d="M22 12.06C22 6.5 17.52 2 12 2S2 6.5 2 12.06c0 5.02 3.66 9.18 8.44 9.94v-7.03H7.9v-2.91h2.54V9.85c0-2.52 1.5-3.91 3.77-3.91 1.09 0 2.24.2 2.24.2v2.46h-1.26c-1.24 0-1.63.78-1.63 1.57v1.89h2.78l-.45 2.91h-2.33V22c4.78-.76 8.44-4.92 8.44-9.94z"/></svg>
+        <span>Facebook</span></a>
+
+      <button class="pt cp" data-copier="${encodeURIComponent(t + ' ' + lien)}">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+        <span>Copier</span></button>
+
+      <button class="pt au" data-partage-natif="${quoi}">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>
+        <span>Autre</span></button>
+    </div>
+
+    <button class="cta creux" style="margin-top:14px" data-fermer-partage="1">Fermer</button>
+  </div>`;
+  pister('SHARE_OPENED', { quoi });
+}
+
+async function partager(quoi){
+  let titre = 'Mon Concours', texte = '';
+  if(quoi === 'performance' && S.classement){
+    texte = `Je suis ${nombreFr(S.classement.rang)}ᵉ sur ${nombreFr(S.classement.population)} candidats sur Mon Concours, `
+          + `avec ${nombreFr(S.classement.points)} points. Prépare les concours directs avec moi.`;
+  } else if(quoi === 'cours' && S.matiereOuverte){
+    texte = `Je révise ${S.matiereOuverte} sur Mon Concours, pour les concours directs du Burkina Faso.`;
+  } else {
+    texte = 'Mon Concours : révisions, compositions et cahier d\'erreurs pour les concours directs du Burkina Faso.';
+  }
+  const charge = { title: titre, text: texte, url: CONTACT.site };
+  pister('SHARE', { quoi });
+  try{
+    if(navigator.share){ await navigator.share(charge); return; }
+  }catch(e){ return; }
+  try{
+    await navigator.clipboard.writeText(texte + ' ' + CONTACT.site);
+    toast('Lien copié. Collez-le où vous voulez.');
+  }catch(e){
+    window.open('https://wa.me/?text=' + encodeURIComponent(texte + ' ' + CONTACT.site), '_blank');
+  }
+}
+
+/* =====================================================================
+   FEUILLE DE COMPOSITION À GARDER
+   Une page propre, en-tête au nom du candidat, note et date. Le
+   navigateur l'enregistre en PDF : aucune bibliothèque à télécharger,
+   ce qui compte quand le réseau est faible.
+   ===================================================================== */
+function feuilleComposition(source){
+  /* source : { grille:[{i}], reponses:{}, note, duree, date }
+     Sans source, on imprime la composition qui vient d'être remise. */
+  const S0 = source || { grille:S.grille, reponses:S.reponses, note:S.grilleNote,
+                         duree:1500 - S.chrono, date:new Date() };
+  const total = S0.grille.length, note = S0.note;
+  const justes = [], rates = [], blancs = [];
+  S0.grille.forEach((g, i) => {
+    const r = S0.reponses[i] || [];
+    if(!r.length) blancs.push(i);
+    else if(r.length === 1 && r[0] === g.i) justes.push(i);
+    else rates.push(i);
+  });
+  const d = S0.date || new Date();
+  const quand = d.toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' });
+  const pct = total ? Math.round(note / total * 100) : 0;
+  const seuil = Math.round(total * 0.64);
+  const admis = note >= seuil;
+  const mots = (S.util.nom || 'Candidat').trim().split(/\s+/).filter(Boolean);
+  const initiales = (mots.length > 1 ? mots[0][0] + mots[mots.length-1][0] : (mots[0]||'C').slice(0,2)).toUpperCase();
+
+  const encouragement = admis
+    ? "Vous êtes au-dessus du seuil. Tenez la position : le seuil monte presque chaque année."
+    : pct >= 45
+      ? "Les bases sont là. Ce qui manque se rattrape par l'entraînement, pas par le talent."
+      : "Ce résultat n'est pas un verdict. Chaque erreur refermée vous rapproche d'une place.";
+
+  const recommandations = [];
+  if(blancs.length > total * 0.15)
+    recommandations.push("Vous avez laissé " + blancs.length + " question" + (blancs.length>1?'s':'') + " blanche" + (blancs.length>1?'s':'') + ". Une case noircie au hasard vaut mieux qu'une case vide : ne rendez jamais une copie incomplète.");
+  if(rates.length > justes.length)
+    recommandations.push("Vous avez plus de réponses fausses que de bonnes. Ralentissez : lisez l'énoncé en entier avant de noircir.");
+  if(S0.duree < 900 && blancs.length)
+    recommandations.push("Vous avez rendu en avance avec des questions blanches. Utilisez tout le temps accordé.");
+  if(justes.length >= total * 0.7)
+    recommandations.push("Votre niveau est solide. Travaillez maintenant la régularité : composez chaque jour à la même heure.");
+  recommandations.push("Reprenez vos " + rates.length + " erreur" + (rates.length>1?'s':'') + " dans « Mes erreurs ». Elles reviendront jusqu'à disparaître.");
+
+  /* La grille telle qu'elle a été noircie, puis corrigée :
+     vert = la bonne case, rouge barré = ce qui a été noirci à tort. */
+  const grilleHtml = S0.grille.map((g, i) => {
+    const r = S0.reponses[i] || [];
+    return '<div class="ligne"><span class="no">' + (i+1) + '</span>' +
+      [0,1,2,3].map(k => {
+        const choisi = r.includes(k), bon = (k === g.i);
+        let cl = 'b';
+        if(bon && choisi) cl += ' juste';
+        else if(bon)      cl += ' attendue';
+        else if(choisi)   cl += ' faute';
+        return '<span class="' + cl + '">' + 'ABCD'[k] + '</span>';
+      }).join('') + '</div>';
+  }).join('');
+
+  const html = '<!doctype html><html lang="fr"><head><meta charset="utf-8">' +
+'<title>Feuille de composition — ' + E(S.util.nom || 'Candidat') + '</title>' +
+'<style>' +
+'@page{size:A4;margin:14mm}' +
+'*{box-sizing:border-box}' +
+'body{font-family:Georgia,"Times New Roman",serif;color:#111;margin:0;line-height:1.5}' +
+'.tete{display:flex;align-items:center;gap:14px;border-bottom:3px double #111;padding-bottom:12px}' +
+'.marque .n{font-size:19px;font-weight:bold;letter-spacing:.04em}' +
+'.marque .d{font-size:11px;color:#555;font-style:italic}' +
+'.sceau{width:52px;height:52px;border-radius:13px;background:#EDE4D3;border:1px solid #C9BEA9;' +
+'  display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:7px;flex:0 0 auto}' +
+'.sceau i{border-radius:50%;background:#FBFAF7;border:1px solid #C9BEA9}' +
+'.sceau i:nth-child(2),.sceau i:nth-child(3){background:#1C1C1C;border-color:#1C1C1C}' +
+'h1{font-size:15px;letter-spacing:.2em;text-transform:uppercase;margin:16px 0 10px;' +
+'  border-bottom:1px solid #111;padding-bottom:5px}' +
+'.ident{display:flex;gap:10px;flex-wrap:wrap}' +
+'.ident div{flex:1 1 120px;border:1px solid #bbb;padding:7px 10px}' +
+'.ident b{display:block;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:#666;font-weight:normal}' +
+'.ident span{font-size:14px}' +
+'.resultat{display:flex;gap:14px;align-items:stretch;margin-top:14px}' +
+'.note{border:2px solid #111;padding:12px 20px;text-align:center;min-width:150px}' +
+'.note .n{font-size:40px;font-weight:bold;line-height:1}' +
+'.note .l{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#555;margin-top:5px}' +
+'.note .v{margin-top:7px;font-size:12px;padding:3px 8px;display:inline-block;border:1px solid #111}' +
+'.rec{flex:1;border-collapse:collapse;font-size:13px}' +
+'.rec td{border:1px solid #bbb;padding:5px 9px}' +
+'.rec td:last-child{text-align:right;font-weight:bold;width:64px}' +
+'.grille{display:grid;grid-template-columns:repeat(5,1fr);gap:3px 12px;font-family:Helvetica,Arial,sans-serif}' +
+'.ligne{display:flex;align-items:center;gap:3px;font-size:11px;break-inside:avoid}' +
+'.no{width:20px;text-align:right;color:#666;font-size:10px}' +
+'.b{width:17px;height:17px;line-height:16px;text-align:center;border:1px solid #ccc;' +
+'  border-radius:50%;font-size:10px;color:#bbb}' +
+'.b.juste{background:#0E7A54;border-color:#0E7A54;color:#fff;font-weight:bold}' +
+'.b.attendue{border:2px solid #0E7A54;color:#0E7A54;font-weight:bold}' +
+'.b.faute{background:#fff;border:2px solid #B4231C;color:#B4231C;font-weight:bold;' +
+'  text-decoration:line-through;text-decoration-thickness:2px}' +
+'.legende{display:flex;gap:16px;font-size:11px;margin:8px 0 0;font-family:Helvetica,Arial,sans-serif;color:#444}' +
+'.legende span{display:flex;align-items:center;gap:5px}' +
+'.legende i{width:14px;height:14px;border-radius:50%;display:inline-block}' +
+'ol{margin:6px 0 0 18px;font-size:13px}li{margin-bottom:5px}' +
+'.mot{border-left:3px solid #111;padding:8px 12px;margin-top:14px;font-style:italic;font-size:13.5px;background:#f7f5f0}' +
+'.pied{margin-top:20px;border-top:1px solid #999;padding-top:7px;font-size:10.5px;color:#555;' +
+'  display:flex;justify-content:space-between}' +
+'@media print{.noimp{display:none}}' +
+'.noimp{text-align:center;margin:20px 0}' +
+'.noimp button{font:inherit;padding:11px 22px;border:1px solid #111;background:#111;color:#fff;cursor:pointer}' +
+'</style></head><body>' +
+
+'<div class="tete">' +
+  '<div class="sceau"><i></i><i></i><i></i><i></i></div>' +
+  '<div class="marque"><div class="n">MON CONCOURS</div>' +
+  '<div class="d">Progresser vers l\'obtention de votre concours</div></div>' +
+'</div>' +
+
+'<h1>Feuille de composition</h1>' +
+'<div class="ident">' +
+  '<div><b>Candidat</b><span>' + E(S.util.nom || 'Candidat') + '</span></div>' +
+  '<div><b>Initiales</b><span>' + initiales + '</span></div>' +
+  '<div><b>Niveau</b><span>' + E(S.niveau) + '</span></div>' +
+  '<div><b>Épreuve</b><span>' + E(S.typeEpreuve || 'Concours direct · épreuve écrite') + '</span></div>' +
+  '<div><b>Date</b><span>' + quand + '</span></div>' +
+'</div>' +
+
+'<div class="resultat">' +
+  '<div class="note"><div class="n">' + note + ' / ' + total + '</div>' +
+  '<div class="l">Note obtenue</div>' +
+  '<div class="v">' + (admis ? 'Au-dessus du seuil' : 'Sous le seuil') + '</div></div>' +
+  '<table class="rec">' +
+    '<tr><td>Réussite</td><td>' + pct + ' %</td></tr>' +
+    '<tr><td>Bonnes réponses</td><td>' + justes.length + '</td></tr>' +
+    '<tr><td>Réponses fausses</td><td>' + rates.length + '</td></tr>' +
+    '<tr><td>Questions blanches</td><td>' + blancs.length + '</td></tr>' +
+    '<tr><td>Temps utilisé</td><td>' + Math.floor((1500 - S.chrono)/60) + ' min</td></tr>' +
+    '<tr><td>Classement national</td><td>' + (S.classement ? nombreFr(S.classement.rang) + 'e' : '—') + '</td></tr>' +
+  '</table>' +
+'</div>' +
+
+'<h1>Votre feuille corrigée</h1>' +
+'<div class="grille">' + grilleHtml + '</div>' +
+'<div class="legende">' +
+  '<span><i style="background:#0E7A54"></i> Bonne réponse noircie</span>' +
+  '<span><i style="border:2px solid #0E7A54"></i> Réponse attendue</span>' +
+  '<span><i style="border:2px solid #B4231C"></i> Noirci à tort</span>' +
+  '<span><i style="border:1px solid #ccc"></i> Non noirci</span>' +
+'</div>' +
+
+'<h1>Recommandations</h1><ol>' + recommandations.map(r => '<li>' + r + '</li>').join('') + '</ol>' +
+'<div class="mot">' + encouragement + '</div>' +
+
+'<div class="pied"><span>monconcours.vercel.app · Mon Concours</span>' +
+'<span>Document remis le ' + quand + '</span></div>' +
+
+'<div class="noimp"><button onclick="window.print()">Enregistrer en PDF ou imprimer</button></div>' +
+'<scr' + 'ipt>setTimeout(function(){window.print();},600);<\/scr' + 'ipt>' +
+'</body></html>';
+
+  const f = window.open('', '_blank');
+  if(!f){ toast("Autorisez les fenêtres pour télécharger votre feuille."); return; }
+  f.document.write(html); f.document.close();
+  pister('SHEET_DOWNLOADED', { note });
+}
+
+/* =====================================================================
+   MUSIQUE DE TRAVAIL
+   Une piste douce, choisie par l'administrateur. Le candidat l'allume
+   comme il allume la lumière : à côté du bouton de thème.
+   ===================================================================== */
+const MUSIQUE = { audio:null, liste:[], index:0, actif:false, charge:false };
+
+async function chargerMusiques(){
+  if(!base || MUSIQUE.charge) return;
+  MUSIQUE.charge = true;
+  try{
+    const { data } = await base.from('musiques')
+      .select('id, titre, artiste, fichier_chemin')
+      .eq('statut','publie').order('ordre').limit(20);
+    MUSIQUE.liste = (data || []).map(m => ({
+      ...m,
+      url: base.storage.from('musiques').getPublicUrl(m.fichier_chemin).data.publicUrl
+    }));
+  }catch(e){ MUSIQUE.liste = []; }
+}
+
+async function basculerMusique(){
+  await chargerMusiques();
+  if(!MUSIQUE.liste.length){
+    toast("Aucune musique disponible pour le moment.");
+    return;
+  }
+  if(MUSIQUE.actif){
+    if(MUSIQUE.audio) MUSIQUE.audio.pause();
+    MUSIQUE.actif = false;
+    ecrireReglage('musique', false);
+    toast('Musique arrêtée.');
+    return rendre();
+  }
+  if(!MUSIQUE.audio){
+    MUSIQUE.audio = new Audio();
+    MUSIQUE.audio.volume = 0.35;               // douce, elle accompagne
+    MUSIQUE.audio.preload = 'none';
+    MUSIQUE.audio.addEventListener('ended', () => {
+      MUSIQUE.index = (MUSIQUE.index + 1) % MUSIQUE.liste.length;
+      MUSIQUE.audio.src = MUSIQUE.liste[MUSIQUE.index].url;
+      MUSIQUE.audio.play().catch(()=>{});
+    });
+    MUSIQUE.audio.addEventListener('error', () => {
+      MUSIQUE.actif = false; toast("Cette piste n'a pas pu être lue."); rendre();
+    });
+  }
+  MUSIQUE.audio.src = MUSIQUE.liste[MUSIQUE.index].url;
+  try{
+    await MUSIQUE.audio.play();
+    MUSIQUE.actif = true;
+    ecrireReglage('musique', true);
+    const p = MUSIQUE.liste[MUSIQUE.index];
+    toast('♪ ' + p.titre + (p.artiste ? ' · ' + p.artiste : ''));
+    rendre();
+  }catch(e){ toast("Touchez à nouveau pour lancer la musique."); }
+}
+
+/* Rejoue une composition déjà remise pour en réimprimer la feuille. */
+async function feuilleArchive(id){
+  if(!base){ toast('Connexion nécessaire pour retrouver cette copie.'); return; }
+  toast('Préparation de votre feuille…');
+  try{
+    const { data: reps } = await base.from('composition_reponses')
+      .select('question_id, options_choisies, repondu_le')
+      .eq('composition_id', id).order('repondu_le');
+    const { data: compo } = await base.from('compositions')
+      .select('debut_le, score, duree_secondes, sujet_id').eq('id', id).maybeSingle();
+    if(!reps || !compo){ toast('Copie introuvable.'); return; }
+
+    const { data: liens } = await base.from('sujet_questions')
+      .select('position, question_id').eq('sujet_id', compo.sujet_id).order('position');
+    const ids = (liens || []).map(l => l.question_id);
+    const { data: opts } = await base.from('question_options')
+      .select('question_id, position, est_correcte').in('question_id', ids).order('position');
+
+    const bonnes = {};
+    (opts || []).forEach(o => {
+      if(!bonnes[o.question_id]) bonnes[o.question_id] = { rang:0, i:0 };
+      const e = bonnes[o.question_id];
+      if(o.est_correcte) e.i = e.rang;
+      e.rang++;
+    });
+    const parQuestion = {};
+    (reps || []).forEach(r => { parQuestion[r.question_id] = (r.options_choisies || []).map(Number); });
+
+    const grille = [], reponses = {};
+    (liens || []).forEach((l, i) => {
+      grille.push({ i: bonnes[l.question_id] ? bonnes[l.question_id].i : 0 });
+      if(parQuestion[l.question_id]) reponses[i] = parQuestion[l.question_id];
+    });
+
+    feuilleComposition({
+      grille, reponses, note: compo.score || 0,
+      duree: compo.duree_secondes || 0, date: new Date(compo.debut_le)
+    });
+  }catch(e){ toast("Impossible de retrouver cette copie."); }
+}
+
+/* Barre de progression : elle avance avec le défilement du cours. */
+function suivreLecture(){
+  const zone = vue(), barre = document.getElementById('jauge-lecture-barre');
+  if(!zone || !barre) return;
+  const maj = () => {
+    const h = zone.scrollHeight - zone.clientHeight;
+    barre.style.width = (h <= 0 ? 100 : Math.min(100, Math.max(0, zone.scrollTop / h * 100))) + '%';
+  };
+  zone.removeEventListener('scroll', zone._suivi || (()=>{}));
+  zone._suivi = maj;
+  zone.addEventListener('scroll', maj, { passive:true });
+  maj();
+}
+
 function ecranLecture(){
+  /* U3 — on lit une matière entière d'un seul tenant. Le candidat déroule,
+     il ne revient pas en arrière entre chaque chapitre. */
+  if(S.matiereOuverte){
+    const lot = (S.ressources || []).filter(x => x.matiere === S.matiereOuverte && x.texte);
+    if(!lot.length){ S.matiereOuverte = null; return ecranCours(); }
+    const commun = lot.every(x => x.commun);
+    vue().innerHTML = `
+    <div class="pad">
+      <div class="jauge-lecture" aria-hidden="true"><i id="jauge-lecture-barre"></i></div>
+      <button class="retourhaut" data-go="cours">La bibliothèque</button>
+      <div class="eyebrow">${commun ? 'Toutes classes' : S.niveau}</div>
+      <h2 class="titre">${E(S.matiereOuverte)}</h2>
+      <p class="sous" style="margin:8px 0 0">${lot.length} chapitre${lot.length>1?'s':''} · lecture continue</p>
+
+      <div class="carte" style="margin-top:16px">
+        <div class="libelle" style="margin-bottom:8px">Sommaire</div>
+        ${lot.map((r,i)=>`<button class="lien" style="display:block;text-align:left;padding:7px 0"
+           data-vers="chap-${i}"><span class="num">${i+1}.</span> ${E(r.titre)}</button>`).join('')}
+      </div>
+
+      ${lot.map((r,i)=>`
+        <div id="chap-${i}" class="chapitre" style="margin-top:26px;scroll-margin-top:14px">
+          <div class="eyebrow">Chapitre ${i+1} sur ${lot.length}${r.theme ? ' · ' + E(r.theme) : ''}</div>
+          <h3 class="titre" style="font-size:21px;margin:6px 0 0">${E(r.titre)}</h3>
+          <div class="carte lecon" style="margin-top:12px">${miseEnPage(r.texte)}</div>
+        </div>`).join('')}
+
+      <div class="carte" style="margin-top:26px;text-align:center">
+        <div class="libelle" style="margin-bottom:8px">Cours terminé</div>
+        <p class="sous" style="margin:0 0 12px">Vous avez lu les ${lot.length} chapitres de ${E(S.matiereOuverte)}. Mettez-les à l'épreuve.</p>
+        <button class="cta" data-cible="${E(S.matiereOuverte)}">📝 Faire les QCM de ce cours</button>
+        <button class="cta creux" style="margin-top:8px" data-partage="cours">Partager ce cours</button>
+      </div>
+      <button class="cta creux" style="margin-top:12px" data-go="cours">Retour à la bibliothèque</button>
+    </div>`;
+    suivreLecture();
+    return;
+  }
+
   const r = (S.ressources || []).find(x => x.id === S.ressourceOuverte);
   if(!r) return ecranCours();
   vue().innerHTML = `
   <div class="pad">
-    <button class="retourhaut" data-go="cours">← La bibliothèque</button>
+    <button class="retourhaut" data-go="cours">La bibliothèque</button>
     <div class="eyebrow">${r.matiere || ''}${r.theme ? ' · ' + r.theme : ''}</div>
-    <h2 class="titre">${r.titre}</h2>
-    <div class="carte" style="margin-top:16px">
-      <div style="font-size:15px;line-height:1.75;white-space:pre-wrap">${(r.texte || '').replace(/</g,'&lt;')}</div>
-    </div>
+    <h2 class="titre">${E(r.titre)}</h2>
+    ${r.commun ? `<p class="sous" style="margin:6px 0 0">Ce cours est le même pour la troisième, la terminale et la licence.</p>` : ''}
+    <div class="carte lecon" style="margin-top:16px">${miseEnPage(r.texte)}</div>
     ${r.fichier_chemin ? `<button class="cta creux" style="margin-top:14px" data-telecharger="${r.id}">Télécharger le fichier</button>` : ''}
   </div>`;
 }
@@ -1536,12 +2204,23 @@ async function chargerRessources(){
   if(!base) return;
   try{
     const niveau = S.niveau.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    /* Un cours sans niveau est commun aux trois classes : il doit apparaitre partout. */
     const { data, error } = await base.from('ressources')
-      .select('id, titre, texte, type_ressource, theme, niveau, fichier_chemin, nom_fichier, taille_octets, matieres(nom)')
-      .eq('statut','publie').eq('niveau', niveau)
-      .order('cree_le', { ascending:false }).limit(100);
+      .select('id, titre, texte, type_ressource, theme, niveau, fichier_chemin, nom_fichier, taille_octets, matieres(nom, ordre, tous_niveaux)')
+      .eq('statut','publie')
+      .or('niveau.eq.' + niveau + ',niveau.is.null')
+      .limit(200);
     if(error) throw error;
-    S.ressources = (data || []).map(r => ({ ...r, matiere: r.matieres ? r.matieres.nom : null }));
+    S.ressources = (data || [])
+      .map(r => ({ ...r,
+        matiere: r.matieres ? r.matieres.nom : 'Autres documents',
+        rang:    r.matieres ? (r.matieres.ordre || 99) : 99,
+        commun:  !r.niveau }))
+      /* ordre stable : matiere du programme, puis theme, puis titre. Jamais la date. */
+      .sort((x, y) =>
+        x.rang - y.rang
+        || (x.theme || '').localeCompare(y.theme || '', 'fr')
+        || x.titre.localeCompare(y.titre, 'fr'));
   }catch(e){ S.ressources = []; }
   if(['cours','lecture'].includes(S.ecran)) rendre();
 }
@@ -1576,18 +2255,18 @@ function ecranQcm(){
   <div class="qzone" style="padding-top:12px">
     <div class="progression" style="margin-bottom:18px">
       <i class="on" style="flex:${numero}"></i><i style="flex:${total-numero}"></i></div>
-    <div class="qtexte">${q.q}</div>
+    <div class="qtexte">${E(q.q)}</div>
     ${q.o.map((o,i)=>{
       let c='';
       if(rep!==undefined){ if(i===q.i) c='juste'; else if(i===rep) c='faux'; }
       return `<button class="opt ${c}" ${rep!==undefined?'disabled':''} data-qcm="${i}">
-        <span class="lettre">${'ABCD'[i]}</span>${o}</button>`;
+        <span class="lettre">${'ABCD'[i]}</span>${E(o)}</button>`;
     }).join('')}
     ${rep!==undefined?`
       <div class="retour ${juste?'bien':'mal'}">
         <b>${juste?'✅ Bonne réponse':'❌ Réponse incorrecte'}</b>
-        ${juste?'':`<div style="margin-bottom:6px">La bonne réponse est : <b style="display:inline;color:var(--vert-texte)">${q.o[q.i]}</b></div>`}
-        <b style="margin-top:2px">Pourquoi ?</b>${q.x}
+        ${juste?'':`<div style="margin-bottom:6px">La bonne réponse est : <b style="display:inline;color:var(--vert-texte)">${E(q.o[q.i])}</b></div>`}
+        <b style="margin-top:2px">Pourquoi ?</b>${E(q.x)}
       </div>
       ${motiv?`<div class="motiv"><b>${motiv[0]}</b><p>${motiv[1]}</p></div>`:''}
       <button class="cta" style="margin-top:12px" data-qsuiv="1">Question suivante →</button>
@@ -1610,12 +2289,12 @@ function ecranSeance(rep){
       <span class="num">${S.seanceIdx+1} / ${S.seance.length}</span>
     </div>
     <div class="progression" style="margin-bottom:18px">${S.seance.map((_,i)=>`<i class="${i<=S.seanceIdx?'on':''}"></i>`).join('')}</div>
-    <div class="qtexte">${q.q}</div>
+    <div class="qtexte">${E(q.q)}</div>
     ${q.opts.map((o,i)=>{
       let c='';
       if(rep!==undefined){ if(i===q.i) c='juste'; else if(i===rep) c='faux'; }
       return `<button class="opt ${c}" ${rep!==undefined?'disabled':''} data-rep="${i}">
-        <span class="lettre">${'ABCD'[i]}</span>${o}</button>`;
+        <span class="lettre">${'ABCD'[i]}</span>${E(o)}</button>`;
     }).join('')}
     ${rep!==undefined ? `
       <div class="retour ${juste?'bien':'mal'}">
@@ -1694,6 +2373,12 @@ function ecranGrille(){
   </div>`;
   brancherScrub();
   if(!S.timer && !S.corrige){
+    /* Le téléphone affiche, le serveur décide. On se resynchronise à
+       l'ouverture puis toutes les minutes : figer l'horloge locale ne
+       donne plus une seconde de plus. */
+    synchroniserChrono();
+    if(S.sync) clearInterval(S.sync);
+    S.sync = setInterval(synchroniserChrono, 60000);
     S.timer = setInterval(()=>{
       S.chrono--;
       const c = document.getElementById('chrono');
@@ -1769,9 +2454,9 @@ function sujetComposition(){
       return `<div class="sujet-q" id="q${qi+1}">
         <div class="sq-tete"><span class="sq-no">Question ${qi+1}</span>
           ${r.length?`<span class="sq-fait">répondu · ${r.map(x=>'ABCD'[x]).join(', ')}</span>`:''}</div>
-        <div class="sq-tx">${g.q}</div>
+        <div class="sq-tx">${E(g.q)}</div>
         <div class="props">
-          ${g.o.map((o,i)=>`<div class="prop"><b>${'abcd'[i]}</b><span>${o}</span></div>`).join('')}
+          ${g.o.map((o,i)=>`<div class="prop"><b>${'abcd'[i]}</b><span>${E(o)}</span></div>`).join('')}
         </div>
       </div>`;
     }).join('')}
@@ -1787,9 +2472,9 @@ function apercuQuestion(){
   <div class="apercu">
     <div class="ap-tete"><span>QUESTION ${qi+1}</span>
       <button class="ap-x" data-apercu="fermer" aria-label="Fermer">✕</button></div>
-    <div class="ap-tx">${g.q}</div>
+    <div class="ap-tx">${E(g.q)}</div>
     <div class="ap-props">
-      ${g.o.map((o,i)=>`<span class="${r.includes(i)?'pris':''}"><b>${'abcd'[i]})</b> ${o}</span>`).join('')}
+      ${g.o.map((o,i)=>`<span class="${r.includes(i)?'pris':''}"><b>${'abcd'[i]})</b> ${E(o)}</span>`).join('')}
     </div>
     <div class="ap-nav">
       <button data-apercu="${Math.max(0,qi-1)}">← précédente</button>
@@ -1826,7 +2511,7 @@ function feuilleOptique(){
 
 function remettre(){
   if(S.timer){clearInterval(S.timer);S.timer=null;}
-  S.corrige = true; S.taches[1] = true; S.sessionCounter++;
+  S.corrige = true; S.taches[1] = true; sauverTaches(); S.sessionCounter++;
   pister('COMPOSITION_SUBMITTED', { traitees: Object.keys(S.reponses).length, restant_s: S.chrono });
   let n = 0;
   S.grille.forEach((g,i)=>{
@@ -1835,7 +2520,7 @@ function remettre(){
   });
   S.grilleNote = n;
   pister('COMPOSITION_COMPLETED', { note: n, sur: S.grille.length });
-  cloturerComposition(n);
+  cloturerComposition();
   S.grille.forEach((g, i) => {
     const r = S.reponses[i];
     if(r === undefined) return;
@@ -1846,7 +2531,8 @@ function remettre(){
     const rep = S.reponses[i] || [];
     if(rep.length && !(rep.length===1 && rep[0]===g.i)){
       if(!S.cahier.some(e=>e.q===g.q))
-        S.cahier.push({q:g.q, mien:g.o[S.reponses[i]], bon:g.o[g.i], opts:g.o, i:g.i,
+        S.cahier.push({q:g.q, mien:rep.map(k=>g.o[k]).filter(Boolean).join(', ') || 'aucune réponse',
+          bon:g.o[g.i], opts:g.o, i:g.i,
           rate:1, suite:0, note:'Ratée en Grille, dans les conditions du concours. C\'est le pire endroit pour se tromper — donc le meilleur pour apprendre.'});
     }
   });
@@ -1862,8 +2548,20 @@ function ecranCopie(){
   const pos = Math.min(100, n/50*100);
   vue().innerHTML = `
   <div class="copie">
-    <div class="eyebrow">Copie corrigée · 25 juillet</div>
-    <h2 class="titre" style="margin-bottom:16px">La machine a lu<br>votre feuille</h2>
+    <div class="eyebrow">Copie corrigée · ${new Date().toLocaleDateString('fr-FR',{day:'numeric',month:'long'})}</div>
+    <h2 class="titre" style="margin-bottom:10px">La machine a lu<br>votre feuille</h2>
+
+    <div class="carte-identite">
+      <div class="av">${(function(){
+        const m = (S.util.nom||'Candidat').trim().split(/\s+/).filter(Boolean);
+        return (m.length>1 ? m[0][0]+m[m.length-1][0] : (m[0]||'C').slice(0,2)).toUpperCase();
+      })()}</div>
+      <div class="qui">
+        <b>${E(S.util.nom || 'Candidat')}</b>
+        <span>${E(S.niveau)} · ${S.classement ? nombreFr(S.classement.rang) + 'ᵉ au classement' : 'classement en cours'}</span>
+      </div>
+      <div class="note-mini"><b class="num">${n}</b><i>/ ${S.grille.length}</i></div>
+    </div>
 
     <div class="cachet-note ${admis?'admis':''}">
       <div class="n num">${n} / 50</div>
@@ -1900,6 +2598,8 @@ function ecranCopie(){
     <button class="cta" data-erreursdusoir="1" style="margin-top:16px">Voir mes erreurs<small>${ouvertes()} en attente, celles d'aujourd'hui d'abord</small></button>
     <button class="cta creux" data-recommencer="meme" style="margin-top:9px">Refaire la composition<small>Le même sujet, pour corriger tes erreurs</small></button>
     <button class="cta creux" data-recommencer="neuve" style="margin-top:9px">Refaire une nouvelle composition<small>Un autre tirage de questions</small></button>
+    <button class="cta creux" data-feuille="1" style="margin-top:9px">Télécharger ma feuille corrigée<small>Votre nom, votre note, votre grille en couleur et vos recommandations</small></button>
+    <button class="cta discret" data-partage="performance" style="margin-top:9px">Partager mon résultat<small>WhatsApp, Facebook, ou copier le lien</small></button>
   </div>`;
 }
 
@@ -1934,9 +2634,9 @@ function ecranCahier(){
         const idx = S.cahier.indexOf(e);
         const j = joursRestants(e);
         return `<div class="err">
-          <div class="q">${e.q}</div>
-          <div class="ligne">Votre réponse : « ${e.mien} »</div>
-          <div class="ligne">Bonne réponse : <b>${e.bon}</b></div>
+          <div class="q">${E(e.q)}</div>
+          <div class="ligne">Votre réponse : « ${E(e.mien)} »</div>
+          <div class="ligne">Bonne réponse : <b>${E(e.bon)}</b></div>
           <div class="ligne" style="margin-top:6px;color:#7E8C86">${e.note}</div>
           <div class="pied">
             <span class="echeance ${j===0?'du':''}">${j===0?'À REPRENDRE AUJOURD\'HUI':'DANS '+j+' JOUR'+(j>1?'S':'')}</span>
@@ -1953,8 +2653,8 @@ function ecranCahier(){
     <div class="bloc">
       <div class="libelle">Refermées<span class="num">${closes.length}</span></div>
       ${closes.map(e=>`<div class="err close">
-        <div class="q" style="font-size:13px">${e.q}</div>
-        <div class="ligne"><b>${e.bon}</b> · trois bonnes réponses d'affilée</div>
+        <div class="q" style="font-size:13px">${E(e.q)}</div>
+        <div class="ligne"><b>${E(e.bon)}</b> · trois bonnes réponses d'affilée</div>
       </div>`).join('')}
     </div>`:''}
 
@@ -1975,11 +2675,11 @@ function ecranReprise(){
   vue().innerHTML = `
   <div class="qzone">
     <div class="qmeta"><span>REPRISE · CAHIER</span><span>RATÉE ${e.rate} FOIS</span></div>
-    <div class="qtexte">${e.q}</div>
+    <div class="qtexte">${E(e.q)}</div>
     ${e.opts.map((o,i)=>{
       let c='';
       if(rep!==undefined){ if(i===e.i) c='juste'; else if(i===rep) c='faux'; }
-      return `<button class="opt ${c}" ${rep!==undefined?'disabled':''} data-rr="${i}"><span class="lettre">${'ABCD'[i]}</span>${o}</button>`;
+      return `<button class="opt ${c}" ${rep!==undefined?'disabled':''} data-rr="${i}"><span class="lettre">${'ABCD'[i]}</span>${E(o)}</button>`;
     }).join('')}
     ${rep!==undefined?`
       <div class="retour ${juste?'bien':'mal'}">
@@ -2016,7 +2716,10 @@ const RECOMPENSES = [
 ];
 
 function ecranCompte(){
-  const initiales = (S.util.nom||'Candidat').split(' ').filter(Boolean).slice(0,2).map(m=>m[0].toUpperCase()).join('');
+  const mots = (S.util.nom||'Candidat').trim().split(/\s+/).filter(Boolean);
+  const initiales = (mots.length > 1
+    ? mots[0][0] + mots[mots.length-1][0]
+    : (mots[0] || 'C').slice(0,2)).toUpperCase();
   const semaine = (S.stats && S.stats.jours_semaine && S.stats.jours_semaine.length === 7)
     ? S.stats.jours_semaine : null;
   const sem = semaine ? semaine.map(j => j.compose ? 1 : 0) : [0,0,0,0,0,0,0];
@@ -2026,7 +2729,7 @@ function ecranCompte(){
   <div class="pad">
     <div class="profil">
       <div class="av">${initiales}</div>
-      <h3>${S.util.nom || 'Candidat'}</h3>
+      <h3>${E(S.util.nom || 'Candidat')}</h3>
       ${S.util.tel?`<span>+226 ${S.util.tel}</span>`:''}
     </div>
 
@@ -2058,7 +2761,10 @@ function ecranCompte(){
           : 'Il vous manque <b>' + nombreFr(S.classement.places_manquantes) + ' places</b> pour entrer dans les '
             + nombreFr(S.classement.places) + ' admis, soit <b>' + nombreFr(S.classement.points_manquants) + ' points</b>.'}</p>
       <p class="sous" style="font-size:12px">Position estimée parmi les candidats de la dernière session. ${S.classement.points_par_place} points font monter d'une place.</p>`
-      : `<div class="rangbig">Chargement de votre position…</div>`}
+      : `<div class="squelette large" style="margin-top:6px"></div>
+         <div class="squelette"></div>
+         <div class="squelette court"></div>
+         <span class="sr">Chargement de votre position</span>`}
 
       <div class="calcul">
         <div class="l">Comment les points se calculent</div>
@@ -2092,7 +2798,7 @@ function ecranCompte(){
             <span class="n">${p[0]}<em>${moi ? nombreFr(S.classement.points) + ' points' :
               atteint ? 'palier atteint' : 'encore ' + nombreFr(manque) + ' points'}</em></span>
             <span class="s num">${moi ? '' : (atteint ? '' : '↑')}</span></div>`;
-        }).join('') : '<p class="sous">Chargement…</p>'}
+        }).join('') : '<div class="squelette"></div><div class="squelette"></div><div class="squelette court"></div><span class="sr">Chargement</span>'}
       </div>`:''}
     </div>
 
@@ -2187,12 +2893,42 @@ function ecranCompte(){
         <span><b>Formule ${S.abo.formule}</b><span>${S.abo.echeance}</span></span>
         <span class="fl">${S.abo.actif?'GÉRER →':'CHANGER →'}</span>
       </button>
+      ${S.compositions && S.compositions.length ? `
+      <div class="carte" style="margin-top:14px;text-align:left">
+        <div class="libelle" style="margin-bottom:8px">Mes compositions</div>
+        ${S.compositions.slice(0,8).map(c => `
+          <div class="mat"><div class="nom">${new Date(c.debut_le).toLocaleDateString('fr-FR',{day:'numeric',month:'short',year:'numeric'})}
+            <em>${c.terminee ? (c.nb_traitees||0) + ' questions traitées' : 'non terminée'}</em></div>
+            <div class="val num">${c.terminee && c.score !== null ? c.score + '/' + (c.nb_questions || 50) : '—'}</div>
+            ${c.terminee ? `<button class="mini" data-archive="${c.id}">Télécharger</button>` : ''}</div>`).join('')}
+        <p class="sous" style="margin-top:10px;font-size:12px">${S.compositions.length} composition${S.compositions.length>1?'s':''} au total.</p>
+      </div>` : ''}
+
+      <div class="carte" style="margin-top:14px;text-align:left">
+        <div class="libelle" style="margin-bottom:8px">Rester informé</div>
+        <p class="sous" style="margin:0 0 12px">Les dates de concours, les nouveaux cours et les annonces passent d'abord par nos canaux.</p>
+        <a class="cta creux" style="display:block;text-decoration:none" href="${CONTACT.canal}" target="_blank" rel="noopener">
+          Rejoindre la chaîne WhatsApp<small>Annonces et dates de concours</small></a>
+        <a class="cta creux" style="display:block;margin-top:8px;text-decoration:none" href="${CONTACT.facebook}" target="_blank" rel="noopener">
+          Suivre la page Facebook<small>Le coin du digital</small></a>
+        <button class="cta creux" style="margin-top:8px" data-partage="site">
+          Partager Mon Concours<small>À un camarade qui prépare aussi</small></button>
+      </div>
+
+      <div class="carte" style="margin-top:14px;text-align:left">
+        <div class="libelle" style="margin-bottom:8px">Aide et contact</div>
+        <p class="sous" style="margin:0 0 12px">Un problème de compte, un paiement qui ne passe pas, une erreur dans un cours : écrivez directement à l'administrateur.</p>
+        <a class="cta creux" style="display:block;text-decoration:none"
+           href="https://wa.me/226${CONTACT.adminTel}?text=${encodeURIComponent('Bonjour, je vous écris depuis Mon Concours.')}"
+           target="_blank" rel="noopener">
+          Écrire sur WhatsApp<small>+226 ${CONTACT.adminTel} · urgences et problèmes de compte</small></a>
+      </div>
+
       <div class="carte reglages">
         <button>Notifications<span>ACTIVÉES</span></button>
-        <button>Paramètres<span>→</span></button>
-        <button>Aide et contact<span>→</span></button>
-        <button>Conditions d'utilisation<span>→</span></button>
         <button data-go="apparence">Apparence<span>→</span></button>
+        <a href="${CONTACT.canal}" target="_blank" rel="noopener">Chaîne WhatsApp<span>→</span></a>
+        <a href="https://wa.me/226${CONTACT.adminTel}" target="_blank" rel="noopener">Aide et contact<span>→</span></a>
         ${S.util.connecte
           ? `<button class="sortie" data-deconnecter="1">Se déconnecter<span>→</span></button>`
           : `<button data-go="connexion">Se connecter<span>→</span></button>`}
@@ -2209,12 +2945,17 @@ function apptete(){
   const t = document.getElementById('apptete');
   if(SANS_TETE.includes(S.ecran)){ t.style.display='none'; return; }
   t.style.display='flex';
-  const droite = {aujourdhui:'J−320', copie:'copie corrigée', cahier:ouvertes()+' en attente',
+  const jr = joursAvantConcours();
+  const droite = {aujourdhui: jr === null ? '' : 'J−' + jr, copie:'copie corrigée', cahier:ouvertes()+' en attente',
     compte:S.abo.actif?'formule '+S.abo.formule.toLowerCase():'formule gratuite',
     revisions:S.niveau.toLowerCase(), qcm:S.matiere||'', abonnement:'', paiement:'sécurisé',
     inscription:'', connexion:'', resultat:'étape 3 sur 3', actualite:'ce matin'}[S.ecran] || '';
   t.innerHTML = `${logoSvg(24)}<span class="mot">MON <i>CONCOURS</i></span>
     <span class="droite">${droite}</span>
+    <button class="bouton-tete ${MUSIQUE.actif?'actif':''}" data-musique="1"
+      aria-pressed="${MUSIQUE.actif}"
+      aria-label="${MUSIQUE.actif?'Arrêter la musique':'Mettre une musique douce'}">
+      ${ico('musique',17)}<span>${MUSIQUE.actif?'Musique en cours':'Musique'}</span></button>
     <button class="bouton-tete" data-bascule-theme="1" aria-label="${S.theme==='sombre'?'Passer en mode clair':'Passer en mode sombre'}">
       ${S.theme==='sombre'?ico('soleil',17):ico('lune',17)}<span>${S.theme==='sombre'?'Mode clair':'Mode sombre'}</span></button>
     ${S.util.connecte
@@ -2233,6 +2974,7 @@ function appliquerTheme(){ document.body.dataset.theme = S.theme; }
 function basculerTheme(){
   document.body.classList.add('en-transition');
   S.theme = S.theme==='sombre' ? 'clair' : 'sombre';
+  ecrireReglage('theme', S.theme);
   rendre();
   clearTimeout(S.tTheme);
   S.tTheme = setTimeout(()=>document.body.classList.remove('en-transition'), 480);
@@ -2317,7 +3059,7 @@ function surcouche(){
 function ecranApparence(){
   vue().innerHTML = `
   <div class="pad">
-    <button class="retourhaut" data-go="compte">← Mon compte</button>
+    <button class="retourhaut" data-go="compte">Mon compte</button>
     <h2 class="titre">Apparence</h2>
     <p class="sous" style="margin:8px 0 18px">Même application, deux ambiances. Le choix s'applique tout de suite, partout.</p>
 
@@ -2334,8 +3076,19 @@ function ecranApparence(){
   </div>`;
 }
 
+let facadeRetiree = false;
+function retirerFacade(){
+  if(facadeRetiree) return;
+  facadeRetiree = true;
+  const f = document.getElementById('facade');
+  if(!f) return;
+  f.classList.add('parti');
+  setTimeout(() => f.remove(), 320);
+}
+
 function rendre(){
   appliquerTheme();
+  retirerFacade();
   if(typeof pister === 'function' && S.ecran !== O.dernierEcran){
     const passe = Date.now() - O.entreeEcran;
     if(O.dernierEcran) pister('SCREEN_LEFT', { ecran: O.dernierEcran, duree_ms: passe });
@@ -2355,7 +3108,7 @@ function rendre(){
 }
 
 document.addEventListener('click', ev=>{
-  const t = ev.target.closest('[data-oeil],[data-reinitialiser],[data-lire],[data-telecharger],[data-apercu],[data-saut],[data-compotab],[data-bascule-theme],[data-modal],[data-entrer],[data-bascule],[data-plustard],[data-deconnecter],[data-theme-choix],[data-erreursdusoir],[data-cible],[data-cours],[data-inscrire],[data-connecter],[data-oubli],[data-formule],[data-operateur],[data-payer],[data-paiefin],[data-paieannul],[data-go],[data-toutcahier],[data-actu],[data-niv],[data-mat],[data-qcm],[data-qsuiv],[data-cahierfreq],[data-classement],[data-diagnostic],[data-defi],[data-duel],[data-badges],[data-phase],[data-conc],[data-dep],[data-test],[data-tb],[data-tremettre],[data-retest],[data-seance],[data-rep],[data-suivante],[data-b],[data-remettre],[data-recommencer],[data-reprise],[data-rr],[data-fin-reprise]');
+  const t = ev.target.closest('[data-matiere],[data-vers],[data-musique],[data-copier],[data-partage-natif],[data-fermer-partage],[data-feuille],[data-archive],[data-partage],[data-oeil],[data-reinitialiser],[data-lire],[data-telecharger],[data-apercu],[data-saut],[data-compotab],[data-bascule-theme],[data-modal],[data-entrer],[data-bascule],[data-plustard],[data-deconnecter],[data-theme-choix],[data-erreursdusoir],[data-cible],[data-cours],[data-inscrire],[data-connecter],[data-oubli],[data-formule],[data-operateur],[data-payer],[data-paiefin],[data-paieannul],[data-go],[data-toutcahier],[data-actu],[data-niv],[data-mat],[data-qcm],[data-qsuiv],[data-cahierfreq],[data-classement],[data-diagnostic],[data-defi],[data-duel],[data-badges],[data-phase],[data-conc],[data-dep],[data-test],[data-tb],[data-tremettre],[data-retest],[data-seance],[data-rep],[data-suivante],[data-b],[data-remettre],[data-recommencer],[data-reprise],[data-rr],[data-fin-reprise]');
   if(!t) return;
   const d = t.dataset;
 
@@ -2397,15 +3150,34 @@ document.addEventListener('click', ev=>{
     if(tel.length !== 8 || pin.length !== 4){
       S.erreur = "Numéro à 8 chiffres et code à 4 chiffres."; return surcouche(); }
     S.erreur = 'Connexion…'; surcouche();
-    ouvrirSession(tel, pin).then(async r => {
-      if(r.erreur){ S.erreur = r.erreur; return surcouche(); }
+    (async () => {
+      /* Un code à quatre chiffres se devine. Au bout de huit essais ratés
+         on ferme quinze minutes, et on montre la sortie de secours. */
+      if(base){
+        try{
+          const { data: v } = await base.rpc('controle_connexion', { p_telephone: tel });
+          if(v && v.bloque){
+            S.bloque = true;
+            S.erreur = `Trop d'essais. Réessayez dans ${v.minutes} minute${v.minutes>1?'s':''}, ou utilisez « Code oublié ».`;
+            return surcouche();
+          }
+        }catch(e){}
+      }
+      const r = await ouvrirSession(tel, pin);
+      if(r.erreur){
+        if(base){ try{ await base.rpc('controle_connexion', { p_telephone: tel, p_reussie: false }); }catch(e){} }
+        S.bloque = true;                       // on montre « Code oublié » dès le 1er échec
+        S.erreur = r.erreur; return surcouche();
+      }
+      if(base){ try{ await base.rpc('controle_connexion', { p_telephone: tel, p_reussie: true }); }catch(e){} }
+      S.bloque = false;
       S.erreur = ''; S.util = { nom:'Candidat', tel:tel, pin:'', connecte:true };
       ecrireMemoire({ nom:'Candidat', tel:tel, niveau:S.niveau });
       S.modal = null;
       await reprendreSession();
       await chargerProgression();
       aller('aujourdhui');
-    });
+    })();
     return;
   }
   if(d.oubli){ S.erreur = "Un code provisoire a été envoyé par SMS au numéro saisi."; return rendre(); }
@@ -2417,9 +3189,10 @@ document.addEventListener('click', ev=>{
     S.erreur=''; S.paieEtape = 1; return rendre();
   }
   if(d.paiefin){
-    pister('PAYMENT_SUCCESS', { formule: S.choixFormule, operateur: S.operateur });
+    /* C5 — un clic du candidat ne vaut pas un paiement. L'abonnement ne
+       s'ouvrira que lorsqu'un serveur aura confirmé la transaction. */
+    pister('PAYMENT_DECLARED', { formule: S.choixFormule, operateur: S.operateur });
     S.paieEtape = 2;
-    S.abo = {actif:true, formule:FORMULES[S.choixFormule].n, echeance:'25 août'};
     return rendre();
   }
   if(d.paieannul){ pister('PAYMENT_ABANDONED', { formule: S.choixFormule }); S.paieEtape = 0; return aller('abonnement'); }
@@ -2432,6 +3205,36 @@ document.addEventListener('click', ev=>{
       clearTimeout(S.minuteur);
       S.minuteur = setTimeout(()=>{ if(!S.util.connecte){ S.modal='inscription'; S.modalDejaVu=true; surcouche(); } }, 6000);
     }
+    return;
+  }
+  if(d.matiere){
+    S.matiereOuverte = decodeURIComponent(d.matiere);
+    S.ressourceOuverte = null;
+    pister('COURSE_OPENED', { matiere: S.matiereOuverte });
+    aller('lecture');
+    if(d.chapitre !== undefined){
+      const cible = document.getElementById('chap-' + d.chapitre);
+      if(cible) cible.scrollIntoView({ block:'start' });
+    }
+    return;
+  }
+  if(d.musique){ basculerMusique(); return; }
+  if(d.feuille){ feuilleComposition(); return; }
+  if(d.archive){ feuilleArchive(d.archive); return; }
+  if(d.partage){ ouvrirPartage(d.partage); return; }
+  if(d.partageNatif){ document.getElementById('voile').hidden = true; partager(d.partageNatif); return; }
+  if(d.copier){
+    const t = decodeURIComponent(d.copier);
+    navigator.clipboard.writeText(t).then(() => {
+      document.getElementById('voile').hidden = true;
+      toast('Lien copié. Collez-le où vous voulez.');
+    }).catch(() => toast('Copie impossible sur ce téléphone.'));
+    return;
+  }
+  if(d.fermerPartage){ document.getElementById('voile').hidden = true; S.modal = null; return; }
+  if(d.vers){
+    const el = document.getElementById(d.vers);
+    if(el) el.scrollIntoView({ behavior:'smooth', block:'start' });
     return;
   }
   if(d.bascule){ S.modal = d.bascule; S.erreur=''; return surcouche(); }
@@ -2460,14 +3263,14 @@ document.addEventListener('click', ev=>{
   if(d.actu){ S.actuOnglet = d.actu; return rendre(); }
   if(d.niv){
     S.niveau = d.niv; S.ressources = null;
-    chargerRessources(); chargerQuestions();
+    banqueChargee = false; chargerRessources(); chargerQuestions();
     pister('LEVEL_CHANGED', { niveau: d.niv });
     return rendre();
   }
   if(d.lire){ S.ressourceOuverte = d.lire; pister('COURSE_OPENED'); return aller('lecture'); }
   if(d.telecharger){ telechargerRessource(d.telecharger); return; }
   if(d.mat){
-    S.matiere = d.mat; S.qcmIdx=0; S.qcmRep=undefined; S.qcmSerie=0; S.ecran='qcm';
+    S.matiere = d.mat; S.qcmIdx = (S.qcmPos && S.qcmPos[d.mat]) || 0; S.qcmRep=undefined; S.qcmSerie=0; S.ecran='qcm';
     pister('COURSE_STARTED', { matiere: d.mat, niveau: S.niveau });
     return rendre();
   }
@@ -2486,8 +3289,13 @@ document.addEventListener('click', ev=>{
     }
     return ecranQcm();
   }
-  if(d.qsuiv){ S.qcmIdx++; S.qcmRep=undefined; return ecranQcm(); }
-  if(d.cahierfreq){ S.cahierFiltre=true; S.taches[2]=true; return aller('cahier'); }
+  if(d.qsuiv){
+    S.qcmIdx++; S.qcmRep=undefined;
+    S.qcmPos = Object.assign({}, S.qcmPos, { [S.matiere]: S.qcmIdx });
+    ecrireReglage('qcmPos', S.qcmPos);
+    return ecranQcm();
+  }
+  if(d.cahierfreq){ S.cahierFiltre=true; S.taches[2]=true; sauverTaches(); return aller('cahier'); }
   if(d.classement){ S.voirClassement = !S.voirClassement; return rendre(); }
   if(d.diagnostic){ S.voirDiagnostic = !S.voirDiagnostic; return rendre(); }
   if(d.defi){ S.voirDefi = !S.voirDefi; return rendre(); }
@@ -2497,7 +3305,7 @@ document.addEventListener('click', ev=>{
   if(d.themeChoix){
     if(d.themeChoix===S.theme) return;
     document.body.classList.add('en-transition');
-    S.theme = d.themeChoix; rendre();
+    S.theme = d.themeChoix; ecrireReglage('theme', S.theme); rendre();
     clearTimeout(S.tTheme);
     S.tTheme = setTimeout(()=>document.body.classList.remove('en-transition'), 480);
     return;
@@ -2513,7 +3321,7 @@ document.addEventListener('click', ev=>{
     S.modalDejaVu = connu;                    // on ne relance pas l'inscription d'un habitué
     return aller(connu ? 'aujourdhui' : 'engagement');
   }
-  if(d.cible){ S.matiere = d.cible; S.qcmIdx=0; S.qcmRep=undefined; S.qcmSerie=0; return aller('qcm'); }
+  if(d.cible){ S.matiere = d.cible; S.qcmIdx = (S.qcmPos && S.qcmPos[d.cible]) || 0; S.qcmRep=undefined; S.qcmSerie=0; return aller('qcm'); }
   if(d.phase){ S.phase = +d.phase; return rendre(); }
   if(d.conc !== undefined){ S.concours = CONCOURS[+d.conc][0]; S.phase = 2; return rendre(); }
   if(d.dep !== undefined){ S.semaines = DEPART[+d.dep][2]; S.ecran='testIntro'; return rendre(); }
@@ -2570,6 +3378,7 @@ document.addEventListener('click', ev=>{
     const l = S.reponses[q] || [];
     if(l.includes(i)) return;              // définitif : pas de retour en arrière
     S.reponses[q] = [...l, i].sort();
+    sauverEpreuve();
     if(!S.compositionId) ouvrirComposition();
     pister('COMPOSITION_ANSWER_SELECTED', { question: q + 1, total: S.grille.length });
     majComposition();
@@ -2579,7 +3388,7 @@ document.addEventListener('click', ev=>{
   if(d.remettre) return remettre();
 
   if(d.recommencer){
-    S.reponses={}; S.corrige=false; S.chrono=1500; S.grilleNote=null;
+    S.reponses={}; S.corrige=false; S.chrono=1500; S.grilleNote=null; effacerEpreuve();
     S.compoTab='feuille'; S.sujetVu=false; S.apercu=null; S.compositionId=null;
     pister('COMPOSITION_RESTARTED', { type: d.recommencer });
     if(d.recommencer === 'neuve'){

@@ -519,8 +519,17 @@ h2.titre{font-family:var(--d);font-weight:800;font-size:25px;line-height:1.05;le
 .voirplus{width:100%;margin-top:10px;padding:10px;border:1px dashed var(--trait);border-radius:10px;
   font-size:12px;font-family:var(--m);letter-spacing:.08em;color:var(--craie2)}
 .voirplus:hover{border-color:var(--survol);color:var(--craie)}
-.retourhaut{display:flex;align-items:center;gap:8px;font-family:var(--m);font-size:10px;letter-spacing:.12em;
-  text-transform:uppercase;color:var(--craie2);margin-bottom:12px}
+/* Le retour doit se voir et se toucher sans viser : cible de 44 px,
+   contour visible, position constante en haut à gauche de chaque écran. */
+.retourhaut{display:inline-flex;align-items:center;gap:9px;
+  font-family:var(--d);font-size:13.5px;font-weight:700;letter-spacing:.01em;
+  text-transform:none;color:var(--craie);
+  min-height:44px;padding:9px 16px 9px 12px;margin:0 0 16px -2px;
+  border:1px solid var(--trait);border-radius:999px;background:var(--ardoise2);
+  transition:background .16s ease,border-color .16s ease,transform .12s ease}
+.retourhaut::before{content:'←';font-size:17px;line-height:1;margin-right:1px}
+.retourhaut:active{transform:scale(.97);background:var(--trait)}
+.retourhaut:focus-visible{outline:2px solid var(--or);outline-offset:2px}
 .pourquoi{margin-top:8px;font-family:var(--m);font-size:10.5px;letter-spacing:.05em;color:var(--craie2);
   border-top:1px dotted var(--trait);padding-top:7px}
 
@@ -905,4 +914,141 @@ body.en-transition *{transition:background-color .4s ease, color .4s ease, borde
 .compteur,.cours,.fascicule{transition:transform .16s ease,border-color .16s ease}
 @media(prefers-reduced-motion:reduce){
   .carte,.compteur,.cours,.fascicule,.err,.info{animation:none}
+}
+
+/* ---------- LECTURE D'UN COURS ----------
+   Le candidat doit pouvoir lire longtemps sans fatigue :
+   ligne aérée, titres qui découpent, formules détachées. */
+.lecon{font-size:16px;line-height:1.8}
+.lecon p{margin:0 0 14px}
+.lecon p:last-child{margin-bottom:0}
+.lecon h3{font-family:var(--d);font-size:12px;font-weight:800;letter-spacing:.09em;
+  color:var(--craie2);margin:26px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--trait)}
+.lecon h3:first-child{margin-top:0}
+.lecon h3.cible{color:var(--or);border-bottom-color:var(--or-bord)}
+.lecon ol{margin:0 0 14px 22px}
+.lecon ol li{margin:0 0 7px;padding-left:4px}
+.lecon .formule{font-family:var(--m);font-size:15px;font-weight:600;
+  background:var(--ardoise2);border:1px solid var(--trait);border-radius:10px;
+  padding:10px 14px;margin:0 0 14px}
+@media(min-width:700px){ .lecon{font-size:17px;line-height:1.85} }
+
+/* ---------- MESSAGE COURT EN BAS D'ÉCRAN ---------- */
+#toast{position:fixed;left:50%;bottom:84px;transform:translate(-50%,14px);
+  max-width:min(92vw,420px);padding:12px 16px;border-radius:12px;
+  background:var(--ardoise2);border:1px solid var(--trait);color:var(--craie);
+  font-size:14px;line-height:1.45;text-align:center;z-index:400;
+  opacity:0;pointer-events:none;transition:opacity .22s ease,transform .22s ease;
+  box-shadow:0 10px 30px rgba(0,0,0,.35)}
+#toast.on{opacity:1;transform:translate(-50%,0)}
+
+/* ---------- PROGRESSION DE LECTURE ---------- */
+.jauge-lecture{position:sticky;top:0;height:3px;background:var(--trait);
+  border-radius:2px;margin:0 0 10px;overflow:hidden;z-index:5}
+.jauge-lecture i{display:block;height:100%;width:0;background:var(--or);
+  transition:width .12s linear}
+.chapitre{border-top:1px solid var(--trait);padding-top:20px}
+.chapitre:first-of-type{border-top:0;padding-top:0}
+
+/* ---------- SQUELETTES DE CHARGEMENT ---------- */
+.squelette{background:linear-gradient(90deg,var(--ardoise2) 25%,var(--trait) 37%,var(--ardoise2) 63%);
+  background-size:400% 100%;animation:glisse 1.3s ease infinite;border-radius:8px;height:14px;margin:0 0 10px}
+.squelette.large{height:22px;width:62%}
+.squelette.court{width:38%}
+@keyframes glisse{0%{background-position:100% 50%}100%{background-position:0 50%}}
+@media(prefers-reduced-motion:reduce){.squelette{animation:none}}
+
+/* ---------- LIENS DANS LA LISTE DES RÉGLAGES ---------- */
+.carte.reglages a{display:flex;align-items:center;justify-content:space-between;
+  width:100%;padding:13px 0;border-bottom:1px solid var(--trait);
+  color:inherit;text-decoration:none;font:inherit}
+.carte.reglages a:last-child{border-bottom:0}
+
+/* ---------- LECTURE : CONFORT SUR GRAND ÉCRAN ---------- */
+@media(min-width:900px){ .lecon{max-width:68ch} }
+
+/* ---------- ÉLÉMENT RÉSERVÉ AUX LECTEURS D'ÉCRAN ---------- */
+.sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;
+  overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+
+/* ---------- IDENTITÉ EN FIN DE COMPOSITION ---------- */
+.carte-identite{display:flex;align-items:center;gap:12px;margin:0 0 18px;
+  padding:12px 14px;border:1px solid var(--trait);border-radius:14px;background:var(--ardoise2)}
+.carte-identite .av{width:44px;height:44px;flex:0 0 auto;border-radius:12px;
+  display:grid;place-items:center;font-family:var(--d);font-weight:800;font-size:15px;
+  background:var(--laterite);color:#fff;letter-spacing:.03em}
+.carte-identite .qui{flex:1;min-width:0}
+.carte-identite .qui b{display:block;font-size:15px;line-height:1.25}
+.carte-identite .qui span{display:block;font-size:12px;color:var(--craie2);margin-top:2px}
+.carte-identite .note-mini{text-align:right;flex:0 0 auto}
+.carte-identite .note-mini b{font-size:26px;line-height:1;font-weight:800}
+.carte-identite .note-mini i{display:block;font-style:normal;font-size:11px;color:var(--craie2)}
+
+/* ---------- HIÉRARCHIE DES BOUTONS ----------
+   Une seule action principale par écran. Le reste s'efface. */
+.cta{position:relative;transition:transform .12s ease,box-shadow .18s ease,background .18s ease}
+.cta:active{transform:scale(.985)}
+.cta:not(.creux){box-shadow:0 6px 18px -8px var(--laterite)}
+.cta.creux{background:transparent;box-shadow:none;opacity:.94}
+.cta.creux:hover{opacity:1;border-color:var(--craie2)}
+.cta.creux small,.cta small{opacity:.72}
+/* troisième niveau : discret, pour les actions annexes */
+.cta.discret{background:transparent;border:1px dashed var(--trait);color:var(--craie2);
+  font-size:14px;padding:11px 14px}
+.cta.discret small{display:block;font-size:11px;opacity:.7}
+
+/* ---------- BOUTON MUSIQUE ---------- */
+.bouton-tete.actif{color:var(--or);border-color:var(--or-bord)}
+.bouton-tete.actif svg{animation:pulseMusique 2.4s ease-in-out infinite}
+@keyframes pulseMusique{0%,100%{opacity:1}50%{opacity:.45}}
+
+/* ---------- ANIMATIONS D'ENTRÉE ----------
+   Discrètes : elles guident l'œil, elles ne le retiennent pas. */
+.pad>*,.copie>*{animation:monte .34s cubic-bezier(.22,.8,.3,1) both}
+.pad>*:nth-child(1),.copie>*:nth-child(1){animation-delay:.01s}
+.pad>*:nth-child(2),.copie>*:nth-child(2){animation-delay:.05s}
+.pad>*:nth-child(3),.copie>*:nth-child(3){animation-delay:.09s}
+.pad>*:nth-child(4),.copie>*:nth-child(4){animation-delay:.13s}
+.pad>*:nth-child(n+5),.copie>*:nth-child(n+5){animation-delay:.16s}
+@keyframes monte{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:none}}
+.cachet-note{animation:tampon .42s cubic-bezier(.2,1.5,.4,1) both;animation-delay:.18s}
+@keyframes tampon{from{opacity:0;transform:scale(.82) rotate(-3deg)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){
+  .pad>*,.copie>*,.cachet-note,.bouton-tete.actif svg{animation:none}
+}
+
+/* ---------- BOUTON COMPOSITION : LE CŒUR DE LA BARRE ----------
+   Il est au milieu, il est plus gros, il appelle le doigt. */
+.nav{position:relative;overflow:visible}
+.nav button.pivot{position:relative;margin-top:-20px;color:#fff;font-weight:700}
+.nav button.pivot .g{width:56px;height:56px;border-radius:50%;
+  background:linear-gradient(160deg,var(--laterite),#A63F20);
+  color:#fff;display:grid;place-items:center;margin-bottom:3px;
+  border:4px solid var(--barre);
+  box-shadow:0 8px 22px -6px rgba(196,85,46,.75);
+  transition:transform .16s cubic-bezier(.2,1.4,.4,1),box-shadow .16s ease}
+.nav button.pivot:active .g{transform:scale(.93)}
+.nav button.pivot.on .g{box-shadow:0 0 0 3px var(--or-bord),0 8px 22px -6px rgba(196,85,46,.8)}
+.nav button.pivot.on::before{display:none}
+.nav button.pivot::after{content:'';position:absolute;top:-4px;left:50%;transform:translateX(-50%);
+  width:56px;height:56px;border-radius:50%;border:2px solid var(--laterite);
+  opacity:0;animation:halo 3.2s ease-out infinite;pointer-events:none}
+@keyframes halo{0%{opacity:.5;transform:translateX(-50%) scale(1)}
+  70%,100%{opacity:0;transform:translateX(-50%) scale(1.45)}}
+
+/* ---------- FEUILLE DE PARTAGE ---------- */
+.partages{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
+.pt{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;
+  min-height:82px;padding:12px 4px;border-radius:14px;border:1px solid var(--trait);
+  background:var(--ardoise2);color:var(--craie);font-size:11.5px;text-decoration:none;
+  transition:transform .12s ease,border-color .16s ease}
+.pt:active{transform:scale(.96)}
+.pt.wa{color:#25D366;border-color:rgba(37,211,102,.35)}
+.pt.fb{color:#1877F2;border-color:rgba(24,119,242,.35)}
+.pt span{color:var(--craie2);letter-spacing:.02em}
+
+@media(prefers-reduced-motion:reduce){.nav button.pivot::after{animation:none}}
+@media(max-width:340px){
+  .nav button.pivot .g{width:50px;height:50px}
+  .partages{grid-template-columns:repeat(2,1fr)}
 }

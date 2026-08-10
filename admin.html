@@ -79,6 +79,7 @@
       <button data-vue="questions">Questions</button>
       <button data-vue="sujets">Sujets</button>
       <button data-vue="actualites">Actualités</button>
+      <button data-vue="musique">Musique</button>
       <button data-vue="referentiel">Référentiel</button>
       <button data-vue="journal">Journal</button>
     </nav>
@@ -91,12 +92,12 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
   if(!window.supabase){
-    document.write('<scr'+'ipt src="https://unpkg.com/@supabase/supabase-js@2"><\/scr'+'ipt>');
+    (function(){var t=document.createElement('script');t.src='https://unpkg.com/@supabase/supabase-js@2';t.async=false;document.head.appendChild(t);})();
   }
 </script>
 <script>
   if(!window.supabase){
-    document.write('<scr'+'ipt src="https://cdn.skypack.dev/@supabase/supabase-js@2"><\/scr'+'ipt>');
+    (function(){var t=document.createElement('script');t.src='https://cdn.skypack.dev/@supabase/supabase-js@2';t.async=false;document.head.appendChild(t);})();
   }
 </script>
 <script src="admin.js"></script>

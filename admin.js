@@ -218,8 +218,88 @@ function rendre(){
      pedagogie:vuePedagogie, candidats:vueCandidats,
      depot:vueDepot, import:vueImport, bibliotheque:vueBibliotheque,
      validation:vueValidation, questions:vueQuestions, sujets:vueSujets, actualites:vueActualites,
-     referentiel:vueReferentiel, journal:vueJournal }[A.vue] || vueApercu)();
+     referentiel:vueReferentiel, journal:vueJournal, musique:vueMusique }[A.vue] || vueApercu)();
   $('#vue').scrollTop = 0;
+}
+
+/* ---------- musique de travail ---------- */
+async function vueMusique(){
+  const { data: pistes } = await base.from('musiques')
+    .select('*').order('ordre').limit(50);
+
+  $('#vue').innerHTML = `
+  <div class="entete-vue">
+    <h2>Musique de travail</h2>
+    <p>Les pistes proposées au candidat pendant qu'il révise. Choisissez des morceaux
+       calmes et sans paroles : la musique accompagne le travail, elle ne le couvre pas.
+       Format MP3 ou M4A, 15 Mo maximum par fichier.</p>
+  </div>
+
+  <div class="carte">
+    <h3>Ajouter une piste</h3>
+    <div class="grille-champs">
+      <label>Titre<input id="mus-titre" placeholder="Pluie sur la cour"></label>
+      <label>Artiste (facultatif)<input id="mus-artiste" placeholder="Nom de l'artiste"></label>
+      <label>Ordre<input id="mus-ordre" type="number" value="${(pistes||[]).length + 1}" min="1"></label>
+      <label>Fichier audio<input id="mus-fichier" type="file" accept="audio/*"></label>
+    </div>
+    <button class="bouton" id="mus-envoyer">Envoyer et publier</button>
+    <p class="aide" id="mus-etat"></p>
+  </div>
+
+  <div class="carte">
+    <h3>Pistes en ligne <span class="compte">${(pistes||[]).length}</span></h3>
+    ${!(pistes||[]).length ? '<p class="vide">Aucune piste pour le moment. Le bouton musique reste sans effet cote candidat.</p>' : `
+    <table class="tableau">
+      <thead><tr><th>Ordre</th><th>Titre</th><th>Artiste</th><th>Etat</th><th></th></tr></thead>
+      <tbody>${pistes.map(m => `
+        <tr>
+          <td>${m.ordre}</td>
+          <td><b>${(m.titre||'').replace(/</g,'&lt;')}</b></td>
+          <td>${(m.artiste||'—').replace(/</g,'&lt;')}</td>
+          <td>${m.statut === 'publie' ? '<span class="etat ok">En ligne</span>' : '<span class="etat">Brouillon</span>'}</td>
+          <td>
+            <button class="mini" data-mus-bascule="${m.id}" data-statut="${m.statut}">
+              ${m.statut === 'publie' ? 'Retirer' : 'Publier'}</button>
+            <button class="mini danger" data-mus-suppr="${m.id}" data-chemin="${m.fichier_chemin}">Supprimer</button>
+          </td>
+        </tr>`).join('')}</tbody>
+    </table>`}
+  </div>`;
+
+  $('#mus-envoyer').onclick = async () => {
+    const titre = $('#mus-titre').value.trim();
+    const f = $('#mus-fichier').files[0];
+    const etat = $('#mus-etat');
+    if(!titre || !f){ etat.textContent = 'Un titre et un fichier sont necessaires.'; return; }
+    if(f.size > 15 * 1024 * 1024){ etat.textContent = 'Fichier trop lourd : 15 Mo maximum.'; return; }
+    etat.textContent = 'Envoi en cours…';
+    const nom = Date.now() + '-' + f.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const { error: e1 } = await base.storage.from('musiques').upload(nom, f, { upsert:false });
+    if(e1){ etat.textContent = "Echec de l'envoi : " + e1.message; return; }
+    const { error: e2 } = await base.from('musiques').insert({
+      titre, artiste: $('#mus-artiste').value.trim() || null,
+      fichier_chemin: nom, ordre: parseInt($('#mus-ordre').value, 10) || 1,
+      statut: 'publie'
+    });
+    if(e2){ etat.textContent = 'Enregistrement refuse : ' + e2.message; return; }
+    etat.textContent = 'Piste en ligne.';
+    vueMusique();
+  };
+
+  $$('[data-mus-bascule]').forEach(b => b.onclick = async () => {
+    await base.from('musiques')
+      .update({ statut: b.dataset.statut === 'publie' ? 'brouillon' : 'publie', maj_le: new Date().toISOString() })
+      .eq('id', b.dataset.musBascule);
+    vueMusique();
+  });
+
+  $$('[data-mus-suppr]').forEach(b => b.onclick = async () => {
+    if(!confirm('Supprimer definitivement cette piste ?')) return;
+    await base.storage.from('musiques').remove([b.dataset.chemin]);
+    await base.from('musiques').delete().eq('id', b.dataset.musSuppr);
+    vueMusique();
+  });
 }
 
 /* ---------- vue d'ensemble ---------- */

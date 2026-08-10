@@ -1,0 +1,32 @@
+{
+  "name": "Mon Concours",
+  "short_name": "Mon Concours",
+  "description": "Préparation aux concours directs du Burkina Faso : révisions, compositions et cahier d'erreurs.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0F1513",
+  "theme_color": "#0F1513",
+  "lang": "fr",
+  "icons": [
+    {
+      "src": "/icone-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icone-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icone-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

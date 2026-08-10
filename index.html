@@ -4,10 +4,34 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0F1513">
-<title>Mon Concours</title>
+<title>Mon Concours — préparation aux concours directs du Burkina Faso</title>
+<meta name="description" content="Révisions, compositions dans les conditions du concours et cahier d'erreurs, pour les candidats aux concours directs du Burkina Faso.">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Mon Concours">
+<meta property="og:title" content="Mon Concours — préparation aux concours directs du Burkina Faso">
+<meta property="og:description" content="Révisions, compositions dans les conditions du concours et cahier d'erreurs.">
+<meta property="og:image" content="/icone-512.png">
+<meta property="og:locale" content="fr_FR">
+<meta name="twitter:card" content="summary">
 
 <!-- la mise en forme d'abord : c'est elle qui décide de la vitesse perçue -->
 <link rel="stylesheet" href="styles.css">
+<style>
+  #facade{position:fixed;inset:0;z-index:900;background:#0F1513;display:flex;
+    flex-direction:column;align-items:center;justify-content:center;gap:10px;
+    font-family:system-ui,-apple-system,sans-serif;transition:opacity .28s ease}
+  #facade b{color:#EFE9DA;font-size:15px;letter-spacing:.22em}
+  #facade i{color:#8A9490;font-size:12px;font-style:normal;text-align:center;padding:0 24px}
+  #facade u{display:block;width:120px;height:2px;margin-top:8px;border-radius:2px;
+    background:#1E2A26;overflow:hidden;position:relative;text-decoration:none}
+  #facade u::after{content:"";position:absolute;inset:0;width:40%;border-radius:2px;
+    background:#C4552E;animation:facadeGlisse 1.05s ease-in-out infinite}
+  @keyframes facadeGlisse{0%{transform:translateX(-100%)}100%{transform:translateX(250%)}}
+  #facade.parti{opacity:0;pointer-events:none}
+</style>
 
 <!-- les polices ne bloquent plus l'affichage : le texte s'affiche tout de suite -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -21,6 +45,21 @@
 </head>
 <body>
 
+<div id="facade" aria-hidden="true">
+  <svg width="62" height="62" viewBox="0 0 64 64">
+    <defs><linearGradient id="fg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F2EADB"/><stop offset="1" stop-color="#DED3BE"/></linearGradient></defs>
+    <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#fg)"/>
+    <circle cx="22" cy="22" r="10.4" fill="#FBFAF7" stroke="#C9BEA9"/>
+    <circle cx="42" cy="22" r="10.4" fill="#1C1C1C"/>
+    <circle cx="22" cy="42" r="10.4" fill="#1C1C1C"/>
+    <circle cx="42" cy="42" r="10.4" fill="#FBFAF7" stroke="#C9BEA9"/>
+  </svg>
+  <b>MON CONCOURS</b>
+  <i>Progresser vers l'obtention de votre concours</i>
+  <u></u>
+</div>
+
 <div class="app">
   <header class="apptete" id="apptete"></header>
   <aside class="rail" id="rail" aria-label="Navigation principale"></aside>
@@ -33,29 +72,58 @@
 <!-- l'application s'affiche immédiatement, sans attendre le réseau -->
 <script src="app.js"></script>
 
-<!-- la base est chargée après le premier affichage : elle ne retarde plus rien -->
+<!-- la base est servie par le site : un domaine de moins à joindre en 2G -->
 <script>
 (function(){
-  var adresses = [
-    'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
-    'https://unpkg.com/@supabase/supabase-js@2',
-    'https://cdn.skypack.dev/@supabase/supabase-js@2'
-  ];
-  function essayer(i){
-    if(i >= adresses.length) return;
-    var s = document.createElement('script');
-    s.src = adresses[i];
-    s.async = true;
-    s.onload = function(){
-      if(window.supabase && typeof brancherBase === 'function') brancherBase();
-      else essayer(i + 1);
-    };
-    s.onerror = function(){ essayer(i + 1); };
-    document.body.appendChild(s);
+  function brancher(){
+    if(window.supabase && typeof brancherBase === 'function') brancherBase();
   }
-  if(document.readyState === 'complete') essayer(0);
-  else window.addEventListener('load', function(){ setTimeout(function(){ essayer(0); }, 60); });
+  var s = document.createElement('script');
+  s.src = '/supabase-js.min.js';
+  s.async = true;
+  s.onload = brancher;
+  s.onerror = function(){
+    /* secours : si le fichier local manque, on retombe sur les CDN */
+    var adresses = ['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
+                    'https://unpkg.com/@supabase/supabase-js@2'];
+    (function essayer(i){
+      if(i >= adresses.length) return;
+      var t = document.createElement('script');
+      t.src = adresses[i]; t.async = true;
+      t.onload = brancher;
+      t.onerror = function(){ essayer(i + 1); };
+      document.body.appendChild(t);
+    })(0);
+  };
+  function lancer(){ document.body.appendChild(s); }
+  if(document.readyState === 'complete') lancer();
+  else window.addEventListener('load', function(){ setTimeout(lancer, 60); });
 })();
 </script>
+
+<!-- ouverture immédiate aux visites suivantes, et lecture sans réseau -->
+<script>
+if('serviceWorker' in navigator){
+  window.addEventListener('load', function(){
+    setTimeout(function(){
+      var recharge = false;
+      navigator.serviceWorker.addEventListener('controllerchange', function(){
+        if(recharge) return; recharge = true; window.location.reload();
+      });
+      navigator.serviceWorker.register('/sw.js').then(function(reg){
+        /* une version neuve prend la main sans attendre */
+        reg.addEventListener('updatefound', function(){
+          var neuf = reg.installing;
+          if(!neuf) return;
+          neuf.addEventListener('statechange', function(){
+            if(neuf.state === 'installed' && navigator.serviceWorker.controller) neuf.postMessage({type:'active'});
+          });
+        });
+      }).catch(function(){});
+    }, 1500);
+  });
+}
+</script>
+
 </body>
 </html>
