@@ -2246,12 +2246,13 @@ function ecranQcm(){
   const banque = QCM[S.matiere] || QCM['Culture générale'];
   const q = banque[S.qcmIdx % banque.length];
   const rep = S.qcmRep, juste = rep===q.i;
+  const matiereLue = (S.matiere || 'Révision');
   const total = 250, numero = 18 + S.qcmIdx;
   const motiv = (rep!==undefined && S.qcmSerie>0 && S.qcmSerie%5===0)
     ? MOTIVATIONS[Math.min(3,Math.floor(S.qcmSerie/5)-1)] : null;
   vue().innerHTML = `
   <div class="qcm-tete">
-    <span class="q">${S.matiere.toUpperCase()} · QUESTION ${numero} / ${total}</span>
+    <span class="q">${E(matiereLue.toUpperCase())} · QUESTION ${numero} / ${total}</span>
     <button class="x" data-go="revisions">✕</button>
   </div>
   <div class="qzone" style="padding-top:12px">
