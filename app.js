@@ -19,6 +19,7 @@ const CONTACT = {
   canal:    'https://whatsapp.com/channel/0029Vb9boQ990x32o1rJTm07',
   facebook: 'https://www.facebook.com/share/18zvk8fdA3/',
   adminTel: '77959848',
+  youtube:  'https://www.youtube.com/@moncoursofficiel',
   site:     'https://monconcours.vercel.app'
 };
 
@@ -67,7 +68,7 @@ const S = {
   form:{nom:'', tel:'', pin:'', pin2:'', couleur:''}, codeVisible:false, erreur:'',
   abo:{actif:true, formule:'Semaine gratuite', echeance:'encore 7 jours'},
   theme:'sombre', sessionCounter:0, cahierDepuisGrille:false,
-  modal:null, modalDejaVu:false, matiereOuverte:null, sync:null, bloque:false, qcmPos:{}, rechercheCours:'', compositions:[], dateConcours:null, nomConcours:null, typeEpreuve:'Concours direct · épreuve écrite',
+  modal:null, modalDejaVu:false, matiereOuverte:null, sync:null, bloque:false, qcmPos:{}, rechercheCours:'', compositions:[], niveauConnu:false, dateConcours:null, nomConcours:null, typeEpreuve:'Concours direct · épreuve écrite',
   choixFormule:'annuelle', operateur:'orange', paieTel:'', paieEtape:0,
   semaines:17, depart:null, concours:'ENAREF cycle C',
   score:71, seuilScore:90,
@@ -236,9 +237,27 @@ function dateDuJour(){
   const t = d.toLocaleDateString('fr-FR', { weekday:'long', day:'numeric', month:'long' });
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
+/* Configuration unique de l'échéance. Une seule ligne à changer le jour
+   où la date officielle est connue, ou renseignez date_ecrit en base :
+   la base a toujours priorité sur cette valeur de repli. */
+const ECHEANCE_PAR_DEFAUT = { date: '2027-06-15', nom: 'les concours 2027' };
+
+/* « J−10 MOIS » plutôt que « J−308 » : un nombre de mois parle, un
+   nombre de jours à trois chiffres ne dit rien. Sous 60 jours on
+   repasse aux jours, parce que là chaque jour compte vraiment. */
+function compteARebours(){
+  const j = joursAvantConcours();
+  const nom = E(S.nomConcours || ECHEANCE_PAR_DEFAUT.nom);
+  if(j === null) return '';
+  if(j <= 0) return `<span class="pastille-j urgent"><b class="num">C'EST AUJOURD'HUI</b> ${nom}</span>`;
+  if(j <= 60) return `<span class="pastille-j urgent"><b class="num">J−${j}</b> ${j === 1 ? 'jour' : 'jours'} avant ${nom}</span>`;
+  const mois = Math.round(j / 30.44);
+  return `<span class="pastille-j"><b class="num">J−${mois} MOIS</b> ${nom} : commencez votre préparation maintenant</span>`;
+}
+
 function joursAvantConcours(){
-  if(!S.dateConcours) return null;
-  const cible = new Date(S.dateConcours + 'T08:00:00');
+  const d = S.dateConcours || ECHEANCE_PAR_DEFAUT.date;
+  const cible = new Date(d + 'T08:00:00');
   const reste = Math.ceil((cible - new Date()) / 86400000);
   return reste >= 0 ? reste : null;
 }
@@ -1242,12 +1261,7 @@ function ecranAujourdhui(){
   <div class="pad">
     <div class="tete-jour">
       <span class="eyebrow">${dateDuJour()}</span>
-      ${(() => {
-        const j = joursAvantConcours();
-        return j === null
-          ? `<span class="pastille-j"><b class="num">${new Date().getFullYear()}</b> session en préparation</span>`
-          : `<span class="pastille-j"><b class="num">J−${j}</b> avant ${E(S.nomConcours || 'les concours')}</span>`;
-      })()}
+      ${compteARebours()}
     </div>
     <h2 class="titre">Actualité du matin</h2>
     <div class="ligne-direct">
@@ -1335,6 +1349,17 @@ function ecranActualite(){
    ===================================================================== */
 
 /* ---------- ICONOGRAPHIE ---------- */
+/* Logos des réseaux, aux couleurs de marque. Dessinés en SVG :
+   aucune image à télécharger, donc rien de plus à charger en 2G. */
+function logoReseau(n){
+  const p = {
+    whatsapp:'<path d="M17.47 14.38c-.3-.15-1.75-.86-2.02-.96-.27-.1-.47-.15-.67.15-.2.3-.77.96-.94 1.16-.17.2-.35.22-.64.08-.3-.15-1.25-.46-2.38-1.47-.88-.78-1.48-1.75-1.65-2.05-.17-.3-.02-.46.13-.6.14-.14.3-.35.45-.53.15-.18.2-.3.3-.5.1-.2.05-.38-.02-.53-.08-.15-.67-1.6-.92-2.2-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.8.37-.27.3-1.04 1.02-1.04 2.48s1.07 2.88 1.22 3.08c.15.2 2.1 3.2 5.08 4.49.71.3 1.26.49 1.69.63.71.22 1.36.19 1.87.12.57-.09 1.75-.72 2-1.41.25-.7.25-1.29.17-1.42-.07-.13-.27-.2-.57-.35z"/><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.86 9.86 0 0 0 4.79 1.22h.01c5.46 0 9.91-4.45 9.91-9.91A9.85 9.85 0 0 0 12.04 2zm0 18.02h-.01a8.2 8.2 0 0 1-4.18-1.15l-.3-.18-3.11.82.83-3.04-.2-.31a8.19 8.19 0 0 1-1.26-4.37c0-4.54 3.7-8.23 8.24-8.23 2.2 0 4.27.86 5.82 2.42a8.16 8.16 0 0 1 2.41 5.82c0 4.54-3.69 8.22-8.24 8.22z"/>',
+    facebook:'<path d="M22 12.06C22 6.5 17.52 2 12 2S2 6.5 2 12.06c0 5.02 3.66 9.18 8.44 9.94v-7.03H7.9v-2.91h2.54V9.85c0-2.52 1.5-3.91 3.77-3.91 1.09 0 2.24.2 2.24.2v2.46h-1.26c-1.24 0-1.63.78-1.63 1.57v1.89h2.78l-.45 2.91h-2.33V22c4.78-.76 8.44-4.92 8.44-9.94z"/>',
+    youtube:'<path d="M21.58 7.19a2.51 2.51 0 0 0-1.77-1.77C18.25 5 12 5 12 5s-6.25 0-7.81.42A2.51 2.51 0 0 0 2.42 7.19 26.2 26.2 0 0 0 2 12a26.2 26.2 0 0 0 .42 4.81 2.51 2.51 0 0 0 1.77 1.77C5.75 19 12 19 12 19s6.25 0 7.81-.42a2.51 2.51 0 0 0 1.77-1.77A26.2 26.2 0 0 0 22 12a26.2 26.2 0 0 0-.42-4.81zM10 15.02V8.98L15.2 12z"/>'
+  }[n] || '';
+  return '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true">' + p + '</svg>';
+}
+
 function ico(n, t){
   t = t || 20;
   const o = `width="${t}" height="${t}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"`;
@@ -1992,7 +2017,7 @@ function feuilleComposition(source){
 '<div class="ident">' +
   '<div><b>Candidat</b><span>' + E(S.util.nom || 'Candidat') + '</span></div>' +
   '<div><b>Initiales</b><span>' + initiales + '</span></div>' +
-  '<div><b>Niveau</b><span>' + E(S.niveau) + '</span></div>' +
+  (S.niveauConnu ? '<div><b>Niveau</b><span>' + E(S.niveau) + '</span></div>' : '') +
   '<div><b>Épreuve</b><span>' + E(S.typeEpreuve || 'Concours direct · épreuve écrite') + '</span></div>' +
   '<div><b>Date</b><span>' + quand + '</span></div>' +
 '</div>' +
@@ -2561,7 +2586,7 @@ function ecranCopie(){
       })()}</div>
       <div class="qui">
         <b>${E(S.util.nom || 'Candidat')}</b>
-        <span>${E(S.niveau)} · ${S.classement ? nombreFr(S.classement.rang) + 'ᵉ au classement' : 'classement en cours'}</span>
+        <span>${S.niveauConnu ? E(S.niveau) + ' · ' : ''}${S.classement ? nombreFr(S.classement.rang) + 'ᵉ au classement national' : 'classement en cours de calcul'}</span>
       </div>
       <div class="note-mini"><b class="num">${n}</b><i>/ ${S.grille.length}</i></div>
     </div>
@@ -2598,10 +2623,9 @@ function ecranCopie(){
       </div>
     </div>
 
-    <button class="cta" data-erreursdusoir="1" style="margin-top:16px">Voir mes erreurs<small>${ouvertes()} en attente, celles d'aujourd'hui d'abord</small></button>
-    <button class="cta creux" data-recommencer="meme" style="margin-top:9px">Refaire la composition<small>Le même sujet, pour corriger tes erreurs</small></button>
+    <button class="cta" data-feuille="1" style="margin-top:16px">Télécharger ma feuille de composition corrigée<small>Vos réponses, les bonnes réponses, vos erreurs et vos points</small></button>
+    <button class="cta creux" data-recommencer="meme" style="margin-top:9px">Refaire la composition<small>Le même sujet, pour corriger vos erreurs</small></button>
     <button class="cta creux" data-recommencer="neuve" style="margin-top:9px">Refaire une nouvelle composition<small>Un autre tirage de questions</small></button>
-    <button class="cta creux" data-feuille="1" style="margin-top:9px">Télécharger ma feuille corrigée<small>Votre nom, votre note, votre grille en couleur et vos recommandations</small></button>
     <button class="cta discret" data-partage="performance" style="margin-top:9px">Partager mon résultat<small>WhatsApp, Facebook, ou copier le lien</small></button>
   </div>`;
 }
@@ -2908,29 +2932,39 @@ function ecranCompte(){
       </div>` : ''}
 
       <div class="carte" style="margin-top:14px;text-align:left">
-        <div class="libelle" style="margin-bottom:8px">Rester informé</div>
+        <div class="libelle" style="margin-bottom:10px">Rester informé</div>
         <p class="sous" style="margin:0 0 12px">Les dates de concours, les nouveaux cours et les annonces passent d'abord par nos canaux.</p>
-        <a class="cta creux" style="display:block;text-decoration:none" href="${CONTACT.canal}" target="_blank" rel="noopener">
-          Rejoindre la chaîne WhatsApp<small>Annonces et dates de concours</small></a>
-        <a class="cta creux" style="display:block;margin-top:8px;text-decoration:none" href="${CONTACT.facebook}" target="_blank" rel="noopener">
-          Suivre la page Facebook<small>Le coin du digital</small></a>
-        <button class="cta creux" style="margin-top:8px" data-partage="site">
-          Partager Mon Concours<small>À un camarade qui prépare aussi</small></button>
+
+        <a class="lien-reseau wa" href="${CONTACT.canal}" target="_blank" rel="noopener">
+          ${logoReseau('whatsapp')}
+          <span><b>Rejoindre la chaîne WhatsApp</b><i>Annonces et dates de concours</i></span></a>
+
+        <a class="lien-reseau fb" href="${CONTACT.facebook}" target="_blank" rel="noopener">
+          ${logoReseau('facebook')}
+          <span><b>Suivre MonConcours officiel</b><i>La page Facebook de la plateforme</i></span></a>
+
+        <a class="lien-reseau yt" href="${CONTACT.youtube}" target="_blank" rel="noopener">
+          ${logoReseau('youtube')}
+          <span><b>Rejoindre ma chaîne YouTube</b><i>Méthodes et corrigés en vidéo</i></span></a>
+
+        <button class="cta creux" style="margin-top:10px" data-partage="site">
+          Partager MonConcours à un camarade<small>Qui prépare le concours lui aussi</small></button>
       </div>
 
       <div class="carte" style="margin-top:14px;text-align:left">
-        <div class="libelle" style="margin-bottom:8px">Aide et contact</div>
-        <p class="sous" style="margin:0 0 12px">Un problème de compte, un paiement qui ne passe pas, une erreur dans un cours : écrivez directement à l'administrateur.</p>
-        <a class="cta creux" style="display:block;text-decoration:none"
-           href="https://wa.me/226${CONTACT.adminTel}?text=${encodeURIComponent('Bonjour, je vous écris depuis Mon Concours.')}"
+        <div class="libelle" style="margin-bottom:10px">Aide et contact</div>
+        <a class="lien-reseau wa"
+           href="https://wa.me/226${CONTACT.adminTel}?text=${encodeURIComponent("Bonjour, j'ai besoin d'aide concernant MonConcours.")}"
            target="_blank" rel="noopener">
-          Écrire sur WhatsApp<small>+226 ${CONTACT.adminTel} · urgences et problèmes de compte</small></a>
+          ${logoReseau('whatsapp')}
+          <span><b>Écrivez-nous sur WhatsApp en cas de difficulté</b><i>+226 ${CONTACT.adminTel} · réponse dans la journée</i></span></a>
       </div>
 
       <div class="carte reglages">
         <button>Notifications<span>ACTIVÉES</span></button>
         <button data-go="apparence">Apparence<span>→</span></button>
         <a href="${CONTACT.canal}" target="_blank" rel="noopener">Chaîne WhatsApp<span>→</span></a>
+        <a href="${CONTACT.facebook}" target="_blank" rel="noopener">MonConcours officiel<span>→</span></a>
         <a href="https://wa.me/226${CONTACT.adminTel}" target="_blank" rel="noopener">Aide et contact<span>→</span></a>
         ${S.util.connecte
           ? `<button class="sortie" data-deconnecter="1">Se déconnecter<span>→</span></button>`
