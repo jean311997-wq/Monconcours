@@ -88,18 +88,33 @@
   </div>
 </div>
 
-<!-- bibliothèque Supabase, avec deux adresses de secours si la première est inaccessible -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- Bibliothèque Supabase, hébergée sur le site : un domaine de moins
+     à joindre, et surtout admin.js n'est chargé qu'UNE FOIS la
+     bibliothèque réellement arrivée. C'était le bug : les anciens
+     scripts de secours s'enchaînaient sans jamais s'attendre, et
+     admin.js démarrait parfois avant que supabase n'existe — d'où
+     « Cannot read properties of null (reading 'auth') ». -->
 <script>
-  if(!window.supabase){
-    (function(){var t=document.createElement('script');t.src='https://unpkg.com/@supabase/supabase-js@2';t.async=false;document.head.appendChild(t);})();
+(function(){
+  function demarrerAdmin(){
+    var s = document.createElement('script');
+    s.src = 'admin.js?v=8';
+    document.body.appendChild(s);
   }
-</script>
-<script>
-  if(!window.supabase){
-    (function(){var t=document.createElement('script');t.src='https://cdn.skypack.dev/@supabase/supabase-js@2';t.async=false;document.head.appendChild(t);})();
+  function chargerBibliotheque(adresses, i){
+    if(i >= adresses.length){ demarrerAdmin(); return; }   // admin.js affichera la panne lui-même
+    var t = document.createElement('script');
+    t.src = adresses[i];
+    t.onload = demarrerAdmin;
+    t.onerror = function(){ chargerBibliotheque(adresses, i + 1); };
+    document.head.appendChild(t);
   }
+  chargerBibliotheque([
+    '/supabase-js.min.js?v=8',
+    'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
+    'https://unpkg.com/@supabase/supabase-js@2'
+  ], 0);
+})();
 </script>
-<script src="admin.js"></script>
 </body>
 </html>
