@@ -1073,3 +1073,62 @@ body.en-transition *{transition:background-color .4s ease, color .4s ease, borde
 /* ---------- COMPTE À REBOURS ---------- */
 .pastille-j.urgent{border-color:var(--laterite);background:rgba(196,85,46,.12)}
 .pastille-j.urgent .num{color:var(--laterite)}
+
+/* ---------- SWIPE ENTRE SUJET ET FEUILLE ---------- */
+.gr-corps.glisse-gauche{animation:glisseGauche .26s ease}
+.gr-corps.glisse-droite{animation:glisseDroite .26s ease}
+@keyframes glisseGauche{from{opacity:.4;transform:translateX(16px)}to{opacity:1;transform:none}}
+@keyframes glisseDroite{from{opacity:.4;transform:translateX(-16px)}to{opacity:1;transform:none}}
+
+/* ---------- DÉMONSTRATION DU SWIPE (une seule fois) ---------- */
+#demo-swipe{position:absolute;inset:0;z-index:30;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:14px;background:rgba(15,21,19,.72);
+  pointer-events:none;opacity:0;transition:opacity .25s ease}
+#demo-swipe.joue{opacity:1}
+#demo-swipe span{color:var(--craie);font-size:13px;letter-spacing:.04em;
+  font-family:var(--d);font-weight:700}
+#demo-swipe .doigt{width:30px;height:30px;border-radius:50%;background:var(--or);
+  box-shadow:0 0 0 8px rgba(224,168,88,.18);
+  animation:doigtGlisse 1.8s ease-in-out .3s 1}
+@keyframes doigtGlisse{
+  0%{transform:translateX(46px);opacity:0}
+  15%{opacity:1}
+  50%{transform:translateX(-46px)}
+  85%{opacity:1}
+  100%{transform:translateX(-46px);opacity:0}
+}
+@media(prefers-reduced-motion:reduce){
+  .gr-corps.glisse-gauche,.gr-corps.glisse-droite,#demo-swipe .doigt{animation:none}
+}
+
+/* ---------- EN-TÊTE REPLIABLE DE LA COMPOSITION ---------- */
+.gr-tete{transition:padding .22s ease,gap .22s ease}
+.gr-tete .t,.gr-tete .eyebrow{transition:font-size .22s ease,opacity .22s ease,max-height .22s ease,margin .22s ease}
+.gr-tete.replie{padding-top:8px;padding-bottom:8px}
+.gr-tete.replie .t{font-size:12.5px;max-height:0;opacity:0;margin:0;overflow:hidden}
+.gr-tete.replie .eyebrow{font-size:11px}
+.gr-tete.replie .gr-chrono{transform:scale(.82);transform-origin:right center}
+
+/* ---------- « OÙ SE CONCENTRENT MES ERREURS ? » ----------
+   Hiérarchie forte : la matière la plus touchée saute aux yeux avant
+   même de lire un chiffre. */
+.carte.concentration{margin:14px 0 4px;padding:16px}
+.conc-ligne{margin-bottom:16px}
+.conc-ligne:last-child{margin-bottom:0}
+.conc-tete{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px}
+.conc-tete b{font-family:var(--d);font-size:15.5px;font-weight:800;letter-spacing:.01em}
+.conc-tete .num{font-family:var(--m);font-size:13px;color:var(--laterite);font-weight:700}
+.conc-barre{height:8px;border-radius:5px;background:var(--trait);overflow:hidden}
+.conc-barre i{display:block;height:100%;border-radius:5px;
+  background:linear-gradient(90deg,var(--laterite),#D9713F);min-width:6%}
+.conc-notions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.conc-notions span{font-size:11.5px;color:var(--craie2);background:var(--ardoise2);
+  border:1px solid var(--trait);border-radius:999px;padding:4px 10px}
+
+/* ---------- ERREUR RÉCEMMENT VALIDÉE : confirmation avant disparition ---------- */
+.err-validee{opacity:.62;border-color:var(--vert-bord);background:var(--vert-fond)}
+.echeance.ok{color:var(--vert,#0E7A54);font-weight:700}
+
+/* Plus de lisibilité générale sur le cahier : titres, contrastes, respiration */
+.err .q{font-size:15px;line-height:1.4;font-weight:600;margin-bottom:8px}
+.libelle{font-family:var(--d);font-size:13px;font-weight:800;letter-spacing:.02em}

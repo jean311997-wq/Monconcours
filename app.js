@@ -249,10 +249,11 @@ function compteARebours(){
   const j = joursAvantConcours();
   const nom = E(S.nomConcours || ECHEANCE_PAR_DEFAUT.nom);
   if(j === null) return '';
-  if(j <= 0) return `<span class="pastille-j urgent"><b class="num">C'EST AUJOURD'HUI</b> ${nom}</span>`;
-  if(j <= 60) return `<span class="pastille-j urgent"><b class="num">J−${j}</b> ${j === 1 ? 'jour' : 'jours'} avant ${nom}</span>`;
+  const annee = (S.dateConcours || ECHEANCE_PAR_DEFAUT.date).slice(0, 4);
+  if(j <= 0)  return `<span class="pastille-j urgent"><b class="num">C'est aujourd'hui.</b> Donne tout.</span>`;
+  if(j <= 60) return `<span class="pastille-j urgent"><b class="num">J−${j} jour${j > 1 ? 's' : ''} avant le concours ${annee}.</b> Sois prêt.</span>`;
   const mois = Math.round(j / 30.44);
-  return `<span class="pastille-j"><b class="num">J−${mois} MOIS</b> ${nom} : commencez votre préparation maintenant</span>`;
+  return `<span class="pastille-j"><b class="num">J−${mois} mois avant le concours ${annee}.</b> Sois prêt.</span>`;
 }
 
 function joursAvantConcours(){
@@ -289,18 +290,26 @@ function joursRestants(e){
   if(e.revoirLe === undefined) return 0;
   return Math.max(0, Math.round((e.revoirLe - aujourdhuiZero())/JOUR));
 }
+const DELAI_SORTIE_MS = 5 * 60 * 1000;   // une erreur validée reste visible 5 minutes, comme confirmation
+
 function programmer(e, juste){
   if(juste){
     e.suite++;
     e.revoirLe = aujourdhuiZero() + (PALIERS[Math.min(e.suite-1, PALIERS.length-1)] * JOUR);
+    if(e.suite >= 3 && !e.valideLe) e.valideLe = Date.now();   // horodate le moment de la maîtrise
   } else {
-    e.suite = 0; e.rate++;
+    e.suite = 0; e.rate++; e.valideLe = null;
     e.revoirLe = aujourdhuiZero();       // à reprendre aujourd'hui même
   }
 }
+/* Une erreur est « active » si elle n'est pas encore maîtrisée, ou si elle
+   vient tout juste de l'être : les 5 premières minutes servent de
+   confirmation visuelle, pas de disparition immédiate et abrupte. */
+const active = e => e.suite < 3 || (e.valideLe && Date.now() - e.valideLe < DELAI_SORTIE_MS);
+const recemmentValidee = e => e.suite >= 3 && e.valideLe && Date.now() - e.valideLe < DELAI_SORTIE_MS;
 const ouvertes = () => S.cahier.filter(e => e.suite < 3).length;
 const dues = () => S.cahier.filter(e => e.suite < 3 && joursRestants(e) === 0).length;
-const aReprendre = () => S.cahier.filter(e => e.suite < 3);
+const aReprendre = () => S.cahier.filter(active);
 
 /* =====================================================================
    C1 — LA COMPOSITION EN COURS EST GARDÉE SUR LE TÉLÉPHONE
@@ -770,50 +779,59 @@ async function chargerCompositions(){
   }catch(e){}
 }
 
+/* Chaque source charge et s'affiche independamment des trois autres.
+   Le classement, souvent le plus lent a calculer cote serveur, ne doit
+   plus jamais retenir le reste du profil : chacune rafraichit l'ecran
+   des qu'elle a sa reponse, sans attendre les autres. */
+function rafraichirSiVisible(){
+  if(['compte','cahier','aujourdhui','parcours'].includes(S.ecran)) rendre();
+}
+
 async function chargerProgression(){
   if(!base) return;
   const uid = await utilisateurCourant();
   if(!uid) return;
 
-  try{
-    const [c, st, er, co] = await Promise.all([
-      base.rpc('mon_classement'),
-      base.rpc('mes_stats'),
-      base.rpc('mes_erreurs'),
-      base.rpc('ma_composition_en_cours')
-    ]);
+  S.classementCharge = false;
 
-    if(c.data) S.classement = c.data;
-    if(st.data) S.stats = st.data;
+  base.rpc('mon_classement').then(({data}) => {
+    S.classementCharge = true;
+    if(data) S.classement = data;
+    rafraichirSiVisible();
+  }).catch(() => { S.classementCharge = true; });
 
-    /* le cahier d'erreurs revient de la base */
-    if(er.data && er.data.length){
-      S.cahier.length = 0;
-      er.data.forEach(e => {
-        if(!e.options || e.options.length < 2) return;
-        S.cahier.push({
-          q: e.enonce,
-          opts: e.options,
-          i: e.bonne ?? 0,
-          bon: e.options[e.bonne ?? 0],
-          mien: '—',
-          note: e.explication || 'Reprends-la jusqu\'à ce qu\'elle soit acquise.',
-          rate: e.rate || 1,
-          suite: e.suite || 0,
-          revoirLe: new Date(e.revoir_le).setHours(0,0,0,0),
-          session: 0
-        });
+  base.rpc('mes_stats').then(({data}) => {
+    if(data) S.stats = data;
+    rafraichirSiVisible();
+  }).catch(() => {});
+
+  base.rpc('mes_erreurs').then(({data}) => {
+    if(!data || !data.length) return;
+    S.cahier.length = 0;
+    data.forEach(e => {
+      if(!e.options || e.options.length < 2) return;
+      S.cahier.push({
+        q: e.enonce,
+        opts: e.options,
+        i: e.bonne ?? 0,
+        bon: e.options[e.bonne ?? 0],
+        mien: '\u2014',
+        matiere: e.matiere || null,
+        theme: e.theme || null,
+        note: e.explication || "Reprends-la jusqu'a ce qu'elle soit acquise.",
+        rate: e.rate || 1,
+        suite: e.suite || 0,
+        revoirLe: new Date(e.revoir_le).setHours(0,0,0,0),
+        session: 0
       });
-    }
+    });
+    rafraichirSiVisible();
+  }).catch(() => {});
 
-    /* une composition laissée en route */
-    if(co.data){
-      S.compositionId = co.data.id;
-      S.compoReprise = co.data;
-    }
-
-    if(['compte','cahier','aujourdhui','parcours'].includes(S.ecran)) rendre();
-  }catch(e){}
+  base.rpc('ma_composition_en_cours').then(({data}) => {
+    if(data){ S.compositionId = data.id; S.compoReprise = data; }
+    rafraichirSiVisible();
+  }).catch(() => {});
 }
 
 /* =====================================================================
@@ -2400,6 +2418,9 @@ function ecranGrille(){
     </div>
   </div>`;
   brancherScrub();
+  brancherSwipeComposition();
+  brancherEnteteRepliable();
+  if(!feuille) setTimeout(demoSwipeSiPremiere, 500);
   if(!S.timer && !S.corrige){
     /* Le téléphone affiche, le serveur décide. On se resynchronise à
        l'ouverture puis toutes les minutes : figer l'horloge locale ne
@@ -2423,8 +2444,24 @@ function ecranGrille(){
   }
 }
 
-/* --- curseur de navigation rapide --- */
+/* --- curseur de navigation rapide ---
+   BUG CORRIGÉ : chaque appel ajoutait de nouveaux écouteurs sur window
+   sans jamais retirer les précédents. Au deuxième rendu de l'écran, les
+   anciens écouteurs pointaient encore vers l'ancien #corps — détruit par
+   le innerHTML suivant — pendant que le doigt du candidat déplaçait la
+   poignée sur le nouveau. Résultat : la poignée bouge, le contenu reste
+   figé. On détache maintenant systématiquement l'ancien jeu avant d'en
+   poser un nouveau. */
+let ecouteursScrub = null;
 function brancherScrub(){
+  if(ecouteursScrub){
+    window.removeEventListener('pointermove', ecouteursScrub.suivre);
+    window.removeEventListener('touchmove', ecouteursScrub.suivreTactile);
+    window.removeEventListener('pointerup', ecouteursScrub.fin);
+    window.removeEventListener('pointercancel', ecouteursScrub.fin);
+    window.removeEventListener('touchend', ecouteursScrub.fin);
+    ecouteursScrub = null;
+  }
   const zone = document.getElementById('scrub');
   const main = document.getElementById('poignee');
   const corps = document.getElementById('corps');
@@ -2472,6 +2509,103 @@ function brancherScrub(){
   window.addEventListener('pointerup', fin);
   window.addEventListener('pointercancel', fin);
   window.addEventListener('touchend', fin);
+  ecouteursScrub = { suivre, suivreTactile, fin };
+}
+
+/* =====================================================================
+   SWIPE — bascule tactile entre le sujet et la feuille de réponses
+   ===================================================================== */
+let ecouteursSwipeCompo = null;
+function brancherSwipeComposition(){
+  if(ecouteursSwipeCompo){
+    ecouteursSwipeCompo.zone.removeEventListener('touchstart', ecouteursSwipeCompo.debut);
+    ecouteursSwipeCompo.zone.removeEventListener('touchmove', ecouteursSwipeCompo.bouge);
+    ecouteursSwipeCompo.zone.removeEventListener('touchend', ecouteursSwipeCompo.fin);
+    ecouteursSwipeCompo = null;
+  }
+  const zone = document.getElementById('corps');
+  if(!zone) return;
+  let x0 = 0, y0 = 0, tranche = null;   // tranche : 'h' horizontal, 'v' vertical, ou null tant qu'indécis
+
+  const debut = e => {
+    if(e.touches.length !== 1) return;
+    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; tranche = null;
+  };
+  const bouge = e => {
+    if(!e.touches[0]) return;
+    const dx = e.touches[0].clientX - x0, dy = e.touches[0].clientY - y0;
+    if(tranche === null && (Math.abs(dx) > 12 || Math.abs(dy) > 12)){
+      /* on tranche une seule fois par geste : au premier déplacement net,
+         horizontal ou vertical, on s'y tient jusqu'au relâchement. Un
+         swipe vertical ne bascule jamais la page, un swipe horizontal
+         ne fait jamais défiler le sujet. */
+      tranche = Math.abs(dx) > Math.abs(dy) * 1.3 ? 'h' : 'v';
+    }
+    if(tranche === 'h') e.preventDefault();   // on bloque le scroll vertical le temps du swipe horizontal
+  };
+  const fin = e => {
+    if(tranche !== 'h') return;
+    const dx = (e.changedTouches[0] ? e.changedTouches[0].clientX : x0) - x0;
+    if(Math.abs(dx) < 60) return;
+    if(dx < 0 && !S.compoTab || S.compoTab === 'sujet'){ if(dx < 0) basculerCompoTab('feuille'); }
+    if(dx > 0 && S.compoTab === 'feuille') basculerCompoTab('sujet');
+  };
+
+  zone.addEventListener('touchstart', debut, { passive:true });
+  zone.addEventListener('touchmove', bouge, { passive:false });
+  zone.addEventListener('touchend', fin, { passive:true });
+  ecouteursSwipeCompo = { zone, debut, bouge, fin };
+}
+
+function basculerCompoTab(cible){
+  if(S.compoTab === cible) return;
+  const zone = document.getElementById('corps');
+  if(zone) zone.classList.add(cible === 'feuille' ? 'glisse-gauche' : 'glisse-droite');
+  S.compoTab = cible;
+  if(cible === 'sujet') S.sujetVu = true;
+  ecrireReglage('swipeCompoVu', true);   // le geste a servi : plus besoin de la démo
+  ecranGrille();
+}
+
+/* Démonstration du swipe, une seule fois, à la première composition. */
+function demoSwipeSiPremiere(){
+  if(lireReglages().swipeCompoVu) return;
+  const zone = document.getElementById('corps');
+  if(!zone || document.getElementById('demo-swipe')) return;
+  const d = document.createElement('div');
+  d.id = 'demo-swipe';
+  d.innerHTML = `<div class="doigt"></div><span>Glissez pour changer de vue</span>`;
+  zone.appendChild(d);
+  setTimeout(() => { d.classList.add('joue'); }, 400);
+  setTimeout(() => { d.remove(); }, 2600);
+}
+
+/* =====================================================================
+   EN-TÊTE REPLIABLE — se compacte pendant la lecture du sujet, se
+   redéploie dès qu'on remonte. Basé sur le sens réel du défilement,
+   jamais sur une simple position.
+   ===================================================================== */
+let ecouteurEnteteRepliable = null;
+function brancherEnteteRepliable(){
+  if(ecouteurEnteteRepliable){
+    const ancien = document.getElementById('corps');
+    if(ancien) ancien.removeEventListener('scroll', ecouteurEnteteRepliable);
+    ecouteurEnteteRepliable = null;
+  }
+  const corps = document.getElementById('corps');
+  const tete = document.querySelector('.gr-tete');
+  if(!corps || !tete) return;
+  let dernier = corps.scrollTop, accumule = 0;
+  const suivre = () => {
+    const y = corps.scrollTop, dy = y - dernier;
+    dernier = y;
+    if(y < 12){ tete.classList.remove('replie'); accumule = 0; return; }
+    accumule += dy;
+    if(accumule > 40){ tete.classList.add('replie'); accumule = 0; }
+    else if(accumule < -30){ tete.classList.remove('replie'); accumule = 0; }
+  };
+  corps.addEventListener('scroll', suivre, { passive:true });
+  ecouteurEnteteRepliable = suivre;
 }
 
 /* --- la feuille de sujet : lecture seule --- */
@@ -2634,6 +2768,37 @@ function ecranCopie(){
    ÉCRAN 5 — MON CAHIER
    ===================================================================== */
 let repriseIdx = null, repriseRep = undefined;
+/* « Où se concentrent mes erreurs ? » — hiérarchie visuelle forte,
+   pour que le candidat voie en un regard où porter son effort. */
+function repartitionErreurs(list){
+  if(list.length < 3) return '';   // pas assez de matière pour qu'un classement ait un sens
+  const parMatiere = {};
+  list.forEach(e => {
+    const m = e.matiere || 'Autres';
+    (parMatiere[m] = parMatiere[m] || []).push(e);
+  });
+  const matieres = Object.entries(parMatiere).sort((a,b) => b[1].length - a[1].length);
+  const pire = matieres[0][1].length;
+
+  return `
+  <div class="carte concentration">
+    <div class="libelle" style="margin-bottom:2px">Où se concentrent mes erreurs ?</div>
+    <p class="sous" style="margin:0 0 14px">La matière la plus haute mérite votre prochaine séance.</p>
+    ${matieres.slice(0, 5).map(([m, es]) => {
+      const parNotion = {};
+      es.forEach(e => { const n = e.theme || 'Général'; parNotion[n] = (parNotion[n]||0) + 1; });
+      const notions = Object.entries(parNotion).sort((a,b) => b[1]-a[1]).slice(0, 3);
+      return `<div class="conc-ligne">
+        <div class="conc-tete">
+          <b>${E(m)}</b><span class="num">${es.length} erreur${es.length>1?'s':''}</span></div>
+        <div class="conc-barre"><i style="width:${Math.round(es.length/pire*100)}%"></i></div>
+        ${notions.length ? `<div class="conc-notions">${notions.map(([n,c]) =>
+          `<span>${E(n)} — ${c}</span>`).join('')}</div>` : ''}
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
 function ecranCahier(){
   let list = aReprendre();
   const scoreSession = e => (S.cahierDepuisGrille && e.session===S.sessionCounter) ? 1 : 0;
@@ -2656,19 +2821,23 @@ function ecranCahier(){
 
     ${list.length ? `
     <div class="bloc">
-      <div class="libelle">Toutes mes erreurs<span class="num">${dues()} dues sur ${list.length}</span></div>
+      ${repartitionErreurs(list)}
+      <div class="libelle" style="margin-top:16px">Toutes mes erreurs<span class="num">${dues()} dues sur ${list.length}</span></div>
       ${list.map(e=>{
         const idx = S.cahier.indexOf(e);
         const j = joursRestants(e);
-        return `<div class="err">
+        const validee = recemmentValidee(e);
+        return `<div class="err${validee?' err-validee':''}">
           <div class="q">${E(e.q)}</div>
           <div class="ligne">Votre réponse : « ${E(e.mien)} »</div>
           <div class="ligne">Bonne réponse : <b>${E(e.bon)}</b></div>
-          <div class="ligne" style="margin-top:6px;color:#7E8C86">${e.note}</div>
+          <div class="ligne" style="margin-top:6px;color:#7E8C86">${E(e.note)}</div>
           <div class="pied">
-            <span class="echeance ${j===0?'du':''}">${j===0?'À REPRENDRE AUJOURD\'HUI':'DANS '+j+' JOUR'+(j>1?'S':'')}</span>
+            ${validee
+              ? `<span class="echeance ok">✓ VALIDÉE</span>`
+              : `<span class="echeance ${j===0?'du':''}">${j===0?'À REPRENDRE AUJOURD\'HUI':'DANS '+j+' JOUR'+(j>1?'S':'')}</span>`}
             <span class="acquis">${[0,1,2].map(i=>`<i class="${i<e.suite?'on':''}"></i>`).join('')}</span>
-            <button class="reprendre ${j===0?'':'valider'}" data-reprise="${idx}">${j===0?'Reprendre':'Valider'}</button>
+            ${validee ? '' : `<button class="reprendre ${j===0?'':'valider'}" data-reprise="${idx}">${j===0?'Reprendre':'Valider'}</button>`}
           </div>
         </div>`;
       }).join('')}
@@ -3339,7 +3508,7 @@ document.addEventListener('click', ev=>{
     else {
       sonFaux();
       if(!S.cahier.some(e=>e.q===q.q))
-        S.cahier.push({q:q.q, mien:q.o[+d.qcm], bon:q.o[q.i], opts:q.o, i:q.i, rate:1, suite:0, revoirLe:0, session:0, note:q.x});
+        S.cahier.push({q:q.q, mien:q.o[+d.qcm], bon:q.o[q.i], opts:q.o, i:q.i, rate:1, suite:0, revoirLe:0, session:0, note:q.x, matiere:S.matiere||null, theme:q.theme||null});
     }
     return ecranQcm();
   }
@@ -3401,7 +3570,7 @@ document.addEventListener('click', ev=>{
     const i = +d.rep, q = S.seance[S.seanceIdx];
     if(i===q.i){ S.seanceJustes++; sonJuste(); } else sonFaux();
     if(i!==q.i && !S.cahier.some(e=>e.q===q.q))
-      S.cahier.push({q:q.q, mien:q.opts[i], bon:q.opts[q.i], opts:q.opts, i:q.i, rate:1, suite:0, revoirLe:0, session:0, note:q.note});
+      S.cahier.push({q:q.q, mien:q.opts[i], bon:q.opts[q.i], opts:q.opts, i:q.i, rate:1, suite:0, revoirLe:0, session:0, note:q.note, matiere:S.matiere||null, theme:q.theme||null});
     return ecranSeance(i), nav();
   }
 
@@ -3412,9 +3581,7 @@ document.addEventListener('click', ev=>{
   }
 
   if(d.compotab){
-    S.compoTab = d.compotab;
-    if(d.compotab==='sujet') S.sujetVu = true;
-    ecranGrille();
+    basculerCompoTab(d.compotab);
     const c = document.getElementById('corps'); if(c) c.scrollTop = 0;
     return;
   }
