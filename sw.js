@@ -3,13 +3,13 @@
    Un candidat en 2G ne doit pas repayer le chargement à chaque visite,
    et un candidat sans réseau doit pouvoir relire ses cours.
    ===================================================================== */
-const VERSION = 'mc-v8';
+const VERSION = 'mc-v9';
 const COQUE   = VERSION + '-coque';   // les fichiers de l'application
 const DONNEES = VERSION + '-donnees'; // les réponses de la base
 
 const FICHIERS = [
-  '/', '/index.html', '/app.js?v=8', '/styles.css?v=8',
-  '/supabase-js.min.js?v=8', '/manifest.webmanifest', '/favicon.png', '/icone-192.png'
+  '/', '/index.html', '/app.js?v=9', '/styles.css?v=9',
+  '/supabase-js.min.js?v=9', '/manifest.webmanifest', '/favicon.png', '/icone-192.png'
 ];
 
 /* Un fichier absent doit rester absent. Ne JAMAIS renvoyer la page
@@ -60,7 +60,7 @@ self.addEventListener('fetch', e => {
   /* index.html et app.js doivent toujours voyager ensemble : on va les
      chercher sur le réseau en priorité, le cache ne sert qu'en secours.
      Sans cela, un ancien app.js peut se retrouver avec un index.html neuf. */
-  if(url.origin === self.location.origin && /\/(index\.html)?$|app\.js|styles\.css|sw\.js/.test(url.pathname)){
+  if(url.origin === self.location.origin && /\/(index\.html)?$|admin\.html|app\.js|admin\.js|styles\.css|admin\.css|sw\.js/.test(url.pathname)){
     e.respondWith(
       fetch(req).then(rep => {
         if(rep && rep.status === 200){
