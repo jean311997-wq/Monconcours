@@ -1145,3 +1145,24 @@ body.en-transition *{transition:background-color .4s ease, color .4s ease, borde
 
 /* ---------- OPÉRATEUR INDISPONIBLE ---------- */
 .operateur.indispo{opacity:.42;pointer-events:none}
+
+/* ---------- CLOCHE DE NOTIFICATIONS ---------- */
+.bouton-tete.cloche{position:relative}
+.pastille-cloche{position:absolute;top:2px;right:2px;min-width:15px;height:15px;
+  padding:0 3px;border-radius:999px;background:var(--laterite);color:#fff;
+  font-size:9.5px;font-weight:800;line-height:15px;text-align:center}
+
+.notif-ligne{display:flex;align-items:flex-start;gap:11px;width:100%;
+  padding:12px 4px;border-bottom:1px solid var(--trait);background:none;
+  text-align:left;position:relative}
+.notif-ligne:last-child{border-bottom:0}
+.notif-ligne.non-lue{background:var(--ardoise2)}
+.notif-ligne .ic{flex:0 0 auto;width:34px;height:34px;border-radius:10px;
+  display:grid;place-items:center;background:var(--ardoise2);color:var(--craie2)}
+.notif-ligne.non-lue .ic{background:var(--laterite);color:#fff}
+.notif-ligne .co{flex:1;min-width:0}
+.notif-ligne .co b{display:block;font-size:14px;font-weight:600}
+.notif-ligne .co span{display:block;font-size:12.5px;color:var(--craie2);margin-top:2px;line-height:1.4}
+.notif-ligne .co i{display:block;font-style:normal;font-size:11px;color:var(--craie2);margin-top:4px;opacity:.75}
+.notif-ligne .point{position:absolute;top:14px;right:6px;width:7px;height:7px;
+  border-radius:50%;background:var(--laterite)}

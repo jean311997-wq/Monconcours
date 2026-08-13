@@ -67,7 +67,7 @@ const S = {
   form:{nom:'', tel:'', pin:'', pin2:'', couleur:''}, codeVisible:false, erreur:'',
   abo:{actif:false, formule:null, jours_restants:0, echeance:'formule gratuite'},
   theme:'sombre', sessionCounter:0, cahierDepuisGrille:false,
-  modal:null, modalDejaVu:false, matiereOuverte:null, sync:null, bloque:false, qcmPos:{}, rechercheCours:'', compositions:[], niveauConnu:false, dateConcours:null, nomConcours:null, typeEpreuve:'Concours direct · épreuve écrite',
+  modal:null, modalDejaVu:false, matiereOuverte:null, sync:null, bloque:false, qcmPos:{}, rechercheCours:'', compositions:[], niveauConnu:false, notifications:[], notifCharge:false, dateConcours:null, nomConcours:null, typeEpreuve:'Concours direct · épreuve écrite',
   choixFormule:'annuelle', operateur:'orange', paieTel:'', paieEtape:0,
   semaines:17, depart:null, concours:'ENAREF cycle C',
   score:71, seuilScore:90,
@@ -687,14 +687,23 @@ function melangerComposition(){
 }
 
 let banqueChargee = false;
+let sujetChoisi = null;   // même sujet pour le tirage des questions et l'ouverture de la composition
+
 async function chargerQuestions(){
   if(!base || banqueChargee) return;
   banqueChargee = true;
   try{
-    /* --- le sujet de composition --- */
-    const { data: sujet } = await base.from('sujets')
+    /* --- le sujet de composition : un tirage au hasard parmi les sujets
+       publiés, pour qu'un candidat ne retombe pas systématiquement sur
+       le même. Le sujet retenu est mémorisé pour que l'ouverture de la
+       composition pointe exactement vers les mêmes questions. */
+    const { data: sujetsDispo } = await base.from('sujets')
       .select('id, duree_secondes, seuil_admission')
-      .eq('reference', '2026-07').eq('statut', 'publie').maybeSingle();
+      .eq('statut', 'publie');
+    const sujet = sujetsDispo && sujetsDispo.length
+      ? sujetsDispo[Math.floor(Math.random() * sujetsDispo.length)]
+      : null;
+    sujetChoisi = sujet;
 
     if(sujet){
       const { data: liens } = await base.from('sujet_questions')
@@ -750,6 +759,28 @@ async function chargerQuestions(){
 /* =====================================================================
    RELIRE SA PROGRESSION
    ===================================================================== */
+async function chargerNotifications(){
+  if(!base) return;
+  try{
+    const uid = await utilisateurCourant();
+    if(!uid) return;
+    const { data } = await base.rpc('mes_notifications');
+    S.notifications = data || [];
+    S.notifCharge = true;
+    rendre();
+  }catch(e){}
+}
+
+async function marquerNotifsLues(id){
+  if(!base) return;
+  try{
+    await base.rpc('marquer_notifications_lues', { p_id: id || null });
+    if(id) S.notifications = S.notifications.map(n => n.id === id ? {...n, lue:true} : n);
+    else S.notifications = S.notifications.map(n => ({...n, lue:true}));
+    rendre();
+  }catch(e){}
+}
+
 async function chargerAbonnement(){
   if(!base) return;
   try{
@@ -951,6 +982,7 @@ function brancherBase(){
   setTimeout(chargerRessources, 1200);
   setTimeout(chargerConcours, 300);
   setTimeout(chargerAbonnement, 600);
+  setTimeout(chargerNotifications, 900);
 }
 
 
@@ -1143,9 +1175,8 @@ async function ouvrirComposition(){
   const uid = await utilisateurCourant();
   if(!uid || !base){ ouvertureEnCours = false; return; }
   try{
-    const { data: sujet } = await base.from('sujets').select('id').eq('reference','2026-07').maybeSingle();
     const { data } = await base.from('compositions').insert({
-      user_id: uid, sujet_id: sujet ? sujet.id : null,
+      user_id: uid, sujet_id: sujetChoisi ? sujetChoisi.id : null,
       nb_questions: S.grille.length, nb_traitees: 0
     }).select('id').single();
     if(data) S.compositionId = data.id;
@@ -1952,6 +1983,53 @@ function texteDePartage(quoi){
 }
 
 /* Feuille de partage : les vrais logos, pas un bouton anonyme. */
+/* Feuille des notifications : la cloche l'ouvre, une par une ou tout
+   marquer comme lu. Le badge se vide dès l'ouverture d'une ligne. */
+const ICONE_NOTIF = { resultat:'grille', paiement:'carte', nouveau_cours:'revisions', rappel:'cloche', motivation:'cloche', faiblesse:'erreurs' };
+
+function relatif(iso){
+  const d = Date.now() - new Date(iso).getTime();
+  const min = Math.floor(d / 60000);
+  if(min < 1) return "à l'instant";
+  if(min < 60) return 'il y a ' + min + ' min';
+  const h = Math.floor(min / 60);
+  if(h < 24) return 'il y a ' + h + 'h';
+  const j = Math.floor(h / 24);
+  if(j < 7) return 'il y a ' + j + ' j';
+  return new Date(iso).toLocaleDateString('fr-FR', { day:'numeric', month:'short' });
+}
+
+function ouvrirNotifications(){
+  S.modal = 'notifications';
+  document.getElementById('voile').hidden = false;
+  const liste = S.notifications;
+  document.getElementById('voile').innerHTML = `
+  <div class="feuille" role="dialog" aria-label="Notifications">
+    <div class="poignee"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <h3 class="titre" style="font-size:20px;margin:0">Notifications</h3>
+      ${liste.some(n=>!n.lue) ? `<button class="lien" data-notifs-tout="1">Tout marquer comme lu</button>` : ''}
+    </div>
+    ${!liste.length ? `
+    <p class="sous" style="margin:18px 0">Rien pour le moment. Vos résultats et rappels apparaîtront ici.</p>
+    ` : `
+    <div style="max-height:56vh;overflow-y:auto;margin-top:10px">
+      ${liste.map(n => `
+        <button class="notif-ligne ${n.lue?'':'non-lue'}" data-notif-lire="${n.id}">
+          <span class="ic">${ico(ICONE_NOTIF[n.type] || 'cloche', 17)}</span>
+          <span class="co">
+            <b>${E(n.titre)}</b>
+            <span>${E(n.message)}</span>
+            <i>${relatif(n.cree_le)}</i>
+          </span>
+          ${!n.lue ? '<span class="point"></span>' : ''}
+        </button>`).join('')}
+    </div>`}
+    <button class="cta creux" style="margin-top:14px" data-fermer-partage="1">Fermer</button>
+  </div>`;
+  if(liste.some(n=>!n.lue)) setTimeout(() => marquerNotifsLues(null), 1200);
+}
+
 function ouvrirPartage(quoi){
   const t = texteDePartage(quoi), lien = CONTACT.site;
   const complet = encodeURIComponent(t + ' ' + lien);
@@ -3230,8 +3308,11 @@ function apptete(){
     compte:S.abo.actif?'formule '+(S.abo.formule==='annuelle'?'annuelle':'mensuelle'):'formule gratuite',
     revisions:S.niveau.toLowerCase(), qcm:S.matiere||'', abonnement:'', paiement:'sécurisé',
     inscription:'', connexion:'', resultat:'étape 3 sur 3', actualite:'ce matin'}[S.ecran] || '';
+  const nonLues = S.notifications.filter(n => !n.lue).length;
   t.innerHTML = `${logoSvg(24)}<span class="mot">MON <i>CONCOURS</i></span>
     <span class="droite">${droite}</span>
+    <button class="bouton-tete cloche" data-notifs="1" aria-label="Notifications${nonLues?', ' + nonLues + ' non lues':''}">
+      ${ico('cloche',17)}${nonLues ? `<i class="pastille-cloche">${nonLues > 9 ? '9+' : nonLues}</i>` : ''}</button>
     <button class="bouton-tete ${MUSIQUE.actif?'actif':''}" data-musique="1"
       aria-pressed="${MUSIQUE.actif}"
       aria-label="${MUSIQUE.actif?'Arrêter la musique':'Mettre une musique douce'}">
@@ -3405,7 +3486,7 @@ function rendre(){
 }
 
 document.addEventListener('click', ev=>{
-  const t = ev.target.closest('[data-matiere],[data-vers],[data-musique],[data-copier],[data-partage-natif],[data-fermer-partage],[data-paieretour],[data-preuve-modifier],[data-preuve-envoyer],[data-feuille],[data-archive],[data-partage],[data-oeil],[data-reinitialiser],[data-lire],[data-telecharger],[data-apercu],[data-saut],[data-compotab],[data-bascule-theme],[data-modal],[data-entrer],[data-bascule],[data-plustard],[data-deconnecter],[data-theme-choix],[data-erreursdusoir],[data-cible],[data-cours],[data-inscrire],[data-connecter],[data-oubli],[data-formule],[data-operateur],[data-payer],[data-paiefin],[data-paieannul],[data-go],[data-toutcahier],[data-actu],[data-niv],[data-mat],[data-qcm],[data-qsuiv],[data-cahierfreq],[data-classement],[data-diagnostic],[data-defi],[data-duel],[data-badges],[data-phase],[data-conc],[data-dep],[data-test],[data-tb],[data-tremettre],[data-retest],[data-seance],[data-rep],[data-suivante],[data-b],[data-remettre],[data-recommencer],[data-reprise],[data-rr],[data-fin-reprise]');
+  const t = ev.target.closest('[data-matiere],[data-vers],[data-musique],[data-notifs],[data-notifs-tout],[data-notif-lire],[data-copier],[data-partage-natif],[data-fermer-partage],[data-paieretour],[data-preuve-modifier],[data-preuve-envoyer],[data-feuille],[data-archive],[data-partage],[data-oeil],[data-reinitialiser],[data-lire],[data-telecharger],[data-apercu],[data-saut],[data-compotab],[data-bascule-theme],[data-modal],[data-entrer],[data-bascule],[data-plustard],[data-deconnecter],[data-theme-choix],[data-erreursdusoir],[data-cible],[data-cours],[data-inscrire],[data-connecter],[data-oubli],[data-formule],[data-operateur],[data-payer],[data-paiefin],[data-paieannul],[data-go],[data-toutcahier],[data-actu],[data-niv],[data-mat],[data-qcm],[data-qsuiv],[data-cahierfreq],[data-classement],[data-diagnostic],[data-defi],[data-duel],[data-badges],[data-phase],[data-conc],[data-dep],[data-test],[data-tb],[data-tremettre],[data-retest],[data-seance],[data-rep],[data-suivante],[data-b],[data-remettre],[data-recommencer],[data-reprise],[data-rr],[data-fin-reprise]');
   if(!t) return;
   const d = t.dataset;
 
@@ -3558,6 +3639,9 @@ document.addEventListener('click', ev=>{
   if(d.musique){ basculerMusique(); return; }
   if(d.feuille){ feuilleComposition(); return; }
   if(d.archive){ feuilleArchive(d.archive); return; }
+  if(d.notifs){ ouvrirNotifications(); return; }
+  if(d.notifsTout){ marquerNotifsLues(null); return; }
+  if(d.notifLire){ marquerNotifsLues(d.notifLire); return; }
   if(d.partage){ ouvrirPartage(d.partage); return; }
   if(d.partageNatif){ document.getElementById('voile').hidden = true; partager(d.partageNatif); return; }
   if(d.copier){

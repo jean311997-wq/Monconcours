@@ -1389,7 +1389,20 @@ async function traiterProposition(id, action){
 }
 
 /* ---------- questions ---------- */
+/* Barre « page X sur Y », reutilisable partout où une liste peut grossir
+   au-dela d'une page. Recoit le total exact et l'index courant. */
+function barrePagination(page, parPage, total){
+  const dernier = Math.max(1, Math.ceil(total / parPage));
+  if(dernier <= 1) return '';
+  return `<div class="pagination">
+    <button class="mini" data-page-vers="${Math.max(0, page-1)}" ${page<=0?'disabled':''}>← Précédent</button>
+    <span>Page ${page+1} sur ${dernier} · ${total} au total</span>
+    <button class="mini" data-page-vers="${Math.min(dernier-1, page+1)}" ${page>=dernier-1?'disabled':''}>Suivant →</button>
+  </div>`;
+}
+
 async function vueQuestions(){
+  let page = 0; const parPage = 100;
   $('#vue').innerHTML = `
     <h2 class="titre">Questions</h2>
     <p class="sous">La banque complète. Seules les questions publiées sont proposées aux candidats.</p>
@@ -1409,18 +1422,25 @@ async function vueQuestions(){
     <div class="bloc"><div class="carte" id="tableau">Chargement…</div></div>`;
 
   const charger = async () => {
-    let r = db.from('questions')
-      .select('id, enonce, statut, niveau, matiere_id, annee_session, cree_le')
-      .order('cree_le', { ascending:false }).limit(100);
     const s = document.getElementById('f-statut').value;
     const m = document.getElementById('f-matiere').value;
+
+    let base_r = db.from('questions').select('id', { count:'exact', head:true });
+    if(s) base_r = base_r.eq('statut', s);
+    if(m) base_r = base_r.eq('matiere_id', m);
+    const { count } = await base_r;
+
+    let r = db.from('questions')
+      .select('id, enonce, statut, niveau, matiere_id, annee_session, cree_le')
+      .order('cree_le', { ascending:false })
+      .range(page * parPage, page * parPage + parPage - 1);
     if(s) r = r.eq('statut', s);
     if(m) r = r.eq('matiere_id', m);
 
     const { data, error } = await r;
     if(error) return erreur(error, 'Lecture impossible');
 
-    document.getElementById('tableau').innerHTML = data.length
+    document.getElementById('tableau').innerHTML = (data.length
       ? `<table><thead><tr><th>Énoncé</th><th>Matière</th><th>Niveau</th><th>État</th><th></th></tr></thead><tbody>
          ${data.map(q => `<tr>
             <td>${q.enonce}</td>
@@ -1432,7 +1452,8 @@ async function vueQuestions(){
               : `<button class="lien" data-retirer-q="${q.id}">retirer</button>`}</td>
           </tr>`).join('')}
          </tbody></table>`
-      : `<div class="vide">Aucune question ne correspond.</div>`;
+      : `<div class="vide">Aucune question ne correspond.</div>`)
+      + barrePagination(page, parPage, count || 0);
 
     document.querySelectorAll('[data-publier]').forEach(b => b.onclick = async () => {
       const { error } = await db.from('questions')
@@ -1446,10 +1467,13 @@ async function vueQuestions(){
       if(error) return erreur(error, 'Retrait impossible');
       signal('Question retirée de la publication.', 'info'); charger();
     });
+    document.querySelectorAll('[data-page-vers]').forEach(b => b.onclick = () => {
+      page = parseInt(b.dataset.pageVers, 10); charger();
+    });
   };
 
-  document.getElementById('f-statut').onchange = charger;
-  document.getElementById('f-matiere').onchange = charger;
+  document.getElementById('f-statut').onchange = () => { page = 0; charger(); };
+  document.getElementById('f-matiere').onchange = () => { page = 0; charger(); };
   charger();
 }
 
@@ -1824,15 +1848,20 @@ async function vueDirect(){
 }
 
 /* ---------- rétention et exploration d'un candidat ---------- */
-async function vueCandidats(){
+async function vueCandidats(pageC){
+  pageC = pageC || 0;
+  const parPage = 50;
   $('#vue').innerHTML = `
     <h2 class="titre">Candidats</h2>
     <p class="sous">Qui revient, et le parcours détaillé de chacun.</p>
     <div id="zone-candidats">Chargement…</div>`;
 
-  const [{ data: ret }, { data: gens }] = await Promise.all([
+  const [{ data: ret }, { count: totalC }, { data: gens }] = await Promise.all([
     db.rpc('retention'),
-    db.from('profils').select('id, nom, telephone, niveau, cree_le').order('cree_le', { ascending:false }).limit(50)
+    db.from('profils').select('id', { count:'exact', head:true }),
+    db.from('profils').select('id, nom, telephone, niveau, cree_le')
+      .order('cree_le', { ascending:false })
+      .range(pageC * parPage, pageC * parPage + parPage - 1)
   ]);
 
   const zK = document.getElementById('zone-candidats');
@@ -1860,11 +1889,13 @@ async function vueCandidats(){
           <td><b>${p.nom}</b><br><span class="num" style="font-size:11px;color:var(--craie2)">
             ${p.telephone ? '+226 ' + p.telephone : '—'} · ${p.niveau || '—'} · ${dateCourte(p.cree_le)}</span></td>
           <td style="text-align:right"><button class="lien" data-chrono="${p.id}">voir son parcours</button></td>
-        </tr>`).join('')}</tbody></table>`}
+        </tr>`).join('')}</tbody></table>${barrePagination(pageC, parPage, totalC || 0)}`}
       </div>
     </div>
 
     <div class="bloc" id="zone-chrono"></div>`;
+
+  document.querySelectorAll('[data-page-vers]').forEach(b => b.onclick = () => vueCandidats(parseInt(b.dataset.pageVers, 10)));
 
   document.querySelectorAll('[data-chrono]').forEach(b => b.onclick = async () => {
     const { data, error } = await db.rpc('chronologie', { p_user: b.dataset.chrono, p_limite: 150 });
@@ -2143,23 +2174,30 @@ async function enregistrerSujet(){
 }
 
 /* ---------- journal ---------- */
-async function vueJournal(){
+async function vueJournal(pageJ){
+  pageJ = pageJ || 0; const parPage = 80;
   $('#vue').innerHTML = `
     <h2 class="titre">Journal</h2>
     <p class="sous">Qui a validé quoi, et quand. Le jour où une erreur passe, c'est ici qu'on remonte à sa source.</p>
     <div class="bloc"><div class="carte" id="j">Chargement…</div></div>`;
 
-  const { data, error } = await db.from('journal_activite')
-    .select('*').order('cree_le', { ascending:false }).limit(80);
+  const [{ count }, { data, error }] = await Promise.all([
+    db.from('journal_activite').select('id', { count:'exact', head:true }),
+    db.from('journal_activite').select('*').order('cree_le', { ascending:false })
+      .range(pageJ * parPage, pageJ * parPage + parPage - 1)
+  ]);
   if(error) return erreur(error, 'Lecture impossible');
 
-  document.getElementById('j').innerHTML = data.length
+  document.getElementById('j').innerHTML = (data.length
     ? `<table><thead><tr><th>Quand</th><th>Action</th><th>Cible</th></tr></thead><tbody>
        ${data.map(l => `<tr><td class="num">${dateHeure(l.cree_le)}</td>
          <td>${(l.action || '').replace(/_/g,' ')}</td>
          <td class="num" style="color:var(--craie2)">${l.table_cible || '—'}</td></tr>`).join('')}
        </tbody></table>`
-    : `<div class="vide">Le journal est vide pour l'instant.</div>`;
+    : `<div class="vide">Le journal est vide pour l'instant.</div>`)
+    + barrePagination(pageJ, parPage, count || 0);
+
+  document.querySelectorAll('[data-page-vers]').forEach(b => b.onclick = () => vueJournal(parseInt(b.dataset.pageVers, 10)));
 }
 
 /* ============================================================
