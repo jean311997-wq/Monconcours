@@ -80,6 +80,7 @@
       <button data-vue="sujets">Sujets</button>
       <button data-vue="actualites">Actualités</button>
       <button data-vue="musique">Musique</button>
+      <button data-vue="paiements">Paiements</button>
       <button data-vue="referentiel">Référentiel</button>
       <button data-vue="journal">Journal</button>
     </nav>
@@ -98,7 +99,7 @@
 (function(){
   function demarrerAdmin(){
     var s = document.createElement('script');
-    s.src = 'admin.js?v=9';
+    s.src = 'admin.js?v=10';
     document.body.appendChild(s);
   }
   function chargerBibliotheque(adresses, i){
@@ -110,7 +111,7 @@
     document.head.appendChild(t);
   }
   chargerBibliotheque([
-    '/supabase-js.min.js?v=9',
+    '/supabase-js.min.js?v=10',
     'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
     'https://unpkg.com/@supabase/supabase-js@2'
   ], 0);

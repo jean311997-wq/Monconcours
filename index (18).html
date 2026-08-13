@@ -18,7 +18,7 @@
 <meta name="twitter:card" content="summary">
 
 <!-- la mise en forme d'abord : c'est elle qui décide de la vitesse perçue -->
-<link rel="stylesheet" href="styles.css?v=8">
+<link rel="stylesheet" href="styles.css?v=10">
 <style>
   #facade{position:fixed;inset:0;z-index:900;background:#0F1513;display:flex;
     flex-direction:column;align-items:center;justify-content:center;gap:10px;
@@ -123,7 +123,7 @@ function reparerEtRecharger(){
 <div class="sr" id="annonce" aria-live="polite" role="status"></div>
 
 <!-- l'application s'affiche immédiatement, sans attendre le réseau -->
-<script src="app.js?v=8" onerror="facadePerdue()"></script>
+<script src="app.js?v=10" onerror="facadePerdue()"></script>
 
 <!-- la base est servie par le site : un domaine de moins à joindre en 2G -->
 <script>
@@ -132,7 +132,7 @@ function reparerEtRecharger(){
     if(window.supabase && typeof brancherBase === 'function') brancherBase();
   }
   var s = document.createElement('script');
-  s.src = '/supabase-js.min.js?v=8';
+  s.src = '/supabase-js.min.js?v=10';
   s.async = true;
   s.onload = brancher;
   s.onerror = function(){

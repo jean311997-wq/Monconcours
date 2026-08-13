@@ -1132,3 +1132,16 @@ body.en-transition *{transition:background-color .4s ease, color .4s ease, borde
 /* Plus de lisibilité générale sur le cahier : titres, contrastes, respiration */
 .err .q{font-size:15px;line-height:1.4;font-weight:600;margin-bottom:8px}
 .libelle{font-family:var(--d);font-size:13px;font-weight:800;letter-spacing:.02em}
+
+/* ---------- DÉPÔT DE LA PREUVE DE PAIEMENT ---------- */
+.depot-preuve{display:flex;flex-direction:column;align-items:center;gap:8px;
+  padding:34px 20px;border:2px dashed var(--trait);border-radius:16px;
+  color:var(--craie2);cursor:pointer;text-align:center;transition:border-color .16s ease}
+.depot-preuve:active{border-color:var(--laterite)}
+.depot-preuve b{color:var(--craie);font-size:14.5px;font-weight:600}
+.depot-preuve span{font-size:12px}
+.apercu-preuve{border-radius:16px;overflow:hidden;border:1px solid var(--trait);background:var(--ardoise2)}
+.apercu-preuve img{display:block;width:100%;max-height:360px;object-fit:contain;background:#000}
+
+/* ---------- OPÉRATEUR INDISPONIBLE ---------- */
+.operateur.indispo{opacity:.42;pointer-events:none}

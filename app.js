@@ -66,7 +66,7 @@ const S = {
   voirClassement:false, voirDiagnostic:false, voirDefi:false, voirBadges:false,
   util:{nom:'', tel:'', pin:'', connecte:false},
   form:{nom:'', tel:'', pin:'', pin2:'', couleur:''}, codeVisible:false, erreur:'',
-  abo:{actif:true, formule:'Semaine gratuite', echeance:'encore 7 jours'},
+  abo:{actif:false, formule:null, jours_restants:0, echeance:'formule gratuite'},
   theme:'sombre', sessionCounter:0, cahierDepuisGrille:false,
   modal:null, modalDejaVu:false, matiereOuverte:null, sync:null, bloque:false, qcmPos:{}, rechercheCours:'', compositions:[], niveauConnu:false, dateConcours:null, nomConcours:null, typeEpreuve:'Concours direct · épreuve écrite',
   choixFormule:'annuelle', operateur:'orange', paieTel:'', paieEtape:0,
@@ -436,7 +436,7 @@ function nav(){
     return `<button class="${on}" data-go="${o.id}"${on?' aria-current="page"':''}>
       <span class="g">${ico(o.g,19)}</span>${o.l}${p}</button>`;
   }).join('') + `<div class="bas">${S.abo.actif
-      ? 'Formule '+S.abo.formule+' · '+S.abo.echeance
+      ? 'Formule ' + (S.abo.formule==='annuelle'?'annuelle':'mensuelle') + ' · ' + E(S.abo.echeance)
       : 'Formule gratuite · l\'actualité du matin reste gratuite à vie'}</div>`;
 }
 
@@ -752,6 +752,29 @@ async function chargerQuestions(){
 /* =====================================================================
    RELIRE SA PROGRESSION
    ===================================================================== */
+async function chargerAbonnement(){
+  if(!base) return;
+  try{
+    const uid = await utilisateurCourant();
+    if(!uid) return;
+    const { data } = await base.from('mon_abonnement').select('*').maybeSingle();
+    if(data && data.actif){
+      S.abo = {
+        actif: true, formule: data.formule, fin_le: data.fin_le,
+        jours_restants: data.jours_restants,
+        echeance: data.jours_restants + ' jour' + (data.jours_restants > 1 ? 's' : '') + ' restant' + (data.jours_restants > 1 ? 's' : '')
+      };
+    } else {
+      S.abo = {actif:false, formule:null, jours_restants:0, echeance:'formule gratuite'};
+    }
+    /* une demande en cours de vérification, à afficher sur l'écran des formules */
+    const { data: dem } = await base.from('paiements')
+      .select('cree_le').eq('statut','en_attente').order('cree_le',{ascending:false}).limit(1).maybeSingle();
+    S.paieEnAttente = dem || null;
+    if(['compte','abonnement','aujourdhui'].includes(S.ecran)) rendre();
+  }catch(e){}
+}
+
 async function chargerConcours(){
   if(!base) return;
   try{
@@ -929,6 +952,7 @@ function brancherBase(){
      quand le candidat ouvre réellement les révisions ou la composition. */
   setTimeout(chargerRessources, 1200);
   setTimeout(chargerConcours, 300);
+  setTimeout(chargerAbonnement, 600);
 }
 
 
@@ -1432,7 +1456,23 @@ function logoSvg(t){
   </svg>`;
 }
 function maj(champ, val){ S.form[champ] = val; }
-function majPaie(val){ S.paieTel = val; }
+function majPaieTel(val){ S.paieTel = val; }
+function majPaieNom(val){ S.paieNomCompte = val; }
+window.majPaieTel = majPaieTel;
+window.majPaieNom = majPaieNom;
+
+/* Le fichier choisi est prévisualisé avant tout envoi réseau. */
+window.choisirPreuve = function(fichier){
+  if(!fichier) return;
+  if(fichier.size > 5 * 1024 * 1024){ S.erreur = 'Image trop lourde : 5 Mo maximum.'; rendre(); return; }
+  const lecteur = new FileReader();
+  lecteur.onload = () => {
+    S.paievePreuve = { fichier, dataUrl: lecteur.result };
+    S.erreur = '';
+    rendre();
+  };
+  lecteur.readAsDataURL(fichier);
+};
 
 function ecranInscription(){
   vue().innerHTML = `
@@ -1510,12 +1550,25 @@ const FORMULES = {
   annuelle:{n:'Formule 2', prix:'5 000 FCFA', per:'par an', reco:true}
 };
 function ecranAbonnement(){
+  const abo = S.abo;
   vue().innerHTML = `
   <div class="pad">
     <button class="retourhaut" data-go="compte">Mon compte</button>
-    <h2 class="titre">Profitez d'une<br>semaine gratuite</h2>
-    <p class="sous" style="margin:10px 0 18px">Tout est ouvert pendant sept jours. Choisissez ensuite la formule qui vous convient.</p>
 
+    ${abo && abo.actif ? `
+    <div class="carte" style="text-align:center;padding:22px 16px">
+      <div class="eyebrow">Abonnement actif</div>
+      <h2 class="titre" style="font-size:22px;margin:8px 0">${E(abo.formule === 'annuelle' ? 'Formule annuelle' : 'Formule mensuelle')}</h2>
+      <p class="sous">${abo.jours_restants} jour${abo.jours_restants>1?'s':''} restant${abo.jours_restants>1?'s':''}, jusqu'au ${new Date(abo.fin_le).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'})}</p>
+    </div>` : `
+    <h2 class="titre">Débloquez<br>tout MonConcours</h2>
+    <p class="sous" style="margin:10px 0 18px">Toutes les matières, le cahier complet, le classement et les compositions illimitées.</p>`}
+
+    ${S.paieEnAttente ? `
+    <div class="carte" style="margin:14px 0;text-align:center">
+      <div class="eyebrow">Demande envoyée</div>
+      <p class="sous" style="margin:6px 0 0">Votre paiement du ${new Date(S.paieEnAttente.cree_le).toLocaleDateString('fr-FR')} est en cours de vérification.</p>
+    </div>` : `
     <div class="libelle">Choisissez votre formule</div>
     ${Object.keys(FORMULES).map(k=>{
       const f = FORMULES[k];
@@ -1526,39 +1579,53 @@ function ecranAbonnement(){
         <button class="mini" style="margin-top:12px" data-formule="${k}">${S.choixFormule===k?'Formule sélectionnée ✓':'Choisir cette formule'}</button>
       </div>`;
     }).join('')}
-
-    <button class="cta" style="margin-top:10px" data-go="paiement">Payer par mobile money<small>${FORMULES[S.choixFormule].prix} · ${FORMULES[S.choixFormule].per}</small></button>
+    <button class="cta" style="margin-top:10px" data-go="paiement">Payer par mobile money<small>${FORMULES[S.choixFormule].prix} · ${FORMULES[S.choixFormule].per}</small></button>`}
   </div>`;
 }
 
 function ecranPaiement(){
   const f = FORMULES[S.choixFormule];
-  const op = {orange:'Orange Money',moov:'Moov Money',wave:'Wave'}[S.operateur];
-  if(S.paieEtape===1){
+
+  /* Étape 3 : la preuve du paiement, jamais un simple clic. */
+  if(S.paieEtape === 3){
     vue().innerHTML = `
-    <div class="pad" style="padding-top:60px;text-align:center">
-      <div class="attente" role="status" aria-label="Paiement en cours"></div>
-      <h2 class="titre" style="font-size:22px">Confirme sur<br>ton téléphone</h2>
-      <p class="sous" style="margin:12px 0 20px">Un message ${op} vient d'être envoyé au +226 ${S.paieTel||'…'}. Saisis ton code secret ${op} pour valider ${f.prix}.</p>
-      <div class="ussd">
-        <div class="eyebrow">ou compose</div>
-        <div class="code">*144*4*6*${f.prix.replace(/\D/g,'')}#</div>
-        <p>Si tu n'as rien reçu au bout d'une minute, compose ce code directement.</p>
+    <div class="pad">
+      <button class="retourhaut" data-paieretour="1">Retour</button>
+      <h2 class="titre">Importez la preuve<br>de votre paiement</h2>
+      <p class="sous" style="margin:10px 0 18px">Téléchargez la capture d'écran envoyée par Orange Money confirmant votre transaction de ${f.prix}.</p>
+
+      ${S.erreur ? `<div class="alerte" role="alert">${E(S.erreur)}</div>` : ''}
+
+      ${!S.paievePreuve ? `
+      <label class="depot-preuve" for="p-preuve">
+        <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>
+        <b>Choisir une capture d'écran</b>
+        <span>JPEG ou PNG · 5 Mo maximum</span>
+      </label>
+      <input id="p-preuve" type="file" accept="image/*" style="display:none" onchange="choisirPreuve(this.files[0])">
+      ` : `
+      <div class="apercu-preuve">
+        <img src="${S.paievePreuve.dataUrl}" alt="Aperçu de la preuve de paiement">
       </div>
-      <button class="cta" style="margin-top:18px" data-paiefin="1">J'ai validé le paiement</button>
-      <button class="lien" data-paieannul="1">Annuler</button>
+      <div class="rangee" style="margin-top:12px;gap:9px">
+        <button class="cta creux" style="flex:1" data-preuve-modifier="1">Modifier</button>
+        <button class="cta" style="flex:1" data-preuve-envoyer="1" ${S.paieEnvoi ? 'disabled' : ''}>${S.paieEnvoi ? 'Envoi…' : 'Envoyer la preuve'}</button>
+      </div>
+      `}
     </div>`;
     return;
   }
+
+  /* Étape 2 : confirmation, la demande est enregistrée côté serveur. */
   if(S.paieEtape===2){
     vue().innerHTML = `
     <div class="pad" style="padding-top:44px;text-align:center">
       <div class="cachet-note" style="max-width:230px">
         <div class="n" style="font-size:34px">…</div>
-        <div class="l">paiement en vérification</div>
+        <div class="l">paiement reçu</div>
       </div>
-      <h2 class="titre" style="font-size:24px">Nous vérifions<br>votre paiement</h2>
-      <p class="sous" style="margin:12px 0 6px">La confirmation de l'opérateur peut prendre quelques minutes. Votre formule s'ouvrira dès qu'elle sera reçue. Vous gardez l'accès à tout ce qui est déjà ouvert.</p>
+      <h2 class="titre" style="font-size:24px">Votre preuve est en<br>cours de vérification</h2>
+      <p class="sous" style="margin:12px 0 6px">La vérification peut prendre jusqu'à deux heures. Votre formule s'ouvrira automatiquement dès la confirmation.</p>
       <div class="carte" style="margin-top:16px;text-align:left">
         <div class="mat"><div class="nom">Numéro déclaré<em>Au +226 ${S.paieTel}</em></div><div class="val">✓</div></div>
         <div class="mat"><div class="nom">Formule demandée<em>${f.n} · ${f.per}</em></div><div class="val num">${f.prix}</div></div>
@@ -1568,33 +1635,58 @@ function ecranPaiement(){
     </div>`;
     return;
   }
+
+  /* Étape 1 : le code USSD, le montant est celui de la formule choisie. */
+  if(S.paieEtape===1){
+    vue().innerHTML = `
+    <div class="pad" style="padding-top:60px;text-align:center">
+      <div class="attente" role="status" aria-label="Paiement en cours"></div>
+      <h2 class="titre" style="font-size:22px">Confirmez sur<br>votre téléphone</h2>
+      <p class="sous" style="margin:12px 0 20px">Composez le code ci-dessous pour valider ${f.prix} vers MonConcours, ou suivez le message Orange Money reçu au +226 ${S.paieTel||'…'}.</p>
+      <div class="ussd">
+        <div class="eyebrow">code de paiement</div>
+        <div class="code">*144*4*6*${f.prix.replace(/\D/g,'')}#</div>
+        <p>Une fois la transaction confirmée par Orange Money, importez la preuve à l'étape suivante.</p>
+      </div>
+      <button class="cta" style="margin-top:18px" data-paiefin="1">J'ai effectué le paiement</button>
+      <button class="lien" data-paieannul="1">Annuler</button>
+    </div>`;
+    return;
+  }
+
+  /* Étape 0 : opérateur, numéro, nom du compte. */
   vue().innerHTML = `
   <div class="pad">
     <button class="retourhaut" data-go="abonnement">Formules</button>
     <h2 class="titre">Paiement</h2>
     <p class="sous" style="margin:8px 0 18px">Formule ${f.n} · ${f.prix} ${f.per}. Aucun compte bancaire nécessaire.</p>
 
-    ${S.erreur?`<div class="alerte" role="alert">${S.erreur}</div>`:''}
+    ${S.erreur?`<div class="alerte" role="alert">${E(S.erreur)}</div>`:''}
 
-    <div class="libelle">Opérateur</div>
-    <button class="operateur ${S.operateur==='orange'?'on':''}" data-operateur="orange" aria-pressed="${S.operateur==='orange'}">
-      <span class="pastille om">OM</span><span><b>Orange Money</b><span>Validation par code secret sur ton téléphone</span></span></button>
-    <button class="operateur ${S.operateur==='moov'?'on':''}" data-operateur="moov" aria-pressed="${S.operateur==='moov'}">
-      <span class="pastille mm">MM</span><span><b>Moov Money</b><span>Validation par code secret sur ton téléphone</span></span></button>
-    <button class="operateur ${S.operateur==='wave'?'on':''}" data-operateur="wave" aria-pressed="${S.operateur==='wave'}">
-      <span class="pastille wv">W</span><span><b>Wave</b><span>Validation par code secret sur ton téléphone</span></span></button>
+    <div class="libelle">Moyen de paiement</div>
+    <button class="operateur on" data-operateur="orange" aria-pressed="true">
+      <span class="pastille om">OM</span><span><b>Orange Money</b><span>Disponible · validation par code secret</span></span></button>
+    <button class="operateur indispo" disabled aria-disabled="true">
+      <span class="pastille mm">MM</span><span><b>Moov Money</b><span>Non disponible pour le moment</span></span></button>
+    <button class="operateur indispo" disabled aria-disabled="true">
+      <span class="pastille wv">W</span><span><b>Wave</b><span>Non disponible pour le moment</span></span></button>
 
     <div class="champ" style="margin-top:16px">
-      <label for="p-tel">Numéro ${S.operateur==='orange'?'Orange':'Moov'}</label>
+      <label for="p-tel">Numéro Orange</label>
       <div class="prefixe"><span class="ind">+226</span>
-        <input id="p-tel" type="tel" inputmode="numeric" maxlength="8" value="${S.paieTel}" placeholder="70 00 00 00" oninput="majPaie(this.value)">
+        <input id="p-tel" type="tel" inputmode="numeric" maxlength="8" value="${S.paieTel}" placeholder="70 00 00 00" oninput="majPaieTel(this.value)">
       </div>
-      <div class="aide">Tu recevras une demande de confirmation immédiatement.</div>
+      <div class="aide">Le numéro qui va effectuer la transaction.</div>
     </div>
 
-    <div class="carte">
+    <div class="champ" style="margin-top:12px">
+      <label for="p-nom">Nom du compte</label>
+      <input id="p-nom" type="text" value="${E(S.paieNomCompte)}" placeholder="Nom sur le compte Orange Money" oninput="majPaieNom(this.value)">
+      <div class="aide">Le nom associé au numéro qui paie, pour retrouver votre transaction.</div>
+    </div>
+
+    <div class="carte" style="margin-top:16px">
       <div class="mat"><div class="nom">Formule ${f.n}<em>${f.per}</em></div><div class="val num">${f.prix}</div></div>
-      <div class="mat"><div class="nom">Frais de transaction<em>Pris en charge</em></div><div class="val num">0 F</div></div>
       <div class="mat"><div class="nom" style="font-weight:600">Total à payer</div><div class="val num" style="color:var(--craie)">${f.prix}</div></div>
     </div>
 
@@ -3086,8 +3178,8 @@ function ecranCompte(){
       <div class="libelle">Mon abonnement</div>
       <button class="grande" style="margin-top:0" data-go="abonnement">
         <span class="ic">${ico('carte',19)}</span>
-        <span><b>Formule ${S.abo.formule}</b><span>${S.abo.echeance}</span></span>
-        <span class="fl">${S.abo.actif?'GÉRER →':'CHANGER →'}</span>
+        <span><b>${S.abo.actif ? 'Formule ' + (S.abo.formule === 'annuelle' ? 'annuelle' : 'mensuelle') : 'Formule gratuite'}</b><span>${E(S.abo.echeance)}</span></span>
+        <span class="fl">${S.abo.actif?'GÉRER →':'S\'ABONNER →'}</span>
       </button>
       ${S.compositions && S.compositions.length ? `
       <div class="carte" style="margin-top:14px;text-align:left">
@@ -3153,7 +3245,7 @@ function apptete(){
   t.style.display='flex';
   const jr = joursAvantConcours();
   const droite = {aujourdhui: jr === null ? '' : 'J−' + jr, copie:'copie corrigée', cahier:ouvertes()+' en attente',
-    compte:S.abo.actif?'formule '+S.abo.formule.toLowerCase():'formule gratuite',
+    compte:S.abo.actif?'formule '+(S.abo.formule==='annuelle'?'annuelle':'mensuelle'):'formule gratuite',
     revisions:S.niveau.toLowerCase(), qcm:S.matiere||'', abonnement:'', paiement:'sécurisé',
     inscription:'', connexion:'', resultat:'étape 3 sur 3', actualite:'ce matin'}[S.ecran] || '';
   t.innerHTML = `${logoSvg(24)}<span class="mot">MON <i>CONCOURS</i></span>
@@ -3331,7 +3423,7 @@ function rendre(){
 }
 
 document.addEventListener('click', ev=>{
-  const t = ev.target.closest('[data-matiere],[data-vers],[data-musique],[data-copier],[data-partage-natif],[data-fermer-partage],[data-feuille],[data-archive],[data-partage],[data-oeil],[data-reinitialiser],[data-lire],[data-telecharger],[data-apercu],[data-saut],[data-compotab],[data-bascule-theme],[data-modal],[data-entrer],[data-bascule],[data-plustard],[data-deconnecter],[data-theme-choix],[data-erreursdusoir],[data-cible],[data-cours],[data-inscrire],[data-connecter],[data-oubli],[data-formule],[data-operateur],[data-payer],[data-paiefin],[data-paieannul],[data-go],[data-toutcahier],[data-actu],[data-niv],[data-mat],[data-qcm],[data-qsuiv],[data-cahierfreq],[data-classement],[data-diagnostic],[data-defi],[data-duel],[data-badges],[data-phase],[data-conc],[data-dep],[data-test],[data-tb],[data-tremettre],[data-retest],[data-seance],[data-rep],[data-suivante],[data-b],[data-remettre],[data-recommencer],[data-reprise],[data-rr],[data-fin-reprise]');
+  const t = ev.target.closest('[data-matiere],[data-vers],[data-musique],[data-copier],[data-partage-natif],[data-fermer-partage],[data-paieretour],[data-preuve-modifier],[data-preuve-envoyer],[data-feuille],[data-archive],[data-partage],[data-oeil],[data-reinitialiser],[data-lire],[data-telecharger],[data-apercu],[data-saut],[data-compotab],[data-bascule-theme],[data-modal],[data-entrer],[data-bascule],[data-plustard],[data-deconnecter],[data-theme-choix],[data-erreursdusoir],[data-cible],[data-cours],[data-inscrire],[data-connecter],[data-oubli],[data-formule],[data-operateur],[data-payer],[data-paiefin],[data-paieannul],[data-go],[data-toutcahier],[data-actu],[data-niv],[data-mat],[data-qcm],[data-qsuiv],[data-cahierfreq],[data-classement],[data-diagnostic],[data-defi],[data-duel],[data-badges],[data-phase],[data-conc],[data-dep],[data-test],[data-tb],[data-tremettre],[data-retest],[data-seance],[data-rep],[data-suivante],[data-b],[data-remettre],[data-recommencer],[data-reprise],[data-rr],[data-fin-reprise]');
   if(!t) return;
   const d = t.dataset;
 
@@ -3408,15 +3500,55 @@ document.addEventListener('click', ev=>{
   if(d.operateur){ S.operateur = d.operateur; return rendre(); }
   if(d.payer){
     const tel = S.paieTel.replace(/\D/g,'');
-    if(tel.length !== 8){ S.erreur = "Saisis le numéro mobile money à 8 chiffres."; return rendre(); }
-    S.erreur=''; S.paieEtape = 1; return rendre();
+    if(tel.length !== 8){ S.erreur = "Saisissez le numéro Orange Money à 8 chiffres."; return rendre(); }
+    if(!S.paieNomCompte || S.paieNomCompte.trim().length < 2){ S.erreur = "Indiquez le nom du compte qui effectue le paiement."; return rendre(); }
+    S.erreur=''; S.operateur = 'orange'; S.paieEtape = 1; return rendre();
   }
   if(d.paiefin){
-    /* C5 — un clic du candidat ne vaut pas un paiement. L'abonnement ne
-       s'ouvrira que lorsqu'un serveur aura confirmé la transaction. */
+    /* Un clic du candidat ne vaut pas un paiement : on demande la
+       preuve avant toute activation, et c'est le serveur qui décide. */
     pister('PAYMENT_DECLARED', { formule: S.choixFormule, operateur: S.operateur });
-    S.paieEtape = 2;
+    S.paieEtape = 3; S.paievePreuve = null; S.erreur = '';
     return rendre();
+  }
+  if(d.paieretour){
+    S.paieEtape = S.paievePreuve ? 3 : 1; S.erreur='';
+    if(S.paieEtape === 1) return rendre();
+    S.paieEtape = 1; return rendre();
+  }
+  if(d.preuveModifier){ S.paievePreuve = null; return rendre(); }
+  if(d.preuveEnvoyer){
+    if(!S.paievePreuve || S.paieEnvoi) return;
+    S.paieEnvoi = true; rendre();
+    (async () => {
+      try{
+        if(!base) throw new Error('Connexion indisponible.');
+        const { data: sess } = await base.auth.getSession();
+        const uid = sess && sess.session && sess.session.user.id;
+        if(!uid) throw new Error('Vous devez être connecté.');
+
+        const chemin = uid + '/' + Date.now() + '-preuve.jpg';
+        const { error: eUp } = await base.storage.from('preuves-paiement')
+          .upload(chemin, S.paievePreuve.fichier, { contentType: S.paievePreuve.fichier.type || 'image/jpeg' });
+        if(eUp) throw eUp;
+
+        const { data, error } = await base.rpc('soumettre_paiement', {
+          p_formule: S.choixFormule, p_operateur: 'orange', p_telephone: S.paieTel,
+          p_nom_compte: S.paieNomCompte, p_preuve_chemin: chemin
+        });
+        if(error) throw error;
+        if(!data || !data.ok){ S.erreur = (data && data.message) || 'Envoi impossible.'; S.paieEnvoi = false; return rendre(); }
+
+        pister('PAYMENT_PROOF_SENT', { formule: S.choixFormule });
+        S.paieEnAttente = { cree_le: new Date().toISOString() };
+        S.paieEnvoi = false; S.paieEtape = 2;
+        rendre();
+      }catch(e){
+        S.erreur = (e && e.message) || "Envoi impossible. Vérifiez votre connexion.";
+        S.paieEnvoi = false; rendre();
+      }
+    })();
+    return;
   }
   if(d.paieannul){ pister('PAYMENT_ABANDONED', { formule: S.choixFormule }); S.paieEtape = 0; return aller('abonnement'); }
   if(d.erreursdusoir){ pister('ERRORS_OPENED', { depuis: 'composition' });

@@ -218,7 +218,7 @@ function rendre(){
      pedagogie:vuePedagogie, candidats:vueCandidats,
      depot:vueDepot, import:vueImport, bibliotheque:vueBibliotheque,
      validation:vueValidation, questions:vueQuestions, sujets:vueSujets, actualites:vueActualites,
-     referentiel:vueReferentiel, journal:vueJournal, musique:vueMusique }[A.vue] || vueApercu)();
+     referentiel:vueReferentiel, journal:vueJournal, musique:vueMusique, paiements:vuePaiements }[A.vue] || vueApercu)();
   $('#vue').scrollTop = 0;
 }
 
@@ -299,6 +299,67 @@ async function vueMusique(){
     await base.storage.from('musiques').remove([b.dataset.chemin]);
     await base.from('musiques').delete().eq('id', b.dataset.musSuppr);
     vueMusique();
+  });
+}
+
+/* ---------- paiements ---------- */
+async function vuePaiements(){
+  $('#vue').innerHTML = `
+  <div class="entete-vue">
+    <h2>Paiements</h2>
+    <p>Chaque demande doit etre verifiee avant confirmation. Ouvrez la preuve, comparez
+       le nom et le montant, puis confirmez ou refusez. La confirmation active
+       immediatement l'abonnement du candidat.</p>
+  </div>
+  <div class="carte"><div id="pai-liste">Chargement…</div></div>`;
+
+  const { data, error } = await base.rpc('paiements_en_attente');
+  const zone = $('#pai-liste');
+  if(error){ zone.innerHTML = '<p class="vide">Erreur de chargement : ' + error.message + '</p>'; return; }
+
+  const liste = data || [];
+  if(!liste.length){ zone.innerHTML = '<p class="vide">Aucune demande de paiement pour le moment.</p>'; return; }
+
+  const statutLabel = { en_attente:'<span class="etat">En attente</span>',
+    confirme:'<span class="etat ok">Confirme</span>', refuse:'<span class="etat danger">Refuse</span>' };
+
+  zone.innerHTML = `<table class="tableau">
+    <thead><tr><th>Candidat</th><th>Numero</th><th>Formule</th><th>Montant</th><th>Preuve</th><th>Statut</th><th>Recu le</th><th></th></tr></thead>
+    <tbody>${liste.map(p => `
+      <tr>
+        <td><b>${(p.nom || '—').replace(/</g,'&lt;')}</b><br><span style="color:var(--craie2);font-size:12px">${(p.nom_compte||'').replace(/</g,'&lt;')}</span></td>
+        <td>${p.telephone || '—'}</td>
+        <td>${p.formule === 'annuelle' ? 'Annuelle' : 'Mensuelle'}</td>
+        <td>${nombre(p.montant)} F</td>
+        <td>${p.preuve_chemin ? `<button class="mini" data-pai-voir="${p.preuve_chemin}">Voir</button>` : '—'}</td>
+        <td>${statutLabel[p.statut] || p.statut}</td>
+        <td>${dateHeure(p.cree_le)}</td>
+        <td>${p.statut === 'en_attente' ? `
+          <button class="mini" data-pai-confirmer="${p.id}">Confirmer</button>
+          <button class="mini danger" data-pai-refuser="${p.id}">Refuser</button>` : ''}</td>
+      </tr>`).join('')}</tbody>
+  </table>`;
+
+  $$('[data-pai-voir]').forEach(b => b.onclick = async () => {
+    const { data: url } = await base.storage.from('preuves-paiement')
+      .createSignedUrl(b.dataset.paiVoir, 300);
+    if(url && url.signedUrl) window.open(url.signedUrl, '_blank');
+    else alert("Impossible d'ouvrir cette preuve.");
+  });
+
+  $$('[data-pai-confirmer]').forEach(b => b.onclick = async () => {
+    b.disabled = true;
+    const { data, error } = await base.rpc('confirmer_paiement', { p_id: b.dataset.paiConfirmer, p_confirme: true });
+    if(error || !data || !data.ok){ alert((data && data.message) || (error && error.message) || 'Echec.'); b.disabled = false; return; }
+    vuePaiements();
+  });
+
+  $$('[data-pai-refuser]').forEach(b => b.onclick = async () => {
+    if(!confirm('Refuser cette demande de paiement ?')) return;
+    b.disabled = true;
+    const { data, error } = await base.rpc('confirmer_paiement', { p_id: b.dataset.paiRefuser, p_confirme: false });
+    if(error || !data || !data.ok){ alert((data && data.message) || (error && error.message) || 'Echec.'); b.disabled = false; return; }
+    vuePaiements();
   });
 }
 
