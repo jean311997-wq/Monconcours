@@ -19,7 +19,6 @@ const CONTACT = {
   canal:    'https://whatsapp.com/channel/0029Vb9boQ990x32o1rJTm07',
   facebook: 'https://www.facebook.com/share/18zvk8fdA3/',
   adminTel: '77959848',
-  youtube:  'https://www.youtube.com/@moncoursofficiel',
   site:     'https://monconcours.vercel.app'
 };
 
@@ -395,7 +394,6 @@ const ECRANS_DECOUVERTE = ['engagement','testIntro','test','resultat'];
 
 function aller(e){
   if(['revisions','qcm','grille','cours'].includes(e)) chargerQuestions();
-  if(e === 'compte') chargerCompositions();
   if(e !== 'lecture') S.matiereOuverte = null;
   if(S.timer && e!=='grille'){clearInterval(S.timer);S.timer=null;}
   if(S.testTimer && e!=='test'){clearInterval(S.testTimer);S.testTimer=null;}
@@ -1408,6 +1406,7 @@ function ico(n, t){
   const p = {
     actualite:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9h6M7 13h10M7 17h7"/>',
     musique:'<path d="M9 18V5l10-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/>',
+    partage:'<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/>',
     revisions:'<path d="M4 6a2 2 0 0 1 2-2h5v16H6a2 2 0 0 1-2-2z"/><path d="M20 6a2 2 0 0 0-2-2h-5v16h5a2 2 0 0 0 2-2z"/>',
     grille:'<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="2" fill="currentColor" stroke="none"/><circle cx="15.5" cy="8.5" r="2"/><circle cx="8.5" cy="15.5" r="2"/><circle cx="15.5" cy="15.5" r="2" fill="currentColor" stroke="none"/>',
     erreurs:'<path d="M4 5a2 2 0 0 1 2-2h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M14 3v5h5"/><path d="M9 12l3 3m0-3l-3 3"/>',
@@ -2110,6 +2109,10 @@ function feuilleComposition(source){
 '.legende i{width:14px;height:14px;border-radius:50%;display:inline-block}' +
 'ol{margin:6px 0 0 18px;font-size:13px}li{margin-bottom:5px}' +
 '.mot{border-left:3px solid #111;padding:8px 12px;margin-top:14px;font-style:italic;font-size:13.5px;background:#f7f5f0}' +
+'.saut-page{break-before:page;page-break-before:always}' +
+'h1{break-after:avoid;page-break-after:avoid}' +
+'.grille{break-inside:auto}' +
+'.legende{break-inside:avoid;page-break-inside:avoid}' +
 '.pied{margin-top:20px;border-top:1px solid #999;padding-top:7px;font-size:10.5px;color:#555;' +
 '  display:flex;justify-content:space-between}' +
 '@media print{.noimp{display:none}}' +
@@ -2146,7 +2149,11 @@ function feuilleComposition(source){
   '</table>' +
 '</div>' +
 
-'<h1>Votre feuille corrigée</h1>' +
+'<h1>Recommandations</h1><ol>' + recommandations.map(r => '<li>' + r + '</li>').join('') + '</ol>' +
+'<div class="mot">' + encouragement + '</div>' +
+
+'<div class="saut-page"></div>' +
+'<h1>Votre feuille de composition</h1>' +
 '<div class="grille">' + grilleHtml + '</div>' +
 '<div class="legende">' +
   '<span><i style="background:#0E7A54"></i> Bonne réponse noircie</span>' +
@@ -2154,9 +2161,6 @@ function feuilleComposition(source){
   '<span><i style="border:2px solid #B4231C"></i> Noirci à tort</span>' +
   '<span><i style="border:1px solid #ccc"></i> Non noirci</span>' +
 '</div>' +
-
-'<h1>Recommandations</h1><ol>' + recommandations.map(r => '<li>' + r + '</li>').join('') + '</ol>' +
-'<div class="mot">' + encouragement + '</div>' +
 
 '<div class="pied"><span>monconcours.vercel.app · Mon Concours</span>' +
 '<span>Document remis le ' + quand + '</span></div>' +
@@ -2316,7 +2320,7 @@ function ecranLecture(){
         <div class="libelle" style="margin-bottom:8px">Cours terminé</div>
         <p class="sous" style="margin:0 0 12px">Vous avez lu les ${lot.length} chapitres de ${E(S.matiereOuverte)}. Mettez-les à l'épreuve.</p>
         <button class="cta" data-cible="${E(S.matiereOuverte)}">📝 Faire les QCM de ce cours</button>
-        <button class="cta creux" style="margin-top:8px" data-partage="cours">Partager ce cours</button>
+        <button class="cta creux" style="margin-top:8px" data-partage="cours">${ico("partage",16)} Partager ce cours</button>
       </div>
       <button class="cta creux" style="margin-top:12px" data-go="cours">Retour à la bibliothèque</button>
     </div>`;
@@ -2852,7 +2856,7 @@ function ecranCopie(){
     <button class="cta" data-feuille="1" style="margin-top:16px">Télécharger ma feuille de composition corrigée<small>Vos réponses, les bonnes réponses, vos erreurs et vos points</small></button>
     <button class="cta creux" data-recommencer="meme" style="margin-top:9px">Refaire la composition<small>Le même sujet, pour corriger vos erreurs</small></button>
     <button class="cta creux" data-recommencer="neuve" style="margin-top:9px">Refaire une nouvelle composition<small>Un autre tirage de questions</small></button>
-    <button class="cta discret" data-partage="performance" style="margin-top:9px">Partager mon résultat<small>WhatsApp, Facebook, ou copier le lien</small></button>
+    <button class="cta discret" data-partage="performance" style="margin-top:9px">${ico("partage",15)} Partager mon résultat<small>WhatsApp, Facebook, ou copier le lien</small></button>
   </div>`;
 }
 
@@ -2946,14 +2950,6 @@ function ecranCahier(){
       </div>`).join('')}
     </div>`:''}
 
-    <div class="bloc">
-      <div class="libelle">Où se concentrent mes erreurs</div>
-      <div class="carte">
-        <div class="mat"><div class="nom">Dates officielles<em>Une fiche chronologique a été ajoutée</em></div><div class="val num">11</div></div>
-        <div class="mat"><div class="nom">Physiologie<em>Chapitre à reprendre entièrement</em></div><div class="val num">8</div></div>
-        <div class="mat"><div class="nom">Accords grammaticaux<em>Participe passé avec « avoir »</em></div><div class="val num">6</div></div>
-      </div>
-    </div>
   </div>`;
 }
 function ecranReprise(){
@@ -3181,17 +3177,6 @@ function ecranCompte(){
         <span><b>${S.abo.actif ? 'Formule ' + (S.abo.formule === 'annuelle' ? 'annuelle' : 'mensuelle') : 'Formule gratuite'}</b><span>${E(S.abo.echeance)}</span></span>
         <span class="fl">${S.abo.actif?'GÉRER →':'S\'ABONNER →'}</span>
       </button>
-      ${S.compositions && S.compositions.length ? `
-      <div class="carte" style="margin-top:14px;text-align:left">
-        <div class="libelle" style="margin-bottom:8px">Mes compositions</div>
-        ${S.compositions.slice(0,8).map(c => `
-          <div class="mat"><div class="nom">${new Date(c.debut_le).toLocaleDateString('fr-FR',{day:'numeric',month:'short',year:'numeric'})}
-            <em>${c.terminee ? (c.nb_traitees||0) + ' questions traitées' : 'non terminée'}</em></div>
-            <div class="val num">${c.terminee && c.score !== null ? c.score + '/' + (c.nb_questions || 50) : '—'}</div>
-            ${c.terminee ? `<button class="mini" data-archive="${c.id}">Télécharger</button>` : ''}</div>`).join('')}
-        <p class="sous" style="margin-top:10px;font-size:12px">${S.compositions.length} composition${S.compositions.length>1?'s':''} au total.</p>
-      </div>` : ''}
-
       <div class="carte" style="margin-top:14px;text-align:left">
         <div class="libelle" style="margin-bottom:10px">Rester informé</div>
         <p class="sous" style="margin:0 0 12px">Les dates de concours, les nouveaux cours et les annonces passent d'abord par nos canaux.</p>
@@ -3204,12 +3189,9 @@ function ecranCompte(){
           ${logoReseau('facebook')}
           <span><b>Suivre MonConcours officiel</b><i>La page Facebook de la plateforme</i></span></a>
 
-        <a class="lien-reseau yt" href="${CONTACT.youtube}" target="_blank" rel="noopener">
-          ${logoReseau('youtube')}
-          <span><b>Rejoindre ma chaîne YouTube</b><i>Méthodes et corrigés en vidéo</i></span></a>
 
         <button class="cta creux" style="margin-top:10px" data-partage="site">
-          Partager MonConcours à un camarade<small>Qui prépare le concours lui aussi</small></button>
+          ${ico("partage",16)} Partager MonConcours à un camarade<small>Qui prépare le concours lui aussi</small></button>
       </div>
 
       <div class="carte" style="margin-top:14px;text-align:left">
