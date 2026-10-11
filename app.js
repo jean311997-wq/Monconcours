@@ -66,6 +66,7 @@ const S = {
   util:{nom:'', tel:'', pin:'', connecte:false},
   form:{nom:'', tel:'', pin:'', pin2:'', couleur:''}, codeVisible:false, erreur:'',
   abo:{actif:false, formule:null, jours_restants:0, echeance:'formule gratuite'},
+  gratuit:true,             // phase de lancement : tout est gratuit (le serveur fait foi)
   theme:'sombre', sessionCounter:0, cahierDepuisGrille:false,
   modal:null, modalDejaVu:false, matiereOuverte:null, sync:null, bloque:false, qcmPos:{}, rechercheCours:'', compositions:[], niveauConnu:false, notifications:[], notifCharge:false, dateConcours:null, nomConcours:null, typeEpreuve:'Concours direct · épreuve écrite',
   choixFormule:'annuelle', operateur:'orange', paieTel:'', paieEtape:0,
@@ -297,6 +298,7 @@ window.addEventListener('beforeunload', e => {
 const ECRANS_DECOUVERTE = ['engagement','testIntro','test','resultat'];
 
 function aller(e){
+  if(S.gratuit && (e === 'abonnement' || e === 'paiement')) e = 'compte';   // pas de formules pendant la phase gratuite
   if(['revisions','qcm'].includes(e)) chargerQuestions();
   if(e !== 'lecture') S.matiereOuverte = null;
   if(S.timer && e!=='grille'){clearInterval(S.timer);S.timer=null;}
@@ -338,7 +340,9 @@ function nav(){
     const p = (o.id==='cahier' && ouvertes()) ? `<span class="pastille num">${ouvertes()}</span>`:'';
     return `<button class="${on}" data-go="${o.id}"${on?' aria-current="page"':''}>
       <span class="g">${ico(o.g,19)}</span>${o.l}${p}</button>`;
-  }).join('') + `<div class="bas">${S.abo.actif
+  }).join('') + `<div class="bas">${S.gratuit
+      ? 'Accès gratuit à tout le site pendant le lancement'
+      : S.abo.actif
       ? nomFormule(S.abo.formule) + ' · ' + E(S.abo.echeance)
       : 'Formule gratuite · l\'actualité du matin reste gratuite à vie'}</div>`;
 }
@@ -644,6 +648,8 @@ async function marquerNotifsLues(id){
 async function chargerAbonnement(){
   if(!base) return;
   try{
+    const { data: g } = await base.rpc('plateforme_gratuite');
+    if(typeof g === 'boolean' && g !== S.gratuit){ S.gratuit = g; rendre(); }
     const uid = await utilisateurCourant();
     if(!uid) return;
     const { data } = await base.from('mon_abonnement').select('*').maybeSingle();
@@ -1606,8 +1612,8 @@ function ecranRevisions(){
     </div>
 
     ${!S.util.connecte ? `<div class="carte" style="margin-top:12px">
-      <p class="sous">Sans compte, tu peux lire les questions. Pour voir la correction, crée ton compte gratuit : 20 corrections par jour, sans limite avec l'abonnement.</p>
-    </div>` : (!S.abo.actif ? `<div class="carte" style="margin-top:12px">
+      <p class="sous">${S.gratuit ? "Sans compte, tu peux lire les questions. Pour voir la correction et garder tes erreurs, crée ton compte : c'est gratuit." : "Sans compte, tu peux lire les questions. Pour voir la correction, crée ton compte gratuit : 20 corrections par jour, sans limite avec l'abonnement."}</p>
+    </div>` : (!S.abo.actif && !S.gratuit ? `<div class="carte" style="margin-top:12px">
       <p class="sous">Formule gratuite : 20 corrections par jour. L'abonnement les rend illimitées et ouvre les compositions.</p>
     </div>` : '')}
 
@@ -2325,9 +2331,12 @@ function ecranGrille(){
 
     ${(feuille && !S.sujetVu) ? `<div class="appel-note">↑ Les ${nbQ} questions sont dans l'onglet « Le sujet »</div>` : ''}
 
-    <div class="gr-corps ${feuille?'':'avec-scrub'}" id="corps">
+    <div class="gr-corps ${feuille?'':'avec-scrub pile'}" id="corps">
       ${feuille ? feuilleOptique() : sujetComposition()}
     </div>
+
+    ${feuille ? '' : `<button class="geste-feuille" data-compotab="feuille" aria-label="Aller à la feuille de réponses">
+      <span class="fleche" aria-hidden="true">←</span><span>Glisser vers la feuille pour cocher</span></button>`}
 
     ${feuille ? '' : `<div class="scrub" id="scrub" aria-hidden="true">
       <div class="rail-s"></div>
@@ -2347,7 +2356,8 @@ function ecranGrille(){
   brancherScrub();
   brancherSwipeComposition();
   brancherEnteteRepliable();
-  if(!feuille) setTimeout(demoSwipeSiPremiere, 500);
+  if(!feuille) brancherPile();
+  setTimeout(demoSwipeSiPremiere, 500);
   if(!S.timer && !S.corrige){
     /* Le téléphone affiche, le serveur décide. On se resynchronise à
        l'ouverture puis toutes les minutes : figer l'horloge locale ne
@@ -2499,12 +2509,42 @@ function demoSwipeSiPremiere(){
   if(lireReglages().swipeCompoVu) return;
   const zone = document.getElementById('corps');
   if(!zone || document.getElementById('demo-swipe')) return;
+  const versFeuille = S.compoTab === 'sujet';
   const d = document.createElement('div');
   d.id = 'demo-swipe';
-  d.innerHTML = `<div class="doigt"></div><span>Glissez pour changer de vue</span>`;
-  zone.appendChild(d);
-  setTimeout(() => { d.classList.add('joue'); }, 400);
-  setTimeout(() => { d.remove(); }, 2600);
+  d.className = versFeuille ? 'vers-gauche' : 'vers-droite';
+  d.innerHTML = `<div class="piste-doigt"><div class="doigt"></div></div>
+    <span>${versFeuille ? 'Glissez vers la gauche pour cocher sur la feuille' : 'Glissez vers la droite pour lire le sujet'}</span>
+    <small>Glissez dans l'autre sens pour revenir</small>`;
+  document.querySelector('.grille').appendChild(d);
+  const fermer = () => { d.classList.remove('joue'); setTimeout(() => d.remove(), 250); };
+  d.addEventListener('pointerdown', fermer, { once:true });
+  setTimeout(() => { d.classList.add('joue'); }, 200);
+  setTimeout(fermer, 4200);
+}
+
+/* Le sujet en pile : en descendant, la question lue monte, s'estompe et
+   laisse la place à la suivante. Le défilement s'arrête sur chaque question. */
+function brancherPile(){
+  const corps = document.getElementById('corps');
+  if(!corps || !corps.classList.contains('pile')) return;
+  const cartes = [...corps.querySelectorAll('.sujet-q')];
+  let attente = false;
+  const peindre = () => {
+    attente = false;
+    const haut = corps.getBoundingClientRect().top;
+    for(const c of cartes){
+      const r = c.getBoundingClientRect();
+      const p = Math.min(1, Math.max(0, (haut - r.top) / Math.max(1, r.height)));
+      const o = p ? String(+(1 - p * 0.85).toFixed(3)) : '';
+      if(c.style.opacity !== o){
+        c.style.opacity = o;
+        c.style.transform = p ? `translateY(${(p * 12).toFixed(1)}px) scale(${(1 - p * 0.05).toFixed(3)})` : '';
+      }
+    }
+  };
+  corps.addEventListener('scroll', () => { if(!attente){ attente = true; requestAnimationFrame(peindre); } }, { passive:true });
+  peindre();
 }
 
 /* =====================================================================
@@ -3020,12 +3060,12 @@ function ecranCompte(){
     </div>
 
     <div class="bloc">
-      <div class="libelle">Mon abonnement</div>
+      ${S.gratuit ? '' : `<div class="libelle">Mon abonnement</div>
       <button class="grande" style="margin-top:0" data-go="abonnement">
         <span class="ic">${ico('carte',19)}</span>
         <span><b>${S.abo.actif ? nomFormule(S.abo.formule) : 'Formule gratuite'}</b><span>${E(S.abo.echeance)}</span></span>
         <span class="fl">${S.abo.actif?'GÉRER →':'S\'ABONNER →'}</span>
-      </button>
+      </button>`}
       <div class="carte" style="margin-top:14px;text-align:left">
         <div class="libelle" style="margin-bottom:10px">Rester informé</div>
         <p class="sous" style="margin:0 0 12px">Les dates de concours, les nouveaux cours et les annonces passent d'abord par nos canaux.</p>
@@ -3072,7 +3112,7 @@ function apptete(){
   t.style.display='flex';
   const jr = joursAvantConcours();
   const droite = {aujourdhui: jr === null ? '' : 'J−' + jr, copie:'copie corrigée', cahier:ouvertes()+' en attente',
-    compte:S.abo.actif?nomFormule(S.abo.formule).toLowerCase():'formule gratuite',
+    compte:S.gratuit ? '' : S.abo.actif?nomFormule(S.abo.formule).toLowerCase():'formule gratuite',
     revisions:S.niveau.toLowerCase(), qcm:S.matiere||'', abonnement:'', paiement:'sécurisé',
     inscription:'', connexion:'', resultat:'étape 3 sur 3', actualite:'ce matin'}[S.ecran] || '';
   const nonLues = S.notifications.filter(n => !n.lue).length;

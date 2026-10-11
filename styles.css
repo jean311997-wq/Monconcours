@@ -286,8 +286,8 @@ body{background:var(--encre);padding:0;overflow:hidden}
 .retour.mal{border-color:var(--rouge-bord);background:var(--rouge-fond)}
 .retour b{display:block;font-size:12px;margin-bottom:4px;font-family:var(--m);letter-spacing:.06em;text-transform:uppercase}
 
-.grille{background:var(--papier);color:#221F17;min-height:100%;display:flex;flex-direction:column;position:relative}
-.scrub{position:absolute;right:8px;top:14%;height:72%;width:30px;z-index:4;touch-action:none;
+.grille{background:var(--papier);color:#221F17;height:100%;display:flex;flex-direction:column;position:relative}
+.scrub{position:absolute;right:8px;top:16%;height:58%;width:30px;z-index:4;touch-action:none;
   display:flex;justify-content:center}
 .scrub .rail-s{width:6px;height:100%;background:var(--papier2);border:1px solid var(--papier-trait);
   border-radius:4px;transition:background .2s}
@@ -316,7 +316,7 @@ body{background:var(--encre);padding:0;overflow:hidden}
 .sonnerie.vu{max-height:44px;padding:10px}
 .gr-consigne{background:var(--papier2);border-bottom:1px solid var(--papier-trait);padding:8px 16px;
   font-family:var(--m);font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:#4E4835;flex:none;display:flex;justify-content:space-between;gap:10px}
-.gr-corps{flex:1;overflow-y:auto;padding:14px 16px 20px;position:relative}
+.gr-corps{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:14px 16px 20px;position:relative}
 .gr-corps.avec-scrub{padding-right:50px}
 .gr-entete-copie{display:flex;justify-content:space-between;font-family:var(--m);font-size:10.5px;color:#6B6350;
   border-bottom:1px solid var(--papier-trait);padding-bottom:9px;margin-bottom:12px;letter-spacing:.07em}
@@ -441,17 +441,7 @@ body{background:var(--encre);padding:0;overflow:hidden}
 .pastille-op.vraie{border-color:var(--cachet);border-width:2.2px;color:var(--cachet);font-weight:600}
 .feuille-pied{margin-top:14px;padding-top:9px;border-top:2px solid #221F17;font-family:var(--m);
   font-size:9.5px;letter-spacing:.1em;color:#8A806A;text-align:center}
-/* Téléphone : un cercle noirci ne s'efface pas, donc pas de cible de 22 px.
-   Une seule colonne, des cercles de 36 px et une zone de toucher de 46 px. */
-@media(max-width:519px){
-  .opt-grille{grid-auto-flow:row;grid-template-rows:none;grid-template-columns:1fr;gap:0;background-image:none}
-  .ligne-op{gap:10px;padding:5px 4px;border-radius:0;border-bottom:1px dashed var(--papier-trait)}
-  .ligne-op:last-child{border-bottom:none}
-  .ligne-op .n{width:30px;font-size:13px;padding:6px 2px}
-  .pastille-op{width:36px;height:36px;font-size:12.5px;position:relative}
-  .pastille-op::before{content:'';position:absolute;inset:-5px}
-}
-@media(min-width:520px){.pastille-op{width:25px;height:25px;font-size:10.5px}
+@media(min-width:430px){.pastille-op{width:25px;height:25px;font-size:10.5px}
   .ligne-op{gap:6px}.ligne-op .n{width:24px;font-size:11.5px}}
 @media(min-width:700px){
   .opt-grille{grid-template-rows:repeat(17,auto);gap:3px 22px;
@@ -1035,19 +1025,14 @@ body.en-transition *{transition:background-color .4s ease, color .4s ease, borde
 .nav{position:relative;overflow:visible}
 .nav button.pivot{position:relative;margin-top:-20px;color:#fff;font-weight:700}
 .nav button.pivot .g{width:56px;height:56px;border-radius:50%;
-  background:linear-gradient(160deg,var(--laterite),#A63F20);
+  background:var(--laterite);
   color:#fff;display:grid;place-items:center;margin-bottom:3px;
   border:4px solid var(--barre);
-  box-shadow:0 8px 22px -6px rgba(196,85,46,.75);
+  box-shadow:0 2px 6px rgba(0,0,0,.25);
   transition:transform .16s cubic-bezier(.2,1.4,.4,1),box-shadow .16s ease}
 .nav button.pivot:active .g{transform:scale(.93)}
-.nav button.pivot.on .g{box-shadow:0 0 0 3px var(--or-bord),0 8px 22px -6px rgba(196,85,46,.8)}
+.nav button.pivot.on .g{box-shadow:0 0 0 2px var(--craie2)}
 .nav button.pivot.on::before{display:none}
-.nav button.pivot::after{content:'';pointer-events:none;position:absolute;top:-4px;left:50%;transform:translateX(-50%);
-  width:56px;height:56px;border-radius:50%;border:2px solid var(--laterite);
-  opacity:0;animation:halo 3.2s ease-out infinite;pointer-events:none}
-@keyframes halo{0%{opacity:.5;transform:translateX(-50%) scale(1)}
-  70%,100%{opacity:0;transform:translateX(-50%) scale(1.45)}}
 
 /* ---------- FEUILLE DE PARTAGE ---------- */
 .partages{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
@@ -1060,7 +1045,6 @@ body.en-transition *{transition:background-color .4s ease, color .4s ease, borde
 .pt.fb{color:#1877F2;border-color:rgba(24,119,242,.35)}
 .pt span{color:var(--craie2);letter-spacing:.02em}
 
-@media(prefers-reduced-motion:reduce){.nav button.pivot::after{animation:none}}
 @media(max-width:340px){
   .nav button.pivot .g{width:50px;height:50px}
   .partages{grid-template-columns:repeat(2,1fr)}
@@ -1225,3 +1209,31 @@ body.en-transition *{transition:background-color .4s ease, color .4s ease, borde
 .info .info-source{display:block;margin:8px 0 2px;line-height:1.5}
 .info .info-pourquoi{margin-top:8px;font-size:12px;color:var(--craie2);line-height:1.5}
 .info .info-pourquoi b{font-family:var(--m);font-size:10px;letter-spacing:.1em;text-transform:uppercase;margin-right:7px;color:var(--craie)}
+
+/* ---------- SUJET EN PILE ET GESTE VERS LA FEUILLE ---------- */
+.gr-corps.pile{scroll-snap-type:y mandatory;scroll-padding-top:10px}
+.gr-corps.pile .sujet-q{scroll-snap-align:start;transform-origin:top center;
+  transition:opacity .12s linear}
+.gr-corps.pile .cta-feuille,.gr-corps.pile .fin-sujet{scroll-snap-align:end}
+.grille{position:relative}
+.geste-feuille{flex:none;display:flex;align-items:center;justify-content:center;gap:10px;width:100%;
+  background:#221F17;color:#FBF7EA;font-size:13px;font-weight:600;padding:9px 14px;border-top:1px solid #000}
+.geste-feuille .fleche{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;
+  background:#FBF7EA;color:#221F17;font-size:14px;animation:flecheGauche 1.6s ease-in-out infinite}
+@keyframes flecheGauche{0%,100%{transform:translateX(0)}50%{transform:translateX(-5px)}}
+
+/* démonstration du geste à la première entrée */
+#demo-swipe small{color:var(--craie2);font-size:12px}
+#demo-swipe .piste-doigt{width:140px;height:34px;position:relative}
+#demo-swipe .piste-doigt .doigt{position:absolute;top:2px;left:55px}
+#demo-swipe.vers-droite .doigt{animation-name:doigtDroite;animation-iteration-count:2}
+#demo-swipe.vers-gauche .doigt{animation-iteration-count:2}
+@keyframes doigtDroite{
+  0%{transform:translateX(-46px);opacity:0}
+  15%{opacity:1}
+  50%{transform:translateX(46px)}
+  85%{opacity:1}
+  100%{transform:translateX(46px);opacity:0}
+}
+@media(prefers-reduced-motion:reduce){.geste-feuille .fleche{animation:none}}
+#demo-swipe.joue{pointer-events:auto}
