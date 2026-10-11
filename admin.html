@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="admin.css">
+<link rel="stylesheet" href="admin.css?v=13">
 </head>
 <body>
 
@@ -89,33 +89,6 @@
   </div>
 </div>
 
-<!-- Bibliothèque Supabase, hébergée sur le site : un domaine de moins
-     à joindre, et surtout admin.js n'est chargé qu'UNE FOIS la
-     bibliothèque réellement arrivée. C'était le bug : les anciens
-     scripts de secours s'enchaînaient sans jamais s'attendre, et
-     admin.js démarrait parfois avant que supabase n'existe — d'où
-     « Cannot read properties of null (reading 'auth') ». -->
-<script>
-(function(){
-  function demarrerAdmin(){
-    var s = document.createElement('script');
-    s.src = 'admin.js?v=12';
-    document.body.appendChild(s);
-  }
-  function chargerBibliotheque(adresses, i){
-    if(i >= adresses.length){ demarrerAdmin(); return; }   // admin.js affichera la panne lui-même
-    var t = document.createElement('script');
-    t.src = adresses[i];
-    t.onload = demarrerAdmin;
-    t.onerror = function(){ chargerBibliotheque(adresses, i + 1); };
-    document.head.appendChild(t);
-  }
-  chargerBibliotheque([
-    '/supabase-js.min.js?v=12',
-    'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2',
-    'https://unpkg.com/@supabase/supabase-js@2'
-  ], 0);
-})();
-</script>
+<script src="admin-boot.js?v=13"></script>
 </body>
 </html>

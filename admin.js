@@ -42,6 +42,14 @@ function afficherPanne(){
 }
 
 /* --- petits utilitaires partagés --- */
+/* Tout texte venu de la base (noms de candidats, statistiques de visite,
+   contenus importés) passe par E() avant d'entrer dans la page. */
+function E(v){
+  if(v === null || v === undefined) return '';
+  return String(v)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
 const $  = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 
@@ -139,7 +147,7 @@ async function entrer(session){
   document.getElementById('admin').hidden = false;
   window.scrollTo(0, 0);
   document.getElementById('qui').textContent =
-    (profil?.nom || session.user.email) + ' · équipe';
+    (profil?.nom || session.user.email) + ' · équipe';   // textContent : pas d'interprétation HTML
 
   await chargerReferentiel();
   rendre();
@@ -198,16 +206,16 @@ async function chargerReferentiel(){
 }
 
 const optionsMatieres = (sel) => A.ref.matieres
-  .map(m => `<option value="${m.id}" ${sel===m.id?'selected':''}>${m.nom}</option>`).join('');
+  .map(m => `<option value="${E(m.id)}" ${sel===m.id?'selected':''}>${E(m.nom)}</option>`).join('');
 const optionsConcours = (sel) => A.ref.concours
-  .map(c => `<option value="${c.id}" ${sel===c.id?'selected':''}>${c.nom}</option>`).join('');
+  .map(c => `<option value="${E(c.id)}" ${sel===c.id?'selected':''}>${E(c.nom)}</option>`).join('');
 const nomMatiere = id => A.ref.matieres.find(m => m.id === id)?.nom || '—';
 
 const NIVEAUX = [['troisieme','Troisième'],['terminale','Terminale'],['licence','Licence']];
 const optionsNiveaux = (sel) => NIVEAUX
   .map(([v,l]) => `<option value="${v}" ${sel===v?'selected':''}>${l}</option>`).join('');
 
-const statut = s => `<span class="marque-statut s-${s}">${(s||'').replace(/_/g,' ')}</span>`;
+const statut = s => `<span class="marque-statut s-${E(s)}">${E((s||'').replace(/_/g,' '))}</span>`;
 
 /* ============================================================
    RENDU
@@ -224,7 +232,7 @@ function rendre(){
 
 /* ---------- musique de travail ---------- */
 async function vueMusique(){
-  const { data: pistes } = await base.from('musiques')
+  const { data: pistes } = await db.from('musiques')
     .select('*').order('ordre').limit(50);
 
   $('#vue').innerHTML = `
@@ -259,9 +267,9 @@ async function vueMusique(){
           <td>${(m.artiste||'—').replace(/</g,'&lt;')}</td>
           <td>${m.statut === 'publie' ? '<span class="etat ok">En ligne</span>' : '<span class="etat">Brouillon</span>'}</td>
           <td>
-            <button class="mini" data-mus-bascule="${m.id}" data-statut="${m.statut}">
+            <button class="mini" data-mus-bascule="${E(m.id)}" data-statut="${E(m.statut)}">
               ${m.statut === 'publie' ? 'Retirer' : 'Publier'}</button>
-            <button class="mini danger" data-mus-suppr="${m.id}" data-chemin="${m.fichier_chemin}">Supprimer</button>
+            <button class="mini danger" data-mus-suppr="${E(m.id)}" data-chemin="${E(m.fichier_chemin)}">Supprimer</button>
           </td>
         </tr>`).join('')}</tbody>
     </table>`}
@@ -275,9 +283,9 @@ async function vueMusique(){
     if(f.size > 15 * 1024 * 1024){ etat.textContent = 'Fichier trop lourd : 15 Mo maximum.'; return; }
     etat.textContent = 'Envoi en cours…';
     const nom = Date.now() + '-' + f.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const { error: e1 } = await base.storage.from('musiques').upload(nom, f, { upsert:false });
-    if(e1){ etat.textContent = "Echec de l'envoi : " + e1.message; return; }
-    const { error: e2 } = await base.from('musiques').insert({
+    const { error: e1 } = await db.storage.from('musiques').upload(nom, f, { upsert:false });
+    if(e1){ etat.textContent = "Échec de l'envoi : " + e1.message; return; }
+    const { error: e2 } = await db.from('musiques').insert({
       titre, artiste: $('#mus-artiste').value.trim() || null,
       fichier_chemin: nom, ordre: parseInt($('#mus-ordre').value, 10) || 1,
       statut: 'publie'
@@ -288,16 +296,16 @@ async function vueMusique(){
   };
 
   $$('[data-mus-bascule]').forEach(b => b.onclick = async () => {
-    await base.from('musiques')
+    await db.from('musiques')
       .update({ statut: b.dataset.statut === 'publie' ? 'brouillon' : 'publie', maj_le: new Date().toISOString() })
       .eq('id', b.dataset.musBascule);
     vueMusique();
   });
 
   $$('[data-mus-suppr]').forEach(b => b.onclick = async () => {
-    if(!confirm('Supprimer definitivement cette piste ?')) return;
-    await base.storage.from('musiques').remove([b.dataset.chemin]);
-    await base.from('musiques').delete().eq('id', b.dataset.musSuppr);
+    if(!confirm('Supprimer définitivement cette piste ?')) return;
+    await db.storage.from('musiques').remove([b.dataset.chemin]);
+    await db.from('musiques').delete().eq('id', b.dataset.musSuppr);
     vueMusique();
   });
 }
@@ -307,41 +315,41 @@ async function vuePaiements(){
   $('#vue').innerHTML = `
   <div class="entete-vue">
     <h2>Paiements</h2>
-    <p>Chaque demande doit etre verifiee avant confirmation. Ouvrez la preuve, comparez
+    <p>Chaque demande doit être vérifiée avant confirmation. Ouvrez la preuve, comparez
        le nom et le montant, puis confirmez ou refusez. La confirmation active
-       immediatement l'abonnement du candidat.</p>
+       immédiatement l'abonnement du candidat.</p>
   </div>
   <div class="carte"><div id="pai-liste">Chargement…</div></div>`;
 
-  const { data, error } = await base.rpc('paiements_en_attente');
+  const { data, error } = await db.rpc('paiements_en_attente');
   const zone = $('#pai-liste');
-  if(error){ zone.innerHTML = '<p class="vide">Erreur de chargement : ' + error.message + '</p>'; return; }
+  if(error){ zone.innerHTML = '<p class="vide">Erreur de chargement : ' + E(error.message) + '</p>'; return; }
 
   const liste = data || [];
   if(!liste.length){ zone.innerHTML = '<p class="vide">Aucune demande de paiement pour le moment.</p>'; return; }
 
   const statutLabel = { en_attente:'<span class="etat">En attente</span>',
-    confirme:'<span class="etat ok">Confirme</span>', refuse:'<span class="etat danger">Refuse</span>' };
+    confirme:'<span class="etat ok">Confirmé</span>', refuse:'<span class="etat danger">Refusé</span>' };
 
   zone.innerHTML = `<table class="tableau">
-    <thead><tr><th>Candidat</th><th>Numero</th><th>Formule</th><th>Montant</th><th>Preuve</th><th>Statut</th><th>Recu le</th><th></th></tr></thead>
+    <thead><tr><th>Candidat</th><th>Numéro</th><th>Formule</th><th>Montant</th><th>Preuve</th><th>Statut</th><th>Reçu le</th><th></th></tr></thead>
     <tbody>${liste.map(p => `
       <tr>
-        <td><b>${(p.nom || '—').replace(/</g,'&lt;')}</b><br><span style="color:var(--craie2);font-size:12px">${(p.nom_compte||'').replace(/</g,'&lt;')}</span></td>
-        <td>${p.telephone || '—'}</td>
+        <td><b>${E(p.nom || '—')}</b><br><span style="color:var(--craie2);font-size:12px">${E(p.nom_compte||'')}</span></td>
+        <td>${E(p.telephone || '—')}</td>
         <td>${p.formule === 'annuelle' ? 'Annuelle' : 'Mensuelle'}</td>
         <td>${nombre(p.montant)} F</td>
-        <td>${p.preuve_chemin ? `<button class="mini" data-pai-voir="${p.preuve_chemin}">Voir</button>` : '—'}</td>
-        <td>${statutLabel[p.statut] || p.statut}</td>
+        <td>${p.preuve_chemin ? `<button class="mini" data-pai-voir="${E(p.preuve_chemin)}">Voir</button>` : '—'}</td>
+        <td>${statutLabel[p.statut] || E(p.statut)}</td>
         <td>${dateHeure(p.cree_le)}</td>
         <td>${p.statut === 'en_attente' ? `
-          <button class="mini" data-pai-confirmer="${p.id}">Confirmer</button>
-          <button class="mini danger" data-pai-refuser="${p.id}">Refuser</button>` : ''}</td>
+          <button class="mini" data-pai-confirmer="${E(p.id)}">Confirmer</button>
+          <button class="mini danger" data-pai-refuser="${E(p.id)}">Refuser</button>` : (p.statut === 'confirme' ? `<button class="mini" data-pai-recu="${E(p.id)}">Reçu</button>` : '')}</td>
       </tr>`).join('')}</tbody>
   </table>`;
 
   $$('[data-pai-voir]').forEach(b => b.onclick = async () => {
-    const { data: url } = await base.storage.from('preuves-paiement')
+    const { data: url } = await db.storage.from('preuves-paiement')
       .createSignedUrl(b.dataset.paiVoir, 300);
     if(url && url.signedUrl) window.open(url.signedUrl, '_blank');
     else alert("Impossible d'ouvrir cette preuve.");
@@ -349,17 +357,27 @@ async function vuePaiements(){
 
   $$('[data-pai-confirmer]').forEach(b => b.onclick = async () => {
     b.disabled = true;
-    const { data, error } = await base.rpc('confirmer_paiement', { p_id: b.dataset.paiConfirmer, p_confirme: true });
-    if(error || !data || !data.ok){ alert((data && data.message) || (error && error.message) || 'Echec.'); b.disabled = false; return; }
+    const { data, error } = await db.rpc('confirmer_paiement', { p_id: b.dataset.paiConfirmer, p_confirme: true });
+    if(error || !data || !data.ok){ alert((data && data.message) || (error && error.message) || 'Échec.'); b.disabled = false; return; }
     vuePaiements();
   });
 
   $$('[data-pai-refuser]').forEach(b => b.onclick = async () => {
-    if(!confirm('Refuser cette demande de paiement ?')) return;
+    const motif = prompt('Motif du refus (le candidat le lira) :', 'Le montant ou le nom sur la capture ne correspond pas. Écrivez-nous sur WhatsApp.');
+    if(motif === null) return;
     b.disabled = true;
-    const { data, error } = await base.rpc('confirmer_paiement', { p_id: b.dataset.paiRefuser, p_confirme: false });
-    if(error || !data || !data.ok){ alert((data && data.message) || (error && error.message) || 'Echec.'); b.disabled = false; return; }
+    const { data, error } = await db.rpc('confirmer_paiement', { p_id: b.dataset.paiRefuser, p_confirme: false, p_motif: motif.trim() || null });
+    if(error || !data || !data.ok){ alert((data && data.message) || (error && error.message) || 'Échec.'); b.disabled = false; return; }
     vuePaiements();
+  });
+
+  $$('[data-pai-recu]').forEach(b => b.onclick = async () => {
+    const { data, error } = await db.rpc('mon_recu', { p_id: b.dataset.paiRecu });
+    if(error || !data || !data.ok) return alert((data && data.message) || 'Reçu indisponible.');
+    const r = data.recu;
+    alert('Reçu ' + r.numero + '\n' + r.candidat + ' · ' + r.offre + '\n' +
+          (r.montant_fcfa || 0).toLocaleString('fr-FR') + ' FCFA · valable jusqu\'au ' +
+          new Date(r.fin_le).toLocaleDateString('fr-FR'));
   });
 }
 
@@ -411,7 +429,7 @@ async function vueApercu(){
 
   document.getElementById('derniers').innerHTML = (docs && docs.length)
     ? `<table><thead><tr><th>Fichier</th><th>État</th><th>Questions</th><th>Reçu le</th></tr></thead><tbody>
-       ${docs.map(d => `<tr><td>${d.nom_fichier}</td><td>${statut(d.statut)}</td>
+       ${docs.map(d => `<tr><td>${E(d.nom_fichier)}</td><td>${statut(d.statut)}</td>
          <td class="num">${d.nb_questions_detectees || 0}</td><td class="num">${dateHeure(d.cree_le)}</td></tr>`).join('')}
        </tbody></table>`
     : `<div class="vide">Aucun document pour l'instant.<br>Commencez par le centre d'import.</div>`;
@@ -574,18 +592,18 @@ function lireLotQuestions(){
       <div class="compteur ${soucis.length?'alerte-c':''}"><div class="v num">${soucis.length}</div><div class="l">Blocs écartés</div></div>
     </div>
 
-    ${soucis.length ? `<div class="alerte">${soucis.slice(0,6).join('<br>')}${soucis.length>6?'<br>…':''}</div>` : ''}
+    ${soucis.length ? `<div class="alerte">${soucis.slice(0,6).map(E).join('<br>')}${soucis.length>6?'<br>…':''}</div>` : ''}
     ${sansJuste ? `<div class="doublon">${sansJuste} question(s) n'ont aucune bonne réponse cochée. C'est possible — mais vérifiez que ce n'est pas un oubli d'étoile.</div>` : ''}
 
     ${lotPret.slice(0,5).map(q => `
       <div class="proposition">
-        <div class="enonce">${q.enonce}</div>
+        <div class="enonce">${E(q.enonce)}</div>
         <div class="options-prop">
           ${(q.options||[]).map((o,i) => `
             <div class="option-prop ${o.est_correcte?'juste':''}">
-              <span class="l">${'abcdefgh'[i]}</span><span>${o.texte}</span></div>`).join('')}
+              <span class="l">${'abcdefgh'[i]}</span><span>${E(o.texte)}</span></div>`).join('')}
         </div>
-        ${q.explication ? `<p class="sous" style="margin:0">${q.explication}</p>` : ''}
+        ${q.explication ? `<p class="sous" style="margin:0">${E(q.explication)}</p>` : ''}
       </div>`).join('')}
     ${lotPret.length > 5 ? `<p class="sous">… et ${lotPret.length-5} autre(s). L'aperçu montre les cinq premières.</p>` : ''}
 
@@ -621,15 +639,14 @@ async function integrerQuestions(publier){
 }
 
 /* ---------- import des actualités ---------- */
-const MODELE_ACTU = `Épreuves écrites confirmées du 15 au 22 juillet
-Conseil des ministres
-Djibo maintenu comme centre secondaire de composition. Tests sportifs les 13 et 14 juin.
-Date officielle · tombe presque chaque année
+const MODELE_ACTU = `[Titre de l'information, une ligne]
+[Source précise : Conseil des ministres du JJ/MM/AAAA, décret n°…, site officiel…]
+[Contenu : les faits, les dates, les chiffres]
+[Pourquoi c'est au programme, une ligne — facultatif]
 
-504 postes réservés aux VDP et aux couches spécifiques
-Décret
-Agents de santé à base communautaire, enseignants communautaires, orphelins et veuves.
-Chiffre important · politique sociale de l'État`;
+[Titre de l'information suivante]
+[Source]
+[Contenu]`;
 
 function importActualites(){
   document.getElementById('zone-import').innerHTML = `
@@ -692,10 +709,10 @@ function lireLotActu(){
     ${lotActu.map(a => `
       <div class="proposition">
         <div class="rangee"><span class="marque-statut s-publie">✓ vérifiée</span>
-          <span class="num" style="font-size:11px;color:var(--craie2)">${a.source || 'source non précisée'} · ${a.categorie}</span></div>
-        <div class="enonce" style="font-size:15px">${a.titre}</div>
-        ${a.contenu ? `<p class="sous" style="margin:0 0 8px">${a.contenu}</p>` : ''}
-        ${a.pourquoi ? `<div class="meta-prop" style="margin:0">${a.pourquoi}</div>` : ''}
+          <span class="num" style="font-size:11px;color:var(--craie2)">${E(a.source || 'source non précisée')} · ${E(a.categorie)}</span></div>
+        <div class="enonce" style="font-size:15px">${E(a.titre)}</div>
+        ${a.contenu ? `<p class="sous" style="margin:0 0 8px">${E(a.contenu)}</p>` : ''}
+        ${a.pourquoi ? `<div class="meta-prop" style="margin:0">${E(a.pourquoi)}</div>` : ''}
       </div>`).join('')}
     <div class="actions" style="margin-top:16px">
       <button class="b-publier" id="btn-actu-publie">Publier maintenant</button>
@@ -791,7 +808,7 @@ function ajouterFichiers(liste){
   fichiersChoisis = fichiersChoisis.concat(liste);
   const z = document.getElementById('liste-fichiers');
   z.innerHTML = fichiersChoisis.map((f,i) => `
-    <div class="fichier"><span class="n">${f.name}</span>
+    <div class="fichier"><span class="n">${E(f.name)}</span>
       <span class="t">${octets(f.size)}</span>
       <button class="lien" data-retirer="${i}">retirer</button></div>`).join('');
   z.querySelectorAll('[data-retirer]').forEach(b => b.onclick = () => {
@@ -858,7 +875,7 @@ async function listerBibliotheque(){
 
   document.getElementById('biblio').innerHTML = (data && data.length)
     ? `<table><thead><tr><th>Fichier</th><th>Nature</th><th>Taille</th><th>Reçu le</th></tr></thead><tbody>
-       ${data.map(d => `<tr><td>${d.nom_fichier}</td><td>${d.type_document || '—'}</td>
+       ${data.map(d => `<tr><td>${E(d.nom_fichier)}</td><td>${E(d.type_document || '—')}</td>
          <td class="num">${octets(d.taille_octets)}</td>
          <td class="num">${dateCourte(d.cree_le)}</td></tr>`).join('')}</tbody></table>`
     : `<div class="vide">La bibliothèque est vide.</div>`;
@@ -981,7 +998,7 @@ function ajouterD(liste, majDevine){
   fichiersDepot = fichiersDepot.concat(liste);
   const z = document.getElementById('liste-d');
   z.innerHTML = fichiersDepot.map((f,i) => `
-    <div class="fichier"><span class="n">${f.name}</span>
+    <div class="fichier"><span class="n">${E(f.name)}</span>
       <span class="t">${octets(f.size)}</span>
       <button class="lien" data-ret-d="${i}">retirer</button></div>`).join('');
   z.querySelectorAll('[data-ret-d]').forEach(b => b.onclick = () => {
@@ -1051,15 +1068,15 @@ async function listerDepots(){
   z.innerHTML = data.map(d => {
     const apercu = (d.contenu || '').slice(0, 220);
     return `
-    <div class="proposition" data-depot="${d.id}">
+    <div class="proposition" data-depot="${E(d.id)}">
       <div class="rangee">
         <span class="marque-statut ${d.nature_devinee === 'inconnu' ? 's-en_attente' : 's-analyse'}">
-          ${libelleNature(d.nature_retenue || d.nature_devinee)}</span>
+          ${E(libelleNature(d.nature_retenue || d.nature_devinee))}</span>
         <span class="num" style="font-size:11px;color:var(--craie2)">${dateHeure(d.cree_le)}</span>
-        ${d.nom_fichier ? `<span class="num" style="font-size:11px;color:var(--craie2)">${d.nom_fichier} · ${octets(d.taille_octets)}</span>` : ''}
+        ${d.nom_fichier ? `<span class="num" style="font-size:11px;color:var(--craie2)">${E(d.nom_fichier)} · ${octets(d.taille_octets)}</span>` : ''}
       </div>
-      <div class="enonce" style="font-size:15px">${d.titre || (d.nom_fichier || 'Texte sans titre')}</div>
-      ${apercu ? `<p class="sous" style="margin:0 0 12px;white-space:pre-wrap">${apercu}${(d.contenu||'').length > 220 ? '…' : ''}</p>` : ''}
+      <div class="enonce" style="font-size:15px">${E(d.titre || (d.nom_fichier || 'Texte sans titre'))}</div>
+      ${apercu ? `<p class="sous" style="margin:0 0 12px;white-space:pre-wrap">${E(apercu)}${(d.contenu||'').length > 220 ? '…' : ''}</p>` : ''}
 
       <div class="deux" style="margin-bottom:12px">
         <div><label>Nature</label>
@@ -1072,14 +1089,14 @@ async function listerDepots(){
         <div><label>Niveau</label>
           <select data-champ="niveau" style="margin:0">${optionsNiveaux(d.niveau || 'terminale')}</select></div>
         <div><label>Année</label>
-          <input data-champ="annee" type="number" placeholder="2025" value="${d.annee_session || ''}" style="margin:0"></div>
+          <input data-champ="annee" type="number" placeholder="2025" value="${E(d.annee_session || '')}" style="margin:0"></div>
       </div>
 
       <div class="actions">
-        ${d.contenu ? `<button class="b-publier" data-traiter="${d.id}">Ranger et intégrer</button>` : ''}
-        <button class="b-valider" data-classer="${d.id}">Enregistrer le classement</button>
-        <button class="b-modifier" data-range="${d.id}">Marquer comme rangé</button>
-        <button class="b-rejeter" data-ignorer="${d.id}">Ignorer</button>
+        ${d.contenu ? `<button class="b-publier" data-traiter="${E(d.id)}">Ranger et intégrer</button>` : ''}
+        <button class="b-valider" data-classer="${E(d.id)}">Enregistrer le classement</button>
+        <button class="b-modifier" data-range="${E(d.id)}">Marquer comme rangé</button>
+        <button class="b-rejeter" data-ignorer="${E(d.id)}">Ignorer</button>
       </div>
     </div>`;
   }).join('');
@@ -1281,18 +1298,18 @@ async function vueBibliotheque(){
 
     document.getElementById('rayons').innerHTML = Object.keys(parMatiere).map(m => `
       <div class="bloc" style="margin-top:0">
-        <div class="libelle">${m}<span class="num">${parMatiere[m].length}</span></div>
+        <div class="libelle">${E(m)}<span class="num">${parMatiere[m].length}</span></div>
         <table><tbody>
           ${parMatiere[m].map(r => `<tr>
-            <td><b>${r.titre}</b><br>
+            <td><b>${E(r.titre)}</b><br>
               <span class="num" style="font-size:11px;color:var(--craie2)">
-                ${r.type_ressource} · ${r.niveau || '—'}${r.theme ? ' · ' + r.theme : ''}
-                ${r.nom_fichier ? ' · ' + r.nom_fichier : ''}
+                ${E(r.type_ressource)} · ${E(r.niveau || '—')}${r.theme ? ' · ' + E(r.theme) : ''}
+                ${r.nom_fichier ? ' · ' + E(r.nom_fichier) : ''}
                 ${r.texte ? ' · texte' : ''}</span></td>
             <td style="text-align:right">${statut(r.statut)}</td>
             <td style="text-align:right">${r.statut !== 'publie'
-              ? `<button class="lien" data-pub-r="${r.id}">publier</button>`
-              : `<button class="lien" data-ret-r="${r.id}">retirer</button>`}</td>
+              ? `<button class="lien" data-pub-r="${E(r.id)}">publier</button>`
+              : `<button class="lien" data-ret-r="${E(r.id)}">retirer</button>`}</td>
           </tr>`).join('')}
         </tbody></table>
       </div>`).join('');
@@ -1335,24 +1352,24 @@ async function vueValidation(){
     const c = p.contenu || {};
     const options = (c.options || []).map((o,i) => `
       <div class="option-prop ${o.est_correcte ? 'juste' : ''}">
-        <span class="l">${'abcd'[i] || (i+1)}</span><span>${o.texte || ''}</span></div>`).join('');
+        <span class="l">${'abcd'[i] || (i+1)}</span><span>${E(o.texte || '')}</span></div>`).join('');
     const justes = (c.options || []).filter(o => o.est_correcte).length;
     return `
-      <div class="proposition" data-prop="${p.id}">
+      <div class="proposition" data-prop="${E(p.id)}">
         <div class="rangee">
           ${statut(p.statut)}
           <span class="num" style="font-size:11px;color:var(--craie2)">confiance ${Math.round((p.confiance ?? 0)*100)} %</span>
         </div>
-        <div class="enonce">${c.enonce || '(énoncé manquant)'}</div>
+        <div class="enonce">${E(c.enonce || '(énoncé manquant)')}</div>
         <div class="options-prop">${options || '<div class="option-prop">Aucune proposition</div>'}</div>
         ${justes === 0 ? '<div class="doublon">Aucune bonne réponse cochée — vérifiez avant de publier.</div>' : ''}
         <div class="meta-prop">
-          <span>Matière : ${nomMatiere(c.matiere_id)}</span>
-          <span>Niveau : ${c.niveau || '—'}</span>
-          <span>Session : ${c.annee_session || '—'}</span>
+          <span>Matière : ${E(nomMatiere(c.matiere_id))}</span>
+          <span>Niveau : ${E(c.niveau || '—')}</span>
+          <span>Session : ${E(c.annee_session || '—')}</span>
           <span>Bonnes réponses : ${justes}</span>
         </div>
-        ${c.explication ? `<p class="sous" style="margin:0 0 12px">${c.explication}</p>` : ''}
+        ${c.explication ? `<p class="sous" style="margin:0 0 12px">${E(c.explication)}</p>` : ''}
         <div class="actions">
           <button class="b-publier" data-action="publier">Valider et publier</button>
           <button class="b-valider" data-action="valider">Valider sans publier</button>
@@ -1443,13 +1460,13 @@ async function vueQuestions(){
     document.getElementById('tableau').innerHTML = (data.length
       ? `<table><thead><tr><th>Énoncé</th><th>Matière</th><th>Niveau</th><th>État</th><th></th></tr></thead><tbody>
          ${data.map(q => `<tr>
-            <td>${q.enonce}</td>
-            <td>${nomMatiere(q.matiere_id)}</td>
-            <td>${q.niveau || '—'}</td>
+            <td>${E(q.enonce)}</td>
+            <td>${E(nomMatiere(q.matiere_id))}</td>
+            <td>${E(q.niveau || '—')}</td>
             <td>${statut(q.statut)}</td>
             <td>${q.statut !== 'publie'
-              ? `<button class="lien" data-publier="${q.id}">publier</button>`
-              : `<button class="lien" data-retirer-q="${q.id}">retirer</button>`}</td>
+              ? `<button class="lien" data-publier="${E(q.id)}">publier</button>`
+              : `<button class="lien" data-retirer-q="${E(q.id)}">retirer</button>`}</td>
           </tr>`).join('')}
          </tbody></table>`
       : `<div class="vide">Aucune question ne correspond.</div>`)
@@ -1487,7 +1504,7 @@ async function vueActualites(){
       <div class="libelle">Nouvelle information</div>
       <div class="carte">
         <label for="a-titre">Titre</label>
-        <input id="a-titre" placeholder="Épreuves écrites confirmées du 15 au 22 juillet">
+        <input id="a-titre" placeholder="Titre court : le fait, la date, le chiffre">
         <div class="deux">
           <div><label for="a-cat">Catégorie</label>
             <select id="a-cat"><option value="national">National</option>
@@ -1548,11 +1565,11 @@ async function vueActualites(){
     document.getElementById('liste-actu').innerHTML = data.length
       ? `<table><thead><tr><th>Titre</th><th>Catégorie</th><th>État</th><th></th></tr></thead><tbody>
          ${data.map(a => `<tr>
-            <td>${a.titre}<br><span class="num" style="font-size:11px;color:var(--craie2)">${a.source || '—'} · ${dateCourte(a.cree_le)}</span></td>
-            <td>${a.categorie}</td><td>${statut(a.statut)}</td>
+            <td>${E(a.titre)}<br><span class="num" style="font-size:11px;color:var(--craie2)">${E(a.source || '—')} · ${dateCourte(a.cree_le)}${a.verifiee ? '' : ' · <b>non vérifiée</b>'}</span></td>
+            <td>${E(a.categorie)}</td><td>${statut(a.statut)}</td>
             <td>${a.statut !== 'publie'
-              ? `<button class="lien" data-pub-a="${a.id}">publier</button>`
-              : `<button class="lien" data-ret-a="${a.id}">retirer</button>`}</td>
+              ? `<button class="lien" data-pub-a="${E(a.id)}">publier</button>`
+              : `<button class="lien" data-ret-a="${E(a.id)}">retirer</button>`}</td>
           </tr>`).join('')}</tbody></table>`
       : `<div class="vide">Aucune actualité pour l'instant.</div>`;
 
@@ -1583,7 +1600,7 @@ async function vueReferentiel(){
       <div class="libelle">Concours<span class="num">${A.ref.concours.length}</span></div>
       <div class="carte">
         <table><tbody>${A.ref.concours.map(c => `<tr>
-          <td><b>${c.nom}</b><br><span class="num" style="font-size:11px;color:var(--craie2)">${c.niveau_requis || '—'}</span></td>
+          <td><b>${E(c.nom)}</b><br><span class="num" style="font-size:11px;color:var(--craie2)">${E(c.niveau_requis || '—')}${c.date_ecrit ? ' · écrit le ' + dateCourte(c.date_ecrit) : ' · date d\'écrit non renseignée'}${c.seuil_dernier_admis ? ' · seuil ' + E(c.seuil_dernier_admis) : ''}</span></td>
           <td style="text-align:right">${c.actif ? statut('publie') : statut('brouillon')}</td>
         </tr>`).join('')}</tbody></table>
       </div>
@@ -1593,8 +1610,8 @@ async function vueReferentiel(){
       <div class="libelle">Matières<span class="num">${A.ref.matieres.length}</span></div>
       <div class="carte">
         <table><tbody>${A.ref.matieres.map(m => `<tr>
-          <td><b>${m.nom}</b></td>
-          <td class="num" style="color:var(--craie2)">${m.code || ''}</td>
+          <td><b>${E(m.nom)}</b></td>
+          <td class="num" style="color:var(--craie2)">${E(m.code || '')}</td>
           <td style="text-align:right" class="num">${A.ref.chapitres.filter(c => c.matiere_id === m.id).length} chapitres</td>
         </tr>`).join('')}</tbody></table>
       </div>
@@ -1697,7 +1714,7 @@ async function vueAnalyse(){
             const pc = depart ? Math.round(100 * e.nombre / depart) : 0;
             return `<div style="padding:9px 0;border-bottom:1px solid var(--trait)">
               <div style="display:flex;justify-content:space-between;align-items:baseline">
-                <span style="font-size:14px">${e.etape}</span>
+                <span style="font-size:14px">${E(e.etape)}</span>
                 <span class="num" style="font-size:14px">${nombre(e.nombre)} <span style="color:var(--craie2);font-size:12px">${pc} %</span></span>
               </div>${barreHorizontale(e.nombre, depart, pc < 40 ? 'var(--laterite)' : 'var(--cachet)')}
             </div>`;
@@ -1760,7 +1777,7 @@ async function vueComportement(){
         ${(!ec || !ec.length) ? insuffisant() : `
         <table><thead><tr><th>Écran</th><th>Vues</th><th>Personnes</th><th>Sorties</th></tr></thead><tbody>
         ${ec.map(e => `<tr>
-          <td>${e.ecran}${barreHorizontale(e.vues, maxE)}</td>
+          <td>${E(e.ecran)}${barreHorizontale(e.vues, maxE)}</td>
           <td class="num">${nombre(e.vues)}</td>
           <td class="num">${nombre(e.personnes)}</td>
           <td class="num" style="${e.sorties > e.vues * 0.4 ? 'color:var(--rouge-texte)' : ''}">${nombre(e.sorties)}</td>
@@ -1775,8 +1792,8 @@ async function vueComportement(){
         ${(!bt || !bt.length) ? insuffisant('Aucun clic observé.') : `
         <table><thead><tr><th>Action</th><th>Écran</th><th>Clics</th><th>Personnes</th></tr></thead><tbody>
         ${bt.map(b => `<tr>
-          <td>${b.element}${barreHorizontale(b.clics, maxB, 'var(--laterite)')}</td>
-          <td style="color:var(--craie2)">${b.ecran || '—'}</td>
+          <td>${E(b.element)}${barreHorizontale(b.clics, maxB, 'var(--laterite)')}</td>
+          <td style="color:var(--craie2)">${E(b.ecran || '—')}</td>
           <td class="num">${nombre(b.clics)}</td>
           <td class="num">${nombre(b.personnes)}</td>
         </tr>`).join('')}</tbody></table>`}
@@ -1803,8 +1820,8 @@ async function vuePedagogie(){
         ${(!q || !q.length) ? insuffisant("Aucune réponse enregistrée pour l'instant.") : `
         <table><thead><tr><th>Question</th><th>Matière</th><th>Tentatives</th><th>Réussite</th><th>Temps</th></tr></thead><tbody>
         ${q.map(x => `<tr>
-          <td>${x.enonce}</td>
-          <td style="color:var(--craie2)">${x.matiere || '—'}</td>
+          <td>${E(x.enonce)}</td>
+          <td style="color:var(--craie2)">${E(x.matiere || '—')}</td>
           <td class="num">${x.tentatives}</td>
           <td class="num" style="color:${x.taux_reussite < 40 ? 'var(--rouge-texte)' : x.taux_reussite > 75 ? 'var(--vert-texte)' : ''}">${x.taux_reussite ?? 0} %</td>
           <td class="num">${x.temps_moyen_s ? x.temps_moyen_s + ' s' : '—'}</td>
@@ -1834,11 +1851,11 @@ async function vueDirect(){
       <div class="bloc">
         <div class="libelle">Les 25 dernières actions</div>
         <div class="carte">
-          ${!t.derniers.length ? insuffisant("Personne n'est passé récemment.") :
-            t.derniers.map(e => `<div style="display:flex;gap:14px;padding:6px 0;border-bottom:1px solid var(--trait);font-size:13px">
-              <span class="num" style="color:var(--craie2);width:70px">${e.quand}</span>
-              <span style="flex:1">${e.nom.replace(/_/g,' ').toLowerCase()}</span>
-              <span style="color:var(--craie2)">${e.ecran || ''}</span>
+          ${!(t.derniers || []).length ? insuffisant("Personne n'est passé récemment.") :
+            (t.derniers || []).map(e => `<div style="display:flex;gap:14px;padding:6px 0;border-bottom:1px solid var(--trait);font-size:13px">
+              <span class="num" style="color:var(--craie2);width:70px">${E(e.quand)}</span>
+              <span style="flex:1">${E((e.nom || '').replace(/_/g,' ').toLowerCase())}</span>
+              <span style="color:var(--craie2)">${E(e.ecran || '')}</span>
             </div>`).join('')}
         </div>
       </div>`;
@@ -1872,7 +1889,7 @@ async function vueCandidats(pageC){
       <div class="carte">
         ${(!ret || !ret.length) ? insuffisant() : `
         <table><thead><tr><th>Inscrits le</th><th>Nombre</th><th>J+1</th><th>J+3</th><th>J+7</th><th>J+30</th></tr></thead><tbody>
-        ${ret.map(c => `<tr><td>${c.cohorte}</td><td class="num">${c.inscrits}</td>
+        ${ret.map(c => `<tr><td>${E(c.cohorte)}</td><td class="num">${c.inscrits}</td>
           <td class="num">${c.j1}</td><td class="num">${c.j3}</td>
           <td class="num">${c.j7}</td><td class="num">${c.j30}</td></tr>`).join('')}
         </tbody></table>
@@ -1886,14 +1903,38 @@ async function vueCandidats(pageC){
         ${(!gens || !gens.length) ? insuffisant("Aucun compte pour l'instant.") : `
         <table><tbody>
         ${gens.map(p => `<tr>
-          <td><b>${p.nom}</b><br><span class="num" style="font-size:11px;color:var(--craie2)">
-            ${p.telephone ? '+226 ' + p.telephone : '—'} · ${p.niveau || '—'} · ${dateCourte(p.cree_le)}</span></td>
-          <td style="text-align:right"><button class="lien" data-chrono="${p.id}">voir son parcours</button></td>
+          <td><b>${E(p.nom)}</b><br><span class="num" style="font-size:11px;color:var(--craie2)">
+            ${p.telephone ? '+226 ' + E(p.telephone) : '—'} · ${E(p.niveau || '—')} · ${dateCourte(p.cree_le)}</span></td>
+          <td style="text-align:right"><button class="lien" data-chrono="${E(p.id)}">voir son parcours</button></td>
         </tr>`).join('')}</tbody></table>${barrePagination(pageC, parPage, totalC || 0)}`}
       </div>
     </div>
 
+    <div class="bloc">
+      <div class="libelle">Changer le code d'un candidat<span>après vérification sur WhatsApp</span></div>
+      <div class="carte">
+        <p class="sous" style="font-size:12.5px;margin-top:0">À faire seulement quand le candidat vous a écrit depuis son propre numéro et que vous êtes sûr de son identité. Le numéro est aussi débloqué s'il avait épuisé ses essais.</p>
+        <div class="deux">
+          <div><label for="k-tel">Numéro (8 chiffres)</label><input id="k-tel" inputmode="numeric" maxlength="8" placeholder="70000000"></div>
+          <div><label for="k-code">Nouveau code (4 chiffres)</label><input id="k-code" inputmode="numeric" maxlength="4" placeholder="1234"></div>
+        </div>
+        <button class="cta petit" id="k-changer">Changer le code</button>
+      </div>
+    </div>
+
     <div class="bloc" id="zone-chrono"></div>`;
+
+  document.getElementById('k-changer').onclick = async () => {
+    const tel = document.getElementById('k-tel').value.replace(/\D/g,'');
+    const code = document.getElementById('k-code').value.replace(/\D/g,'');
+    if(tel.length !== 8 || code.length !== 4) return signal('Numéro à 8 chiffres et code à 4 chiffres.', 'mal');
+    if(!confirm('Changer le code du +226 ' + tel + ' ?')) return;
+    const { data, error } = await db.rpc('admin_changer_code', { p_telephone: tel, p_nouveau: code });
+    if(error) return erreur(error, 'Changement impossible');
+    if(!data || !data.ok) return signal((data && data.message) || 'Changement impossible.', 'mal');
+    signal('Code changé. Communiquez-le au candidat sur WhatsApp.', 'bien');
+    document.getElementById('k-code').value = '';
+  };
 
   document.querySelectorAll('[data-page-vers]').forEach(b => b.onclick = () => vueCandidats(parseInt(b.dataset.pageVers, 10)));
 
@@ -1907,9 +1948,9 @@ async function vueCandidats(pageC){
       <div class="carte">
         ${(!data || !data.length) ? insuffisant("Ce candidat n'a encore rien fait d'observé.") :
           data.map(e => `<div style="display:flex;gap:14px;padding:6px 0;border-bottom:1px solid var(--trait);font-size:13px">
-            <span class="num" style="color:var(--craie2);width:105px">${e.quand}</span>
-            <span style="flex:1">${e.nom.replace(/_/g,' ').toLowerCase()}${e.element ? ' · ' + e.element : ''}</span>
-            <span style="color:var(--craie2)">${e.ecran || ''}</span>
+            <span class="num" style="color:var(--craie2);width:105px">${E(e.quand)}</span>
+            <span style="flex:1">${E((e.nom || '').replace(/_/g,' ').toLowerCase())}${e.element ? ' · ' + E(e.element) : ''}</span>
+            <span style="color:var(--craie2)">${E(e.ecran || '')}</span>
           </div>`).join('')}
       </div>`;
     zH.scrollIntoView({ behavior:'smooth' });
@@ -1948,8 +1989,8 @@ async function vueSujets(){
             <select id="s-concours"><option value="">— aucun —</option>${optionsConcours()}</select></div>
           <div><label for="s-duree">Durée en minutes</label>
             <input id="s-duree" type="number" value="25" min="5" max="240"></div>
-          <div><label for="s-seuil">Seuil du dernier admis</label>
-            <input id="s-seuil" type="number" value="32" min="0"></div>
+          <div><label for="s-seuil">Seuil du dernier admis (seulement s'il est connu et sourcé)</label>
+            <input id="s-seuil" type="number" min="0" placeholder="laisser vide si inconnu"></div>
         </div>
         <button class="cta vert petit" id="s-creer">Créer le sujet</button>
       </div>
@@ -1992,16 +2033,16 @@ async function chargerSujets(){
 
   z.innerHTML = `<table><thead><tr><th>Référence</th><th>Niveau</th><th>Questions</th><th>Durée</th><th>État</th><th></th></tr></thead><tbody>
     ${data.map(s => `<tr>
-      <td><b>${s.reference}</b></td>
-      <td>${s.niveau || '—'}</td>
+      <td><b>${E(s.reference)}</b></td>
+      <td>${E(s.niveau || '—')}</td>
       <td class="num" style="${s.nb_questions ? '' : 'color:var(--rouge-texte)'}">${s.nb_questions || 0}</td>
       <td class="num">${Math.round((s.duree_secondes || 0)/60)} min</td>
       <td>${statut(s.statut)}</td>
       <td style="text-align:right;white-space:nowrap">
-        <button class="lien" data-composer="${s.id}">composer</button>
+        <button class="lien" data-composer="${E(s.id)}">composer</button>
         ${s.statut === 'publie'
-          ? `<button class="lien" style="margin-left:10px" data-retirer-s="${s.id}">retirer</button>`
-          : `<button class="lien" style="margin-left:10px" data-publier-s="${s.id}">publier</button>`}
+          ? `<button class="lien" style="margin-left:10px" data-retirer-s="${E(s.id)}">retirer</button>`
+          : `<button class="lien" style="margin-left:10px" data-publier-s="${E(s.id)}">publier</button>`}
       </td></tr>`).join('')}
     </tbody></table>`;
 
@@ -2026,7 +2067,7 @@ async function composerSujet(){
   const s = sujetOuvert;
   $('#vue').innerHTML = `
     <button class="retourhaut" data-retour-sujets="1">← Tous les sujets</button>
-    <h2 class="titre">Sujet ${s.reference}</h2>
+    <h2 class="titre">Sujet ${E(s.reference)}</h2>
     <p class="sous">Ajoutez des questions depuis la banque, ordonnez-les, puis enregistrez. L'ordre est celui que verra le candidat.</p>
 
     <div class="bloc">
@@ -2092,8 +2133,8 @@ function afficherListeSujet(){
   z.innerHTML = listeSujet.map((q, i) => `
     <div style="display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--trait)">
       <span class="num" style="color:var(--craie2);width:26px">${i+1}</span>
-      <span style="flex:1;font-size:13.5px">${q.enonce}
-        <br><span class="num" style="font-size:11px;color:var(--craie2)">${q.matiere || 'sans matière'}</span></span>
+      <span style="flex:1;font-size:13.5px">${E(q.enonce)}
+        <br><span class="num" style="font-size:11px;color:var(--craie2)">${E(q.matiere || 'sans matière')}</span></span>
       <span style="white-space:nowrap">
         <button class="lien" data-monter="${i}" ${i===0?'style="opacity:.3"':''}>▲</button>
         <button class="lien" data-descendre="${i}" ${i===listeSujet.length-1?'style="opacity:.3"':''}>▼</button>
@@ -2136,10 +2177,10 @@ async function chargerBanque(){
 
   z.innerHTML = libres.length ? libres.map(q => `
     <div style="display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--trait)">
-      <span style="flex:1;font-size:13.5px">${q.enonce}
-        <br><span class="num" style="font-size:11px;color:var(--craie2)">${q.matieres ? q.matieres.nom : 'sans matière'}</span></span>
-      <button class="lien" data-ajouter="${q.id}" data-enonce="${q.enonce.replace(/"/g,'&quot;')}"
-        data-mat="${q.matieres ? q.matieres.nom : ''}">ajouter</button>
+      <span style="flex:1;font-size:13.5px">${E(q.enonce)}
+        <br><span class="num" style="font-size:11px;color:var(--craie2)">${E(q.matieres ? q.matieres.nom : 'sans matière')}</span></span>
+      <button class="lien" data-ajouter="${E(q.id)}" data-enonce="${E(q.enonce)}"
+        data-mat="${E(q.matieres ? q.matieres.nom : '')}">ajouter</button>
     </div>`).join('')
     : `<div class="vide">Toutes les questions correspondantes sont déjà dans le sujet.</div>`;
 
@@ -2191,8 +2232,8 @@ async function vueJournal(pageJ){
   document.getElementById('j').innerHTML = (data.length
     ? `<table><thead><tr><th>Quand</th><th>Action</th><th>Cible</th></tr></thead><tbody>
        ${data.map(l => `<tr><td class="num">${dateHeure(l.cree_le)}</td>
-         <td>${(l.action || '').replace(/_/g,' ')}</td>
-         <td class="num" style="color:var(--craie2)">${l.table_cible || '—'}</td></tr>`).join('')}
+         <td>${E((l.action || '').replace(/_/g,' '))}</td>
+         <td class="num" style="color:var(--craie2)">${E(l.table_cible || '—')}</td></tr>`).join('')}
        </tbody></table>`
     : `<div class="vide">Le journal est vide pour l'instant.</div>`)
     + barrePagination(pageJ, parPage, count || 0);

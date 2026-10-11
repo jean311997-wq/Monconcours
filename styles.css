@@ -271,6 +271,8 @@ h2.titre{font-family:var(--d);font-weight:800;font-size:25px;line-height:1.05;le
 .opt.juste .lettre{background:var(--cachet);border-color:var(--cachet);color:#fff}
 .opt.faux{border-color:var(--laterite);background:var(--rouge-fond)}
 .opt.faux .lettre{background:var(--laterite);border-color:var(--laterite);color:#fff}
+.opt.choisi{border-color:var(--craie2,#8A9490)}
+.opt.choisi .lettre{background:var(--craie2,#8A9490);color:#fff}
 .opt[disabled]{cursor:default}
 .retour{border-radius:12px;padding:13px;font-size:13.5px;line-height:1.55;margin-top:12px;border:1px solid;
   animation:apparait .32s cubic-bezier(.2,.8,.3,1) both}
