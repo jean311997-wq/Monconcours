@@ -1,13 +1,13 @@
 /* ============================================================
    MON CONCOURS · administration
-   Même identité que le site : encre, latérite, vert cachet.
+   Même identité que le site : nuit, vert Faso, or.
    ============================================================ */
 :root{
-  --encre:#0F1513; --ardoise:#18211E; --ardoise2:#212C27; --trait:#2E3B35;
-  --craie:#EDEAE1; --craie2:#A3B0AA; --papier:#EFE9DA;
-  --laterite:#C4552E; --cachet:#0E7A54; --or:#CE9F2F;
+  --encre:#0C1512; --ardoise:#14211C; --ardoise2:#1B2B25; --trait:#26372F;
+  --craie:#E9EEEA; --craie2:#A2B2AA; --papier:#EFE9DA;
+  --laterite:#13805A; --cachet:#0E7A54; --or:#E3A82B;
   --vert-fond:#0F241C; --vert-bord:#1D5442; --vert-texte:#4FC28F;
-  --rouge-fond:#20110B; --rouge-bord:#5A2E1D; --rouge-texte:#E28460;
+  --rouge-fond:#241010; --rouge-bord:#5C2420; --rouge-texte:#EF7B6E;
   --ambre-fond:#221D0F; --ambre-bord:#4E4222; --ambre-texte:#C9A94A;
   --d:'Bricolage Grotesque',system-ui,sans-serif;
   --b:'IBM Plex Sans',system-ui,sans-serif;
@@ -31,7 +31,7 @@ input,select,textarea{font:inherit}
   border-radius:18px;padding:26px}
 .marque{display:flex;align-items:center;gap:11px;margin-bottom:22px}
 .marque .mot{font-family:var(--d);font-weight:800;font-size:16px;letter-spacing:.01em}
-.marque .mot i{font-style:normal;color:var(--laterite)}
+.marque .mot i{font-style:normal;color:var(--or)}
 .marque .devise{font-size:11.5px;color:var(--craie2);margin-top:2px}
 .carte-portail h1{font-family:var(--d);font-weight:800;font-size:28px;letter-spacing:-.03em}
 .aide{font-size:13px;color:var(--craie2);line-height:1.55;margin:8px 0 18px}
@@ -58,7 +58,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--cachet);outline-
   padding:13px 20px;border-bottom:1px solid var(--trait);background:#111917}
 .tete .marque{margin:0}
 .etiquette{font-family:var(--m);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
-  color:var(--laterite);border:1px solid var(--rouge-bord);border-radius:5px;padding:3px 8px;margin-left:4px}
+  color:var(--or);border:1px solid var(--ambre-bord);border-radius:5px;padding:3px 8px;margin-left:4px}
 .tete .droite{display:flex;align-items:center;gap:14px}
 .qui{font-family:var(--m);font-size:11.5px;color:var(--craie2)}
 
@@ -132,7 +132,7 @@ tr:last-child td{border-bottom:none}
 /* ---------- zone de dépôt ---------- */
 .depot{border:2px dashed var(--trait);border-radius:16px;padding:34px 20px;text-align:center;
   transition:border-color .18s,background .18s}
-.depot.survol{border-color:var(--laterite);background:var(--rouge-fond)}
+.depot.survol{border-color:var(--laterite);background:var(--vert-fond)}
 .depot .g{font-family:var(--d);font-weight:800;font-size:19px;letter-spacing:-.02em}
 .depot p{font-size:13px;color:var(--craie2);margin-top:7px;line-height:1.5}
 .fichiers{margin-top:14px;display:flex;flex-direction:column;gap:7px}

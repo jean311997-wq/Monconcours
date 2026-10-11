@@ -529,7 +529,7 @@ function ecranResultat(){
       <div class="ec-tete"><span>Ton niveau aujourd'hui</span><span class="num">${n}/10</span></div>
       <div class="barre-seuil">
         <div class="piste"></div>
-        <div class="moi" style="width:${Math.min(100,n*10)}%;background:${solide?'var(--cachet)':'var(--laterite)'}"></div>
+        <div class="moi" style="width:${Math.min(100,n*10)}%;background:${solide?'var(--cachet)':'var(--or)'}"></div>
       </div>
       <div class="ec-pied">
         <span class="num">0</span>
@@ -3043,7 +3043,7 @@ function ecranCompte(){
       <div class="libelle">Assiduité</div>
       <div class="carte">
         <div style="display:flex;justify-content:space-between;align-items:flex-end">
-          <div><div style="display:flex;align-items:center;gap:8px;color:var(--laterite)">${ico('flamme',20)}
+          <div><div style="display:flex;align-items:center;gap:8px;color:var(--or)">${ico('flamme',20)}
               <span style="font-family:var(--d);font-weight:800;font-size:26px;letter-spacing:-.03em;color:var(--craie)">${S.stats ? S.stats.serie : 0} jour${(S.stats&&S.stats.serie>1)?'s':''}</span></div>
             <div class="eyebrow" style="margin-top:3px">consécutifs</div></div>
           <div style="text-align:right"><div class="num" style="font-size:15px">${S.stats ? S.stats.record : 0}</div>
@@ -3168,7 +3168,7 @@ function surcouche(){
   <div class="panneau" role="dialog" aria-modal="true" aria-label="${titres[mode]}">
     <div class="poignee"></div>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">${logoSvg(30)}
-      <span style="font-family:var(--d);font-weight:800;font-size:15px">MON <i style="font-style:normal;color:var(--laterite)">CONCOURS</i></span></div>
+      <span style="font-family:var(--d);font-weight:800;font-size:15px">MON <i style="font-style:normal;color:var(--laterite-txt)">CONCOURS</i></span></div>
 
     <div class="titre-panneau">${titres[mode]}</div>
     <p class="intro">${intros[mode]}</p>
@@ -3236,13 +3236,13 @@ function ecranApparence(){
 
     <button class="theme-carte ${S.theme==='sombre'?'on':''}" data-theme-choix="sombre" aria-pressed="${S.theme==='sombre'}">
       ${S.theme==='sombre'?'<span class="coche">ACTIF</span>':''}
-      <div class="demo"><i style="background:#18211E"></i><i style="background:#0F1513"></i><i style="background:#C4552E"></i></div>
-      <b>Mode sombre</b><span>L'identité actuelle du site, pensée pour le soir</span>
+      <div class="demo"><i style="background:#14211C"></i><i style="background:#0C1512"></i><i style="background:#13805A"></i></div>
+      <b>Mode sombre</b><span>Vert Faso sur fond nuit, pensé pour le soir</span>
     </button>
     <button class="theme-carte ${S.theme==='clair'?'on':''}" data-theme-choix="clair" aria-pressed="${S.theme==='clair'}">
       ${S.theme==='clair'?'<span class="coche">ACTIF</span>':''}
-      <div class="demo"><i style="background:#F3F0E8"></i><i style="background:#FFFDFA"></i><i style="background:#A8401E"></i></div>
-      <b>Mode clair</b><span>Fond crème, cartes claires, texte noir, mêmes couleurs</span>
+      <div class="demo"><i style="background:#F5F5F0"></i><i style="background:#FFFFFF"></i><i style="background:#0B6B4A"></i></div>
+      <b>Mode clair</b><span>Fond clair, cartes blanches, texte foncé, mêmes couleurs</span>
     </button>
   </div>`;
 }
