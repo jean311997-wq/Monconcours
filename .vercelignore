@@ -1,0 +1,7 @@
+# Fichiers de travail : jamais publiés sur le site
+DEPLOIEMENT.md
+deployer.bat
+deployer.command
+supabase/
+*.md
+.git/
