@@ -8,7 +8,8 @@
   --papier:#EFE9DA;
   --papier2:#E2D9C2;
   --papier-trait:#C3B694;
-  --laterite:#C4552E;
+  --laterite:#BE5129;          /* 4,8:1 sous un texte blanc */
+  --laterite-txt:#DB6E44;      /* accent en petit texte sur fond sombre, 5,5:1 */
   --cachet:#0E7A54;
   --or:#CE9F2F;
   --survol:#4A5C55;
@@ -66,7 +67,7 @@ body{background:var(--encre);padding:0;overflow:hidden}
   .hero{padding:34px 34px 40px}
   .qzone{padding:26px 34px 50px}
   .copie{padding:30px 34px 50px}
-  h2.titre{font-size:32px}
+  .titre{font-size:32px}
   .serment{font-size:46px}
   .qtexte{font-size:24px}
   .opt{font-size:15px;padding:14px 15px}
@@ -93,19 +94,19 @@ body{background:var(--encre);padding:0;overflow:hidden}
   font-family:var(--m);font-size:8.5px;min-width:14px;height:14px;border-radius:8px;display:grid;place-items:center;padding:0 3px}
 
 /* ---------- BLOCS ---------- */
-.eyebrow{font-family:var(--m);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--craie2)}
-h2.titre{font-family:var(--d);font-weight:800;font-size:25px;line-height:1.05;letter-spacing:-.025em;margin:6px 0 3px}
+.eyebrow{font-family:var(--m);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--craie2)}
+.titre{font-family:var(--d);font-weight:800;font-size:25px;line-height:1.05;letter-spacing:-.025em;margin:6px 0 3px}
 .sous{color:var(--craie2);font-size:14px;line-height:1.55}
 .carte{background:var(--ardoise);border:1px solid var(--trait);border-radius:14px;padding:14px}
 .carte+.carte{margin-top:10px}
 .bloc{margin-top:22px}
-.libelle{font-family:var(--m);font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--craie2);margin-bottom:9px;display:flex;justify-content:space-between;align-items:baseline;gap:14px}
+.libelle{font-family:var(--m);font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--craie2);margin-bottom:9px;display:flex;justify-content:space-between;align-items:baseline;gap:14px}
 .cta{width:100%;background:var(--laterite);color:#fff;font-weight:600;font-size:14.5px;border-radius:11px;
   padding:14px;text-align:center;transition:transform .12s,filter .12s}
 .cta:hover{filter:brightness(1.09)}.cta:active{transform:scale(.985)}
 .cta.vert{background:var(--cachet)}
 .cta.creux{background:none;border:1px solid var(--trait);color:var(--craie)}
-.cta small{display:block;font-weight:400;font-size:11px;opacity:.72;margin-top:3px;font-family:var(--m)}
+.cta small{display:block;font-weight:400;font-size:12px;margin-top:3px;color:#fff}
 .num{font-family:var(--m);font-variant-numeric:tabular-nums}
 
 /* tampons */
@@ -128,7 +129,7 @@ h2.titre{font-family:var(--d);font-weight:800;font-size:25px;line-height:1.05;le
 
 .marquehero{display:flex;align-items:center;gap:11px;margin-bottom:20px}
 .marquehero .mot{font-family:var(--d);font-weight:800;font-size:17px;letter-spacing:.01em}
-.marquehero .mot i{font-style:normal;color:var(--laterite)}
+.marquehero .mot i{font-style:normal;color:var(--laterite-txt)}
 .marquehero .devise{font-size:11.5px;color:var(--craie2);margin-top:2px}
 
 /* ---------- NOTE DE COPIE ---------- */
@@ -153,7 +154,7 @@ h2.titre{font-family:var(--d);font-weight:800;font-size:25px;line-height:1.05;le
 .ec-tete{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;color:var(--craie2);margin-bottom:12px}
 .ec-tete .num{color:var(--craie);font-size:14px}
 .echelle .barre-seuil{margin:0 0 6px;height:14px}
-.echelle .barre-seuil .rail{top:4px}
+.echelle .barre-seuil .piste{top:4px}
 .echelle .barre-seuil .moi{top:4px}
 .echelle .barre-seuil .seuil{top:0;height:14px}
 .ec-pied{position:relative;height:30px;font-family:var(--m);font-size:10.5px;color:var(--craie2)}
@@ -188,20 +189,20 @@ h2.titre{font-family:var(--d);font-weight:800;font-size:25px;line-height:1.05;le
 .verdict.fragile{border-color:var(--rouge-bord);background:var(--rouge-fond)}
 .verdict b{display:block;font-family:var(--d);font-weight:700;font-size:16px;margin-bottom:6px;letter-spacing:-.01em}
 .bonne-nouvelle{border-left:2px solid var(--or);padding-left:13px;margin-top:20px}
-.bonne-nouvelle h4{font-family:var(--d);font-weight:700;font-size:17px;letter-spacing:-.02em;margin-bottom:5px}
+.bonne-nouvelle h2{font-family:var(--d);font-weight:700;font-size:17px;letter-spacing:-.02em;margin-bottom:5px}
 .bonne-nouvelle p{font-size:12.5px;color:var(--craie2);line-height:1.55}
 
 .tete-jour{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px}
 .pastille-j{display:inline-flex;align-items:baseline;gap:6px;font-family:var(--m);font-size:10px;
   letter-spacing:.04em;color:var(--craie2);border:1px solid var(--trait);background:var(--ardoise);
   border-radius:20px;padding:5px 11px;white-space:nowrap}
-.pastille-j b{font-family:var(--d);font-weight:800;font-size:13px;color:var(--laterite);letter-spacing:-.02em}
+.pastille-j b{font-family:var(--d);font-weight:800;font-size:13px;color:var(--laterite-txt);letter-spacing:-.02em}
 .sous-titre{font-size:13.5px;color:var(--craie2);margin-top:5px}
 @media(max-width:360px){.pastille-j{font-size:9px;padding:4px 9px}}
 
 .ligne-direct{display:flex;align-items:center;gap:11px;flex-wrap:wrap;margin-top:7px}
 .direct{display:inline-flex;align-items:center;gap:7px;font-family:var(--m);font-size:10.5px;
-  letter-spacing:.09em;text-transform:uppercase;color:var(--laterite)}
+  letter-spacing:.09em;text-transform:uppercase;color:var(--laterite-txt)}
 .direct i{width:8px;height:8px;border-radius:50%;background:var(--laterite);
   box-shadow:0 0 0 0 rgba(196,85,46,.6);animation:pulseDirect 1.8s ease-out infinite}
 @keyframes pulseDirect{0%{box-shadow:0 0 0 0 rgba(196,85,46,.65)}70%{box-shadow:0 0 0 10px rgba(196,85,46,0)}100%{box-shadow:0 0 0 0 rgba(196,85,46,0)}}
@@ -214,9 +215,7 @@ h2.titre{font-family:var(--d);font-weight:800;font-size:25px;line-height:1.05;le
   animation:defileActu 26s linear infinite}
 @keyframes defileActu{from{transform:translateX(0)}to{transform:translateX(-100%)}}
 .tag-neuf{display:inline-block;font-family:var(--m);font-size:9px;letter-spacing:.12em;text-transform:uppercase;
-  background:var(--laterite);color:#fff;border-radius:4px;padding:3px 7px;margin-left:5px;
-  animation:clignoteNeuf 1.7s ease-in-out infinite}
-@keyframes clignoteNeuf{0%,100%{opacity:1}50%{opacity:.4}}
+  background:var(--laterite);color:#fff;border-radius:4px;padding:3px 7px;margin-left:5px}
 
 /* ---------- REPRISE DE COMPOSITION ---------- */
 .reprise-compo{display:block;width:100%;text-align:left;border:1.5px solid var(--laterite);
@@ -230,7 +229,7 @@ h2.titre{font-family:var(--d);font-weight:800;font-size:25px;line-height:1.05;le
 
 /* ---------- BULLETIN ---------- */
 .info{border-left:2px solid var(--trait);padding:2px 0 2px 13px;margin-bottom:18px}
-.info h4{font-size:16px;font-weight:600;line-height:1.35;margin:7px 0 5px}
+.info h2{font-size:16px;font-weight:600;line-height:1.35;margin:7px 0 5px}
 .info p{font-size:14px;color:var(--craie2);line-height:1.55}
 .info.ok{border-color:var(--cachet)}
 .info.att{border-color:var(--ambre-bord)}
@@ -239,12 +238,12 @@ h2.titre{font-family:var(--d);font-weight:800;font-size:25px;line-height:1.05;le
 .mat{display:flex;align-items:center;gap:11px;padding:9px 0;border-bottom:1px solid var(--trait)}
 .mat:last-child{border-bottom:none}
 .mat .nom{flex:1;font-size:14px}
-.mat .nom em{display:block;font-style:normal;font-size:12px;color:var(--craie2);font-family:var(--m);margin-top:2px}
+.mat .nom em{display:block;font-style:normal;font-size:12.5px;line-height:1.4;color:var(--craie2);margin-top:2px}
 .jauge{width:74px;height:4px;background:var(--trait);border-radius:2px;overflow:hidden}
 .jauge i{display:block;height:100%;background:var(--craie2);transition:width .6s cubic-bezier(.2,.8,.3,1)}
 .jauge.bas i{background:var(--laterite)}
 .jauge.haut i{background:var(--cachet)}
-.mat .val{font-family:var(--m);font-size:13px;width:36px;text-align:right}
+.mat .val{font-family:var(--m);font-size:13px;min-width:36px;flex:none;text-align:right}
 
 /* ---------- ÉTAPES ---------- */
 .etape{display:flex;gap:11px;padding:11px 0;border-bottom:1px solid var(--trait);align-items:flex-start}
@@ -252,11 +251,11 @@ h2.titre{font-family:var(--d);font-weight:800;font-size:25px;line-height:1.05;le
 .puce{width:21px;height:21px;flex:none;border-radius:50%;border:1px solid var(--trait);display:grid;place-items:center;
   font-family:var(--m);font-size:10px;color:var(--craie2);margin-top:1px}
 .etape.fait .puce{background:var(--cachet);border-color:var(--cachet);color:#fff}
-.etape.actif .puce{border-color:var(--laterite);color:var(--laterite)}
-.etape h5{font-size:13.5px;font-weight:600}
+.etape.actif .puce{border-color:var(--laterite-txt);color:var(--laterite-txt)}
+.etape h3{font-size:13.5px;font-weight:600}
 .etape p{font-size:11.5px;color:var(--craie2);margin-top:2px;line-height:1.45}
 .etape .dur{font-family:var(--m);font-size:10px;color:var(--craie2);margin-top:4px;display:block}
-.etape.fait h5{color:var(--craie2);text-decoration:line-through;text-decoration-color:var(--trait)}
+.etape.fait h3{color:var(--craie2);text-decoration:line-through;text-decoration-color:var(--trait)}
 
 /* ---------- SÉANCE ---------- */
 .qzone{padding:18px}
@@ -308,7 +307,7 @@ h2.titre{font-family:var(--d);font-weight:800;font-size:25px;line-height:1.05;le
 .scrub .bulle-q::after{content:'';position:absolute;right:-5px;top:50%;margin-top:-5px;
   border:5px solid transparent;border-left-color:#221F17}
 .gr-tete{background:#20211C;color:var(--papier);padding:12px 16px;display:flex;justify-content:space-between;align-items:center;flex:none}
-.gr-tete .t{font-family:var(--d);font-weight:800;font-size:14px;letter-spacing:.02em}
+.gr-tete .t{font-family:var(--d);font-weight:800;font-size:14px;letter-spacing:.02em;text-transform:uppercase}
 .gr-chrono{font-family:var(--m);font-size:18px;font-weight:600;letter-spacing:.04em}
 .gr-chrono.chaud{color:#FF8A5C;animation:battement 1s ease-in-out infinite}
 @keyframes battement{0%,100%{opacity:1}50%{opacity:.45}}
@@ -353,7 +352,7 @@ h2.titre{font-family:var(--d);font-weight:800;font-size:25px;line-height:1.05;le
 .copie .cachet-note .n{font-family:var(--d);font-weight:800;font-size:44px;line-height:1;letter-spacing:-.03em}
 .copie .cachet-note .l{font-family:var(--m);font-size:11.5px;letter-spacing:.18em;text-transform:uppercase;margin-top:6px}
 .barre-seuil{position:relative;height:34px;margin:16px 0 8px}
-.barre-seuil .rail{position:absolute;top:14px;left:0;right:0;height:6px;background:var(--trait);border-radius:3px}
+.barre-seuil .piste{position:absolute;top:14px;left:0;right:0;height:6px;background:var(--trait);border-radius:3px}
 .barre-seuil .moi{position:absolute;top:14px;left:0;height:6px;background:var(--laterite);border-radius:3px;
   transition:width .8s cubic-bezier(.2,.8,.3,1)}
 .barre-seuil .seuil{position:absolute;top:6px;width:2px;height:22px;background:var(--or)}
@@ -370,8 +369,7 @@ h2.titre{font-family:var(--d);font-weight:800;font-size:25px;line-height:1.05;le
   background:#fff;box-shadow:0 0 0 0 rgba(255,255,255,.7);animation:pointOnde 1.35s ease-out infinite}
 @keyframes pointOnde{0%{box-shadow:0 0 0 0 rgba(255,255,255,.75)}70%{box-shadow:0 0 0 9px rgba(255,255,255,0)}100%{box-shadow:0 0 0 0 rgba(255,255,255,0)}}
 .appel-note{flex:none;background:var(--laterite);color:#fff;font-family:var(--m);font-size:11px;
-  letter-spacing:.05em;text-align:center;padding:7px 10px;animation:appelClignote 1.6s ease-in-out infinite}
-@keyframes appelClignote{0%,100%{opacity:1}50%{opacity:.45}}
+  letter-spacing:.05em;text-align:center;padding:7px 10px}
 
 .sujet-tete{border-bottom:2px solid #221F17;padding-bottom:10px;margin-bottom:11px}
 .sujet-tete .ref{font-family:var(--m);font-size:14px;font-weight:600;letter-spacing:.08em;color:#221F17}
@@ -443,7 +441,17 @@ h2.titre{font-family:var(--d);font-weight:800;font-size:25px;line-height:1.05;le
 .pastille-op.vraie{border-color:var(--cachet);border-width:2.2px;color:var(--cachet);font-weight:600}
 .feuille-pied{margin-top:14px;padding-top:9px;border-top:2px solid #221F17;font-family:var(--m);
   font-size:9.5px;letter-spacing:.1em;color:#8A806A;text-align:center}
-@media(min-width:430px){.pastille-op{width:25px;height:25px;font-size:10.5px}
+/* Téléphone : un cercle noirci ne s'efface pas, donc pas de cible de 22 px.
+   Une seule colonne, des cercles de 36 px et une zone de toucher de 46 px. */
+@media(max-width:519px){
+  .opt-grille{grid-auto-flow:row;grid-template-rows:none;grid-template-columns:1fr;gap:0;background-image:none}
+  .ligne-op{gap:10px;padding:5px 4px;border-radius:0;border-bottom:1px dashed var(--papier-trait)}
+  .ligne-op:last-child{border-bottom:none}
+  .ligne-op .n{width:30px;font-size:13px;padding:6px 2px}
+  .pastille-op{width:36px;height:36px;font-size:12.5px;position:relative}
+  .pastille-op::before{content:'';position:absolute;inset:-5px}
+}
+@media(min-width:520px){.pastille-op{width:25px;height:25px;font-size:10.5px}
   .ligne-op{gap:6px}.ligne-op .n{width:24px;font-size:11.5px}}
 @media(min-width:700px){
   .opt-grille{grid-template-rows:repeat(17,auto);gap:3px 22px;
@@ -490,7 +498,7 @@ h2.titre{font-family:var(--d);font-weight:800;font-size:25px;line-height:1.05;le
 
 /* ---------- COLONNE NOTE ---------- */
 .note{position:sticky;top:28px}
-.note .kicker{font-family:var(--m);font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--laterite)}
+.note .kicker{font-family:var(--m);font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--laterite-txt)}
 .note h3{font-family:var(--d);font-weight:800;font-size:30px;line-height:1.06;letter-spacing:-.03em;margin:8px 0 12px}
 .note .lede{font-size:14.5px;line-height:1.62;color:#C3CCC7;max-width:56ch}
 .note .lede strong{color:var(--craie);font-weight:600}
@@ -547,7 +555,7 @@ h2.titre{font-family:var(--d);font-weight:800;font-size:25px;line-height:1.05;le
 .cours .co b{display:block;font-size:13.5px;font-weight:600}
 .cours .bar{height:4px;background:var(--trait);border-radius:2px;margin-top:7px;overflow:hidden}
 .cours .bar i{display:block;height:100%;background:var(--cachet);transition:width .6s cubic-bezier(.2,.8,.3,1)}
-.cours .pc{font-family:var(--m);font-size:11px;color:var(--craie2);margin-top:5px;display:block}
+.cours .pc{font-size:12.5px;line-height:1.4;color:var(--craie2);margin-top:5px;display:block}
 .cours .fl{font-family:var(--m);font-size:10px;color:var(--craie2);flex:none;text-align:right}
 
 .bandeau-niveau{display:flex;align-items:center;gap:10px;justify-content:space-between;
@@ -611,7 +619,7 @@ h2.titre{font-family:var(--d);font-weight:800;font-size:25px;line-height:1.05;le
 .profil{display:flex;flex-direction:column;align-items:center;padding:18px 0 14px}
 .profil .av{width:62px;height:62px;border-radius:50%;background:var(--ardoise2);border:1px solid var(--trait);
   display:grid;place-items:center;font-size:28px;margin-bottom:10px}
-.profil h3{font-family:var(--d);font-weight:800;font-size:21px;letter-spacing:-.02em}
+.profil h1{font-family:var(--d);font-weight:800;font-size:21px;letter-spacing:-.02em}
 .profil span{font-family:var(--m);font-size:12px;color:var(--craie2);letter-spacing:.06em;margin-top:3px}
 .duo{display:grid;grid-template-columns:1fr 1fr;gap:9px}
 .stat{background:var(--ardoise);border:1px solid var(--trait);border-radius:12px;padding:12px;text-align:center}
@@ -639,11 +647,12 @@ h2.titre{font-family:var(--d);font-weight:800;font-size:25px;line-height:1.05;le
 .semaine .c{height:30px;border-radius:7px;background:var(--trait);display:grid;place-items:center;font-size:13px}
 .semaine .c.vert{background:var(--vert-plein);color:var(--vert-texte)}
 .semaine .c.rouge{background:var(--rouge-plein);color:var(--rouge-texte)}
+.semaine .c.vide{background:transparent;border:1px dashed var(--trait)}
 .reglages button{display:flex;justify-content:space-between;align-items:center;width:100%;padding:13px 0;
-  border-bottom:1px solid var(--trait);font-size:14.5px;color:var(--craie2)}
+  border-bottom:1px solid var(--trait);font-size:14.5px;color:var(--craie)}
 .reglages button:last-child{border-bottom:none}
-.reglages button span{font-family:var(--m);font-size:12px;color:var(--survol)}
-.reglages button.sortie{color:var(--laterite)}
+.reglages button span{font-size:16px;color:var(--craie2)}
+.reglages button.sortie{color:var(--laterite-txt)}
 
 
 /* ---------- ACCESSIBILITÉ ---------- */
@@ -651,13 +660,13 @@ h2.titre{font-family:var(--d);font-weight:800;font-size:25px;line-height:1.05;le
 .vue:focus{outline:none}
 
 /* ---------- EN-TÊTE D'APPLICATION ---------- */
-.apptete{flex:none;display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid var(--trait);background:var(--barre)}
+.apptete{flex:none;display:flex;align-items:center;gap:6px;padding:10px 14px;border-bottom:1px solid var(--trait);background:var(--barre)}
 @media(min-width:860px){.apptete{padding:14px 24px}.apptete .mot{font-size:16px}}
-.apptete .mot{font-family:var(--d);font-weight:800;font-size:14px;letter-spacing:.02em}
-.apptete .mot i{font-style:normal;color:var(--laterite)}
+.apptete .mot{font-family:var(--d);font-weight:800;font-size:14px;letter-spacing:.02em;white-space:nowrap;margin-left:4px}
+.apptete .mot i{font-style:normal;color:var(--laterite-txt)}
 .apptete .droite{margin-left:auto;font-family:var(--m);font-size:10px;letter-spacing:.06em;color:var(--craie2)}
 .bouton-tete{display:flex;align-items:center;gap:6px;border:1px solid var(--trait);border-radius:9px;
-  padding:6px 9px;font-size:11.5px;color:var(--craie2);white-space:nowrap;background:var(--ardoise)}
+  padding:6px 10px;min-height:40px;min-width:40px;justify-content:center;font-size:11.5px;color:var(--craie2);white-space:nowrap;background:var(--ardoise)}
 .bouton-tete:hover{border-color:var(--survol);color:var(--craie)}
 .bouton-tete svg{display:block;flex:none}
 .bouton-tete span{display:none}
@@ -747,6 +756,7 @@ body[data-theme="clair"]{
   --barre:#FFFDFA;
   --survol:#B9AF9C;
   --laterite:#A8401E;
+  --laterite-txt:#A8401E;
   --cachet:#0A6141;
   --or:#8A6510;
   --vert-fond:#E6F2EB; --vert-bord:#A6D2BC; --vert-texte:#0A6141; --vert-plein:#CFE8DB;
@@ -773,7 +783,7 @@ body[data-theme="clair"] .nav{background:var(--barre);border-top-color:#E6E0D2}
 body[data-theme="clair"] .rail{background:#F7F4EC;border-right-color:#E6E0D2}
 body[data-theme="clair"] .rail button:hover{background:#FFFDFA}
 body[data-theme="clair"] .rail button.on{background:#FFFDFA;box-shadow:0 1px 2px rgba(70,60,40,.06)}
-body[data-theme="clair"] .nav button{color:#7C7768}
+body[data-theme="clair"] .nav button{color:#5F5A4F}
 body[data-theme="clair"] .nav button.on{color:var(--craie)}
 body[data-theme="clair"] .bouton-tete{background:#FFFDFA;border-color:#E0D9C9}
 
@@ -789,6 +799,7 @@ body[data-theme="clair"] .rang .av{background:var(--ardoise2)}
 
 body[data-theme="clair"] .champ input{background:#FFFDFA}
 body[data-theme="clair"] .semaine .c{background:var(--ardoise2)}
+body[data-theme="clair"] .semaine .c.vide{background:transparent}
 body[data-theme="clair"] .jeton{background:var(--ardoise2)}
 body[data-theme="clair"] .ussd{background:#FFFDFA;border-color:#E0D9C9}
 body[data-theme="clair"] .ussd .code{color:var(--craie)}
@@ -829,7 +840,7 @@ body.en-transition *{transition:background-color .4s ease, color .4s ease, borde
 
 /* ---------- jauge des places ---------- */
 .jauge-places{position:relative;height:12px;margin:14px 0 6px}
-.jauge-places .rail{position:absolute;inset:3px 0;background:var(--trait);border-radius:3px}
+.jauge-places .piste{position:absolute;inset:3px 0;background:var(--trait);border-radius:3px}
 .jauge-places .admis{position:absolute;top:3px;left:0;height:6px;background:var(--cachet);border-radius:3px}
 .jauge-places .curseur{position:absolute;top:0;width:3px;height:12px;background:var(--laterite);
   border-radius:2px;transition:left .8s cubic-bezier(.2,.8,.3,1)}
@@ -865,12 +876,12 @@ body.en-transition *{transition:background-color .4s ease, color .4s ease, borde
   .pad{max-width:1080px;padding:30px 40px 70px}
   .hero{max-width:900px;padding:44px 40px}
   .qzone,.copie{max-width:860px}
-  h2.titre{font-size:36px}
+  .titre{font-size:36px}
   .serment{font-size:54px}
   .sous{font-size:15px}
 
   /* l'accueil se met sur deux colonnes : actualité à gauche, tâches à droite */
-  .pad .colonnes{display:grid;grid-template-columns:1.35fr 1fr;gap:26px;align-items:start}
+  .pad .colonnes{display:grid;grid-template-columns:1.35fr 1fr;gap:26px;align-items:start;margin-top:22px}
   .pad .colonnes .bloc{margin-top:0}
 
   /* les listes respirent */
@@ -879,7 +890,7 @@ body.en-transition *{transition:background-color .4s ease, color .4s ease, borde
   .cours{padding:15px 16px}
   .cours .co b{font-size:15px}
   .fascicule{padding:16px}
-  .info h4{font-size:17px}
+  .info h2{font-size:17px}
   .info p{font-size:15px}
 }
 
@@ -896,7 +907,7 @@ body.en-transition *{transition:background-color .4s ease, color .4s ease, borde
 
 /* écrans très étroits : rien ne déborde */
 @media(max-width:340px){
-  h2.titre{font-size:22px}
+  .titre{font-size:22px}
   .serment{font-size:29px}
   .pad{padding:14px 13px 40px}
   .compteurs{grid-template-columns:1fr}
@@ -993,7 +1004,7 @@ body.en-transition *{transition:background-color .4s ease, color .4s ease, borde
 .cta:not(.creux){box-shadow:0 6px 18px -8px var(--laterite)}
 .cta.creux{background:transparent;box-shadow:none;opacity:.94}
 .cta.creux:hover{opacity:1;border-color:var(--craie2)}
-.cta.creux small,.cta small{opacity:.72}
+.cta.creux small{color:var(--craie2)}
 /* troisième niveau : discret, pour les actions annexes */
 .cta.discret{background:transparent;border:1px dashed var(--trait);color:var(--craie2);
   font-size:14px;padding:11px 14px}
@@ -1074,7 +1085,7 @@ body.en-transition *{transition:background-color .4s ease, color .4s ease, borde
 
 /* ---------- COMPTE À REBOURS ---------- */
 .pastille-j.urgent{border-color:var(--laterite);background:rgba(196,85,46,.12)}
-.pastille-j.urgent .num{color:var(--laterite)}
+.pastille-j.urgent .num{color:var(--laterite-txt)}
 
 /* ---------- SWIPE ENTRE SUJET ET FEUILLE ---------- */
 .gr-corps.glisse-gauche{animation:glisseGauche .26s ease}
@@ -1119,7 +1130,7 @@ body.en-transition *{transition:background-color .4s ease, color .4s ease, borde
 .conc-ligne:last-child{margin-bottom:0}
 .conc-tete{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px}
 .conc-tete b{font-family:var(--d);font-size:15.5px;font-weight:800;letter-spacing:.01em}
-.conc-tete .num{font-family:var(--m);font-size:13px;color:var(--laterite);font-weight:700}
+.conc-tete .num{font-family:var(--m);font-size:13px;color:var(--laterite-txt);font-weight:700}
 .conc-barre{height:8px;border-radius:5px;background:var(--trait);overflow:hidden}
 .conc-barre i{display:block;height:100%;border-radius:5px;
   background:linear-gradient(90deg,var(--laterite),#D9713F);min-width:6%}
@@ -1168,3 +1179,49 @@ body.en-transition *{transition:background-color .4s ease, color .4s ease, borde
 .notif-ligne .co i{display:block;font-style:normal;font-size:11px;color:var(--craie2);margin-top:4px;opacity:.75}
 .notif-ligne .point{position:absolute;top:14px;right:6px;width:7px;height:7px;
   border-radius:50%;background:var(--laterite)}
+
+/* ---------- RETOUCHES DE DESIGN · octobre 2026 ---------- */
+/* la bonne réponse se lit comme une phrase, pas comme une étiquette */
+.retour .bonne-rep{font-weight:600;color:var(--vert-texte)}
+/* écrans de première visite : pleine largeur, sans colonne vide */
+@media(min-width:760px){
+  .app.sans-rail{grid-template-columns:minmax(0,1fr)}
+}
+/* compte à rebours : le nom du concours ne pousse plus la mise en page */
+.pastille-j{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.pastille-j b{flex:none}
+
+/* cours : une carte par matière, deux actions côte à côte */
+.cours-mat{margin-top:12px;padding:16px}
+.cm-tete{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.cm-tete h2{font-family:var(--d);font-weight:800;font-size:18px;letter-spacing:-.02em}
+.cm-tete .num{font-size:11px;color:var(--craie2)}
+.cm-prog{font-size:13px;color:var(--craie2);line-height:1.5;margin:6px 0 14px;text-wrap:pretty}
+.cm-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cm-actions .cta{display:flex;align-items:center;justify-content:center;gap:8px;padding:12px 10px;font-size:14px}
+.cm-actions .cta svg{flex:none}
+@media(max-width:340px){.cm-actions{grid-template-columns:1fr}}
+.cours-mat .fascicule{margin-top:10px}
+
+/* apparence : le choix actif est une étiquette posée sur l'aperçu */
+.theme-carte{position:relative}
+.theme-carte .coche{float:none;position:absolute;top:24px;right:24px;z-index:1;
+  background:var(--cachet);color:#fff;font-size:10px;letter-spacing:.1em;padding:3px 7px;border-radius:4px}
+
+/* « dernière mise à jour » : une date, pas un direct qui clignote */
+.direct i{animation:none;box-shadow:none;width:7px;height:7px}
+
+/* compteur de la feuille : « 12 / 50 questions traitées » sur une ligne */
+.compteur-copie{display:flex;align-items:baseline;gap:4px;margin-bottom:9px;color:#221F17}
+.compteur-copie .cc-v{font-size:20px;font-weight:600}
+.compteur-copie .cc-s{font-size:13px;color:#5A5442;margin-right:6px}
+.compteur-copie .cc-l{font-size:12.5px;color:#5A5442}
+
+/* barre du bas : libellés lisibles (10,5 px minimum) */
+.nav button{font-size:10.5px;letter-spacing:.01em}
+
+/* actualité : les tampons sur une ligne, la source sur la suivante */
+.info-tete{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.info .info-source{display:block;margin:8px 0 2px;line-height:1.5}
+.info .info-pourquoi{margin-top:8px;font-size:12px;color:var(--craie2);line-height:1.5}
+.info .info-pourquoi b{font-family:var(--m);font-size:10px;letter-spacing:.1em;text-transform:uppercase;margin-right:7px;color:var(--craie)}

@@ -153,12 +153,12 @@ function compteARebours(){
   const j = joursAvantConcours();
   if(j === null) return '';
   const nom = E(S.nomConcours || 'le concours');
-  if(j <= 0)  return `<span class="pastille-j urgent"><b class="num">C'est aujourd'hui.</b> Donne tout.</span>`;
-  if(j <= 60) return `<span class="pastille-j urgent"><b class="num">J−${j} jour${j > 1 ? 's' : ''} avant ${nom}.</b></span>`;
+  const date = new Date(S.dateConcours + 'T08:00:00').toLocaleDateString('fr-FR', { day:'numeric', month:'short' });
+  if(j <= 0)  return `<span class="pastille-j urgent"><b class="num">Écrit aujourd'hui</b>${nom}</span>`;
+  if(j <= 60) return `<span class="pastille-j urgent" title="Écrit le ${date}"><b class="num">J−${j}</b>${nom}</span>`;
   const mois = Math.round(j / 30.44);
-  return `<span class="pastille-j"><b class="num">J−${mois} mois avant ${nom}.</b></span>`;
+  return `<span class="pastille-j" title="Écrit le ${date}"><b class="num">Dans ${mois} mois</b>${nom} · ${date}</span>`;
 }
-
 function joursAvantConcours(){
   if(!S.dateConcours) return null;
   const cible = new Date(S.dateConcours + 'T08:00:00');
@@ -320,6 +320,7 @@ function nav(){
   const cache = ['engagement','testIntro','test','resultat','seance','inscription','connexion','paiement'].includes(S.ecran);
   n.style.display = cache ? 'none' : 'grid';
   r.style.display = cache ? 'none' : '';
+  const app = document.querySelector('.app'); if(app) app.classList.toggle('sans-rail', cache);
   if(cache) return;
   n.style.gridTemplateColumns = 'repeat(5,1fr)';
   n.innerHTML = ONGLETS.map(o=>{
@@ -412,7 +413,7 @@ function ecranTest(){
   vue().innerHTML = `
   <div class="grille">
     <div class="gr-tete">
-      <div><div class="t">VOTRE FEUILLE DE COMPOSITION</div>
+      <div><h1 class="t">Votre feuille de composition</h1>
         <div class="eyebrow" style="color:#B5AC96">Test de niveau · 10 questions</div></div>
       <div style="text-align:right">
         <div class="gr-chrono ${S.testChrono<=30?'chaud':''}" id="tchrono">${mmss(S.testChrono)}</div>
@@ -491,6 +492,7 @@ function bilanDomaines(){
   return m;
 }
 function ecranResultat(){
+  if(S.testNote === null || S.testNote === undefined) return ecranTestIntro();   // pas de note sans test passé
   const n = S.testNote, dom = bilanDomaines();
   const forces = Object.keys(dom).filter(d=>dom[d].f===0);
   const faibles = Object.keys(dom).filter(d=>dom[d].f>0).sort((a,b)=>dom[b].f-dom[a].f);
@@ -522,7 +524,7 @@ function ecranResultat(){
     <div class="echelle">
       <div class="ec-tete"><span>Ton niveau aujourd'hui</span><span class="num">${n}/10</span></div>
       <div class="barre-seuil">
-        <div class="rail"></div>
+        <div class="piste"></div>
         <div class="moi" style="width:${Math.min(100,n*10)}%;background:${solide?'var(--cachet)':'var(--laterite)'}"></div>
       </div>
       <div class="ec-pied">
@@ -546,7 +548,7 @@ function ecranResultat(){
     </div>
 
     <div class="bonne-nouvelle">
-      <h4>La suite</h4>
+      <h2>La suite</h2>
       <p>Tes fautes de ce test sont déjà dans « Mes erreurs ». Commence par elles.</p>
     </div>
 
@@ -846,7 +848,7 @@ function brancherBase(){
    OBSERVATION — collecte des événements
    Rien de personnel : ni saisie, ni mot de passe, ni position.
    ===================================================================== */
-const VERSION_APP = 'v11';
+const VERSION_APP = 'v14';
 
 const O = {
   session: null, precedent: null, dernierTemps: Date.now(), entreeEcran: Date.now(),
@@ -1125,11 +1127,13 @@ function dateCourteFr(iso){
 }
 function carteActu(a, neuf){
   return `<div class="info ${a.v?'ok':'att'}">
-    <span class="tampon ${a.v?'t-ok':'t-att'}">${a.v?'✓ Vérifié':'À confirmer'}</span>
-    ${neuf?'<span class="tag-neuf">Nouveau</span>':''}
-    <span class="eyebrow">${E(a.s)}${a.le ? (a.s ? ' · ' : '') + E(dateCourteFr(a.le)) : ''}</span>
-    <h4>${E(a.t)}</h4><p>${E(a.x)}</p>
-    ${a.p ? `<p class="sous" style="margin-top:6px;font-size:12px">${E(a.p)}</p>` : ''}
+    <div class="info-tete">
+      <span class="tampon ${a.v?'t-ok':'t-att'}">${a.v?'✓ Vérifié':'À confirmer'}</span>
+      ${neuf?'<span class="tag-neuf">Nouveau</span>':''}
+    </div>
+    <span class="eyebrow info-source">${E(a.s)}${a.le ? (a.s ? ' · ' : '') + E(dateCourteFr(a.le)) : ''}</span>
+    <h2>${E(a.t)}</h2><p>${E(a.x)}</p>
+    ${a.p ? `<p class="info-pourquoi"><b>Utile pour</b>${E(a.p)}</p>` : ''}
   </div>`;
 }
 function blocActuVide(){
@@ -1147,7 +1151,7 @@ function ecranAujourdhui(){
       <span class="eyebrow">${dateDuJour()}</span>
       ${compteARebours()}
     </div>
-    <h2 class="titre">L'actualité utile au concours</h2>
+    <h1 class="titre">L'actualité utile au concours</h1>
     <div class="ligne-direct">
       ${S.actuDerniere ? `<span class="direct"><i></i>Dernière mise à jour : ${E(dateCourteFr(S.actuDerniere))}</span>` : ''}
       <span class="sous-titre">National et international</span>
@@ -1177,19 +1181,19 @@ function ecranAujourdhui(){
       <div class="carte">
         <div class="etape ${S.taches[0]?'fait':'actif'}">
           <div class="puce">${S.taches[0]?'✓':'1'}</div>
-          <div><h5>Lire l'actualité</h5>
+          <div><h3>Lire l'actualité</h3>
             <p>Cochée quand tu ouvres la page d'actualité.</p>
             <span class="dur">3 min</span></div>
         </div>
         <div class="etape ${S.taches[1]?'fait':(S.taches[0]?'actif':'')}">
           <div class="puce">${S.taches[1]?'✓':'2'}</div>
-          <div><h5>Composer</h5>
+          <div><h3>Composer</h3>
             <p>Une épreuve chronométrée sur la feuille de réponses. Cochée à la remise de la copie.</p>
             <span class="dur">25 min</span></div>
         </div>
         <div class="etape ${S.taches[2]?'fait':''}">
           <div class="puce">${S.taches[2]?'✓':'3'}</div>
-          <div><h5>Revoir mes erreurs</h5>
+          <div><h3>Revoir mes erreurs</h3>
             <p>${ouvertes() ? ouvertes() + ' erreur' + (ouvertes()>1?'s':'') + ' ouverte' + (ouvertes()>1?'s':'') + ', les plus ratées en premier.' : 'Aucune erreur ouverte pour l\'instant.'}</p>
             <span class="dur">10 min</span></div>
         </div>
@@ -1210,7 +1214,7 @@ function ecranActualite(){
   vue().innerHTML = `
   <div class="pad">
     <button class="retourhaut" data-go="aujourdhui">Aujourd'hui</button>
-    <h2 class="titre">Actualité</h2>
+    <h1 class="titre">Actualité</h1>
     <p class="sous" style="margin-top:6px">Seules les informations utiles au concours entrent ici : grandes décisions nationales, organisations internationales, dates et chiffres. Un fait divers local n'y a pas sa place.</p>
 
     <div class="onglets">
@@ -1321,7 +1325,7 @@ function ecranInscription(){
   vue().innerHTML = `
   <div class="pad" style="padding-top:22px">
     ${logoSvg(44)}
-    <h2 class="titre" style="margin-top:16px">Garde ton<br>résultat</h2>
+    <h1 class="titre" style="margin-top:16px">Garde ton<br>résultat</h1>
     <p class="sous" style="margin:8px 0 18px">Tu viens de composer ${S.testNote!==null?`et d'obtenir ${S.testNote}/10`:''}. Crée ton compte pour retrouver ton cahier d'erreurs, ton classement et ta série sur n'importe quel téléphone.</p>
 
     ${S.erreur?`<div class="alerte" role="alert">${E(S.erreur)}</div>`:''}
@@ -1353,7 +1357,7 @@ function ecranConnexion(){
   vue().innerHTML = `
   <div class="pad" style="padding-top:22px">
     ${logoSvg(44)}
-    <h2 class="titre" style="margin-top:16px">Content de<br>te revoir</h2>
+    <h1 class="titre" style="margin-top:16px">Content de<br>te revoir</h1>
     <p class="sous" style="margin:8px 0 18px">Ton cahier d'erreurs et ta série d'assiduité t'attendent.</p>
 
     ${S.erreur?`<div class="alerte" role="alert">${E(S.erreur)}</div>`:''}
@@ -1402,10 +1406,10 @@ function ecranAbonnement(){
     ${abo && abo.actif ? `
     <div class="carte" style="text-align:center;padding:22px 16px">
       <div class="eyebrow">Abonnement actif</div>
-      <h2 class="titre" style="font-size:22px;margin:8px 0">${E(nomFormule(abo.formule))}</h2>
+      <h1 class="titre" style="font-size:22px;margin:8px 0">${E(nomFormule(abo.formule))}</h1>
       <p class="sous">${abo.jours_restants} jour${abo.jours_restants>1?'s':''} restant${abo.jours_restants>1?'s':''}, jusqu'au ${new Date(abo.fin_le).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'})}</p>
     </div>` : `
-    <h2 class="titre">Débloquez<br>tout MonConcours</h2>
+    <h1 class="titre">Débloquez<br>tout Mon Concours</h1>
     <p class="sous" style="margin:10px 0 18px">Les corrections de révision sans limite (20 par jour en formule gratuite) et les compositions chronométrées, corrigées par le serveur.</p>`}
 
     ${S.paiementEtat && S.paiementEtat.statut === 'confirme' ? `
@@ -1446,7 +1450,7 @@ function ecranPaiement(){
     vue().innerHTML = `
     <div class="pad">
       <button class="retourhaut" data-paieretour="1">Retour</button>
-      <h2 class="titre">Importez la preuve<br>de votre paiement</h2>
+      <h1 class="titre">Importez la preuve<br>de votre paiement</h1>
       <p class="sous" style="margin:10px 0 18px">Téléchargez la capture d'écran envoyée par Orange Money confirmant votre transaction de ${f.prix}.</p>
 
       ${S.erreur ? `<div class="alerte" role="alert">${E(S.erreur)}</div>` : ''}
@@ -1479,7 +1483,7 @@ function ecranPaiement(){
         <div class="n" style="font-size:34px">…</div>
         <div class="l">paiement reçu</div>
       </div>
-      <h2 class="titre" style="font-size:24px">Votre preuve est en<br>cours de vérification</h2>
+      <h1 class="titre" style="font-size:24px">Votre preuve est en<br>cours de vérification</h1>
       <p class="sous" style="margin:12px 0 6px">La vérification peut prendre jusqu'à deux heures. Votre formule s'ouvrira automatiquement dès la confirmation.</p>
       <div class="carte" style="margin-top:16px;text-align:left">
         <div class="mat"><div class="nom">Numéro déclaré<em>Au +226 ${E(S.paieTel)}</em></div><div class="val">✓</div></div>
@@ -1496,8 +1500,8 @@ function ecranPaiement(){
     vue().innerHTML = `
     <div class="pad" style="padding-top:60px;text-align:center">
       <div class="attente" role="status" aria-label="Paiement en cours"></div>
-      <h2 class="titre" style="font-size:22px">Confirmez sur<br>votre téléphone</h2>
-      <p class="sous" style="margin:12px 0 20px">Composez le code ci-dessous pour valider ${f.prix} vers MonConcours, ou suivez le message Orange Money reçu au +226 ${S.paieTel||'…'}.</p>
+      <h1 class="titre" style="font-size:22px">Confirmez sur<br>votre téléphone</h1>
+      <p class="sous" style="margin:12px 0 20px">Composez le code ci-dessous pour valider ${f.prix} vers Mon Concours, ou suivez le message Orange Money reçu au +226 ${S.paieTel||'…'}.</p>
       <div class="ussd">
         <div class="eyebrow">code de paiement</div>
         <div class="code">*144*4*6*${f.prix.replace(/\D/g,'')}#</div>
@@ -1513,8 +1517,8 @@ function ecranPaiement(){
   vue().innerHTML = `
   <div class="pad">
     <button class="retourhaut" data-go="abonnement">Formules</button>
-    <h2 class="titre">Paiement</h2>
-    <p class="sous" style="margin:8px 0 18px">Formule ${f.n} · ${f.prix} ${f.per}. Aucun compte bancaire nécessaire.</p>
+    <h1 class="titre">Paiement</h1>
+    <p class="sous" style="margin:8px 0 18px">${f.n} · ${f.prix} ${f.per}. Aucun compte bancaire nécessaire.</p>
 
     ${S.erreur?`<div class="alerte" role="alert">${E(S.erreur)}</div>`:''}
 
@@ -1541,8 +1545,8 @@ function ecranPaiement(){
     </div>
 
     <div class="carte" style="margin-top:16px">
-      <div class="mat"><div class="nom">Formule ${f.n}<em>${f.per}</em></div><div class="val num">${f.prix}</div></div>
-      <div class="mat"><div class="nom" style="font-weight:600">Total à payer</div><div class="val num" style="color:var(--craie)">${f.prix}</div></div>
+      <div class="mat"><div class="nom">${f.n}<em>${f.per}</em></div><div class="val num" style="white-space:nowrap">${f.prix}</div></div>
+      <div class="mat"><div class="nom" style="font-weight:600">Total à payer</div><div class="val num" style="color:var(--craie);white-space:nowrap">${f.prix}</div></div>
     </div>
 
     <button class="cta vert" style="margin-top:16px" data-payer="1">Payer ${f.prix}<small>Sans renouvellement automatique</small></button>
@@ -1570,7 +1574,7 @@ function ecranRevisions(){
   vue().innerHTML = `
   <div class="pad">
     <div class="eyebrow">Mes révisions</div>
-    <h2 class="titre">Choisis ton niveau</h2>
+    <h1 class="titre">Choisis ton niveau</h1>
     <p class="sous" style="margin:8px 0 16px">Les questions changent selon le niveau du concours visé. Les matières communes (culture générale, institutions, droit, économie) sont proposées à tous les niveaux.</p>
 
     <div class="niveaux" role="group" aria-label="Niveau">
@@ -1645,7 +1649,7 @@ function ecranCours(){
   vue().innerHTML = `
   <div class="pad">
     <button class="retourhaut" data-go="revisions">Mes révisions</button>
-    <h2 class="titre">Les cours</h2>
+    <h1 class="titre">Les cours</h1>
     <p class="sous" style="margin:8px 0 16px">Les documents au programme ${S.niveau.toLowerCase()}. À lire ici, ou à télécharger une fois pour travailler sans connexion.</p>
 
     <div class="champ" style="margin-bottom:12px">
@@ -1667,15 +1671,15 @@ function ecranCours(){
       : !dispo.length
         ? `<div class="carte"><p class="sous">Aucun document n'est encore disponible pour ce niveau. Reviens bientôt : la bibliothèque se remplit au fur et à mesure.</p></div>`
         : ordreMatieres.map(m => `
-          <div class="bloc" style="margin-top:14px">
-            <div class="libelle">${E(m)}<span class="num">${parMatiere[m].length}</span></div>
-            <button class="cta" style="margin:10px 0 8px" data-matiere="${encodeURIComponent(m)}">
-              📖 Lire le cours complet<small>Tout ${E(m)} en une seule lecture · ${parMatiere[m].length} partie${parMatiere[m].length>1?'s':''}</small></button>
-            <button class="cta creux" style="margin:0 0 6px" data-cible="${E(m)}">
-              📝 Faire les QCM du cours<small>Les questions qui portent sur ce cours</small></button>
-            <p class="sous" style="margin:2px 0 0;font-size:12.5px">Au programme : ${
+          <div class="carte cours-mat">
+            <div class="cm-tete"><h2>${E(m)}</h2><span class="num">${parMatiere[m].length} partie${parMatiere[m].length>1?'s':''}</span></div>
+            <p class="cm-prog">${
               parMatiere[m].slice(0,4).map(r => E(r.titre)).join(' · ')
             }${parMatiere[m].length > 4 ? ' · et ' + (parMatiere[m].length - 4) + ' autre' + (parMatiere[m].length-4>1?'s':'') : ''}</p>
+            <div class="cm-actions">
+              <button class="cta" data-matiere="${encodeURIComponent(m)}">${ico('lire',17)}Lire le cours</button>
+              <button class="cta creux" data-cible="${E(m)}">${ico('revisions',17)}Faire les QCM</button>
+            </div>
             ${parMatiere[m].filter(r => r.fichier_chemin && !r.texte).map(r => `
               <div class="fascicule">
                 <div class="ligne1"><span class="ic">PDF</span>
@@ -1747,10 +1751,10 @@ function ouvrirNotifications(){
   document.getElementById('voile').hidden = false;
   const liste = S.notifications;
   document.getElementById('voile').innerHTML = `
-  <div class="feuille" role="dialog" aria-label="Notifications">
+  <div class="panneau" role="dialog" aria-modal="true" aria-label="Notifications">
     <div class="poignee"></div>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-      <h3 class="titre" style="font-size:20px;margin:0">Notifications</h3>
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:4px">
+      <h3 style="margin:0">Notifications</h3>
       ${liste.some(n=>!n.lue) ? `<button class="lien" data-notifs-tout="1">Tout marquer comme lu</button>` : ''}
     </div>
     ${!liste.length ? `
@@ -1779,9 +1783,9 @@ function ouvrirPartage(quoi){
   S.modal = 'partage';
   document.getElementById('voile').hidden = false;
   document.getElementById('voile').innerHTML = `
-  <div class="feuille" role="dialog" aria-label="Partager">
+  <div class="panneau" role="dialog" aria-modal="true" aria-label="Partager">
     <div class="poignee"></div>
-    <h3 class="titre" style="font-size:20px;margin:0 0 4px">Partager</h3>
+    <h3 style="margin:0 0 4px">Partager</h3>
     <p class="sous" style="margin:0 0 14px">${E(t)}</p>
 
     <div class="partages">
@@ -2103,7 +2107,7 @@ function ecranLecture(){
       <div class="jauge-lecture" aria-hidden="true"><i id="jauge-lecture-barre"></i></div>
       <button class="retourhaut" data-go="cours">La bibliothèque</button>
       <div class="eyebrow">${commun ? 'Toutes classes' : S.niveau}</div>
-      <h2 class="titre">${E(S.matiereOuverte)}</h2>
+      <h1 class="titre">${E(S.matiereOuverte)}</h1>
       <p class="sous" style="margin:8px 0 0">${lot.length} chapitre${lot.length>1?'s':''} · lecture continue</p>
 
       <div class="carte" style="margin-top:16px">
@@ -2115,14 +2119,14 @@ function ecranLecture(){
       ${lot.map((r,i)=>`
         <div id="chap-${i}" class="chapitre" style="margin-top:26px;scroll-margin-top:14px">
           <div class="eyebrow">Chapitre ${i+1} sur ${lot.length}${r.theme ? ' · ' + E(r.theme) : ''}</div>
-          <h3 class="titre" style="font-size:21px;margin:6px 0 0">${E(r.titre)}</h3>
+          <h2 class="titre" style="font-size:21px;margin:6px 0 0">${E(r.titre)}</h2>
           <div class="carte lecon" style="margin-top:12px">${miseEnPage(r.texte)}</div>
         </div>`).join('')}
 
       <div class="carte" style="margin-top:26px;text-align:center">
         <div class="libelle" style="margin-bottom:8px">Cours terminé</div>
         <p class="sous" style="margin:0 0 12px">Vous avez lu les ${lot.length} chapitres de ${E(S.matiereOuverte)}. Mettez-les à l'épreuve.</p>
-        <button class="cta" data-cible="${E(S.matiereOuverte)}">📝 Faire les QCM de ce cours</button>
+        <button class="cta" data-cible="${E(S.matiereOuverte)}">Faire les QCM de ce cours</button>
         <button class="cta creux" style="margin-top:8px" data-partage="cours">${ico("partage",16)} Partager ce cours</button>
       </div>
       <button class="cta creux" style="margin-top:12px" data-go="cours">Retour à la bibliothèque</button>
@@ -2137,7 +2141,7 @@ function ecranLecture(){
   <div class="pad">
     <button class="retourhaut" data-go="cours">La bibliothèque</button>
     <div class="eyebrow">${E(r.matiere || '')}${r.theme ? ' · ' + E(r.theme) : ''}</div>
-    <h2 class="titre">${E(r.titre)}</h2>
+    <h1 class="titre">${E(r.titre)}</h1>
     ${r.commun ? `<p class="sous" style="margin:6px 0 0">Ce cours est le même pour la troisième, la terminale et la licence.</p>` : ''}
     <div class="carte lecon" style="margin-top:16px">${miseEnPage(r.texte)}</div>
     ${r.fichier_chemin ? `<button class="cta creux" style="margin-top:14px" data-telecharger="${r.id}">Télécharger le fichier</button>` : ''}
@@ -2235,7 +2239,7 @@ function ecranQcm(){
     ${c && c.ok ? `
       <div class="retour ${c.correcte?'bien':'mal'}">
         <b>${c.correcte?'Bonne réponse':'Réponse incorrecte'}</b>
-        ${c.correcte?'':`<div style="margin-bottom:6px">La bonne réponse : <b style="display:inline;color:var(--vert-texte)">${E((c.bonnes||[]).map(k => q.o[k]).join(' + '))}</b></div>`}
+        ${c.correcte?'':`<div style="margin-bottom:6px">La bonne réponse : <strong class="bonne-rep">${E((c.bonnes||[]).map(k => 'ABCD'[k] + '. ' + q.o[k]).join(' + '))}</strong></div>`}
         ${c.explication ? `<b style="margin-top:2px">Pourquoi ?</b>${E(c.explication)}` : ''}
         ${c.correcte ? '' : '<div style="margin-top:6px;font-size:12.5px">Elle entre dans « Mes erreurs ».</div>'}
       </div>
@@ -2282,7 +2286,7 @@ function ecranCompoAttente(){
   vue().innerHTML = `
   <div class="pad" style="padding-top:40px;text-align:center">
     ${logoSvg(44)}
-    <h2 class="titre" style="font-size:24px;margin-top:16px">${titres[etat] || titres.erreur}</h2>
+    <h1 class="titre" style="font-size:24px;margin-top:16px">${titres[etat] || titres.erreur}</h1>
     <p class="sous" style="margin:10px 0 18px">${E(textes[etat] || textes.erreur)}</p>
     ${etat === 'connexion' ? `<button class="cta" data-modal="inscription">Créer mon compte</button>
       <button class="lien" data-modal="connexion">J'ai déjà un compte</button>` : ''}
@@ -2303,7 +2307,7 @@ function ecranGrille(){
   vue().innerHTML = `
   <div class="grille">
     <div class="gr-tete">
-      <div><div class="t">VOTRE FEUILLE DE COMPOSITION</div>
+      <div><h1 class="t">Votre feuille de composition</h1>
         <div class="eyebrow" style="color:#B5AC96">Entraînement type ${E(S.concours)} · ${nbQ} questions</div></div>
       <div style="text-align:right">
         <div class="gr-chrono ${S.chrono<=300?'chaud':''}" id="chrono">${mmss(S.chrono)}</div>
@@ -2642,13 +2646,13 @@ function ecranCopie(){
   if(S.remiseEtat === 'envoi' || (S.remiseEtat !== 'ok' && S.remiseEtat !== 'erreur')){
     vue().innerHTML = `<div class="pad" style="padding-top:60px;text-align:center">
       <div class="attente" role="status" aria-label="Correction en cours"></div>
-      <h2 class="titre" style="font-size:22px">Correction en cours</h2>
+      <h1 class="titre" style="font-size:22px">Correction en cours</h1>
       <p class="sous">Le serveur lit votre feuille.</p></div>`;
     return;
   }
   if(S.remiseEtat === 'erreur'){
     vue().innerHTML = `<div class="pad" style="padding-top:44px;text-align:center">
-      <h2 class="titre" style="font-size:22px">La copie n'est pas encore corrigée</h2>
+      <h1 class="titre" style="font-size:22px">La copie n'est pas encore corrigée</h1>
       <p class="sous" style="margin:10px 0 18px">${E(S.remiseMessage || 'Envoi impossible.')}</p>
       ${S.compositionId ? `<button class="cta" data-remise-relancer="1">Renvoyer ma copie</button>` : ''}
       <button class="cta creux" style="margin-top:9px" data-go="aujourdhui">Revenir à l'accueil</button></div>`;
@@ -2662,8 +2666,8 @@ function ecranCopie(){
   const utilise = S.dureeUtilisee ?? ((S.dureeCompo || 1500) - S.chrono);
   vue().innerHTML = `
   <div class="copie">
-    <div class="eyebrow">Copie corrigée · ${new Date().toLocaleDateString('fr-FR',{day:'numeric',month:'long'})}${S.sujetRef ? ' · sujet n° ' + E(S.sujetRef) : ''}</div>
-    <h2 class="titre" style="margin-bottom:10px">Votre feuille<br>est corrigée</h2>
+    <div class="eyebrow">Copie corrigée · ${new Date().toLocaleDateString('fr-FR',{day:'numeric',month:'long'})}${S.sujetRef ? ' · <span style="white-space:nowrap">sujet n° ' + E(S.sujetRef) + '</span>' : ''}</div>
+    <h1 class="titre" style="margin-bottom:10px">Votre feuille<br>est corrigée</h1>
 
     <div class="carte-identite">
       <div class="av">${(function(){
@@ -2683,7 +2687,7 @@ function ecranCopie(){
     </div>
 
     <div class="barre-seuil">
-      <div class="rail"></div>
+      <div class="piste"></div>
       <div class="moi" style="width:${pos}%"></div>
       ${seuil !== null ? `<div class="seuil" style="left:${seuil/total*100}%"></div>
       <div class="etq" style="left:${seuil/total*100}%">Seuil du dernier admis</div>` : ''}
@@ -2762,7 +2766,7 @@ function ecranCahier(){
   vue().innerHTML = `
   <div class="pad">
     <div class="eyebrow">Mes erreurs · ce qui reste à corriger</div>
-    <h2 class="titre">${ouvertes()} erreur${ouvertes()>1?'s':''}<br>encore ouverte${ouvertes()>1?'s':''}</h2>
+    <h1 class="titre">${ouvertes()} erreur${ouvertes()>1?'s':''}<br>encore ouverte${ouvertes()>1?'s':''}</h1>
     ${S.cahierDepuisGrille && list.some(e=>e.session===S.sessionCounter)?`<div class="carte" style="margin-top:12px;border-color:var(--vert-bord);background:var(--vert-fond)">
       <div style="font-size:12.5px;font-weight:600;margin-bottom:4px">Tes erreurs de cette composition, en premier</div>
       <p class="sous">Elles remontent en tête tant que tu ne les as pas revues.</p></div>`:''}
@@ -2775,7 +2779,7 @@ function ecranCahier(){
     ${list.length ? `
     <div class="bloc">
       ${repartitionErreurs(list)}
-      <div class="libelle" style="margin-top:16px">Toutes mes erreurs<span class="num">${dues()} dues sur ${list.length}</span></div>
+      <div class="libelle" style="margin-top:16px">Toutes mes erreurs<span class="num">${dues()} à revoir sur ${list.length}</span></div>
       ${list.map(e=>{
         const idx = S.cahier.indexOf(e);
         const j = joursRestants(e);
@@ -2784,7 +2788,7 @@ function ecranCahier(){
           <div class="q">${E(e.q)}</div>
           ${e.mien ? `<div class="ligne">Votre dernière réponse : « ${E(e.mien)} »</div>` : ''}
           <div class="ligne">Bonne réponse : <b>${E(e.bon)}</b></div>
-          <div class="ligne" style="margin-top:6px;color:#7E8C86">${E(e.note)}</div>
+          <div class="ligne" style="margin-top:6px;color:var(--craie2)">${E(e.note)}</div>
           <div class="pied">
             ${validee
               ? `<span class="echeance ok">✓ VALIDÉE</span>`
@@ -2872,7 +2876,7 @@ function ecranCompte(){
   <div class="pad">
     <div class="profil">
       <div class="av">${initiales}</div>
-      <h3>${E(S.util.nom || 'Candidat')}</h3>
+      <h1>${E(S.util.nom || 'Candidat')}</h1>
       ${S.util.tel?`<span>+226 ${E(S.util.tel)}</span>`:''}
     </div>
 
@@ -2893,7 +2897,7 @@ function ecranCompte(){
             ? '▼ Vous avez perdu ' + Math.abs(S.classement.places_semaine) + ' place' + (Math.abs(S.classement.places_semaine)>1?'s':'') + ' cette semaine'
             : 'Aucun mouvement cette semaine'}</div>
       <div class="jauge-places">
-        <div class="rail"></div>
+        <div class="piste"></div>
         <div class="admis" style="width:${(S.classement.places / S.classement.population * 100).toFixed(1)}%"></div>
         <div class="curseur" style="left:${Math.min(100, S.classement.rang / S.classement.population * 100).toFixed(1)}%"></div>
       </div>
@@ -3008,7 +3012,7 @@ function ecranCompte(){
         <div class="libelle" style="margin-top:16px">Série en cours<span class="num">${faites}/7 jours</span></div>
         <div class="semaine">
           ${jours.map((j,k)=>`<div><div class="j">${j}</div>
-            <div class="c ${sem[k]?'vert':'rouge'}" title="${sem[k]?'composé':'absent'}">${sem[k]?'✓':'✕'}</div></div>`).join('')}
+            <div class="c ${sem[k]?'vert':'vide'}" title="${sem[k]?'Jour travaillé':'Pas encore travaillé'}">${sem[k]?'✓':''}</div></div>`).join('')}
         </div>
         <p class="sous" style="margin-top:12px;border-left:2px solid var(--or);padding-left:11px">
           ${S.stats && S.stats.serie >= 3 ? 'Trois jours ou plus d\'affilée : c\'est la régularité qui fait la différence. Ne cassez pas la série.' : 'Un peu chaque jour vaut mieux que beaucoup une fois par semaine. Revenez demain, même pour dix questions.'}</p>
@@ -3032,17 +3036,17 @@ function ecranCompte(){
 
         <a class="lien-reseau fb" href="${CONTACT.facebook}" target="_blank" rel="noopener">
           ${logoReseau('facebook')}
-          <span><b>Suivre MonConcours officiel</b><i>La page Facebook de la plateforme</i></span></a>
+          <span><b>Suivre Mon Concours sur Facebook</b><i>Annonces, dates et nouveaux cours</i></span></a>
 
 
         <button class="cta creux" style="margin-top:10px" data-partage="site">
-          ${ico("partage",16)} Partager MonConcours à un camarade<small>Qui prépare le concours lui aussi</small></button>
+          ${ico("partage",16)} Partager Mon Concours à un camarade<small>Qui prépare le concours lui aussi</small></button>
       </div>
 
       <div class="carte" style="margin-top:14px;text-align:left">
         <div class="libelle" style="margin-bottom:10px">Aide et contact</div>
         <a class="lien-reseau wa"
-           href="https://wa.me/226${CONTACT.adminTel}?text=${encodeURIComponent("Bonjour, j'ai besoin d'aide concernant MonConcours.")}"
+           href="https://wa.me/226${CONTACT.adminTel}?text=${encodeURIComponent("Bonjour, j'ai besoin d'aide concernant Mon Concours.")}"
            target="_blank" rel="noopener">
           ${logoReseau('whatsapp')}
           <span><b>Écrivez-nous sur WhatsApp en cas de difficulté</b><i>Réponse dans la journée</i></span></a>
@@ -3050,9 +3054,6 @@ function ecranCompte(){
 
       <div class="carte reglages">
         <button data-go="apparence">Apparence<span>→</span></button>
-        <a href="${CONTACT.canal}" target="_blank" rel="noopener">Chaîne WhatsApp<span>→</span></a>
-        <a href="${CONTACT.facebook}" target="_blank" rel="noopener">MonConcours officiel<span>→</span></a>
-        <a href="https://wa.me/226${CONTACT.adminTel}" target="_blank" rel="noopener">Aide et contact<span>→</span></a>
         ${S.util.connecte
           ? `<button class="sortie" data-deconnecter="1">Se déconnecter<span>→</span></button>`
           : `<button data-go="connexion">Se connecter<span>→</span></button>`}
@@ -3064,7 +3065,7 @@ function ecranCompte(){
 /* =====================================================================
    RENDU + ÉVÉNEMENTS
    ===================================================================== */
-const SANS_TETE = ['test','grille','engagement','testIntro'];
+const SANS_TETE = ['test','grille','engagement','testIntro','resultat'];
 function apptete(){
   const t = document.getElementById('apptete');
   if(SANS_TETE.includes(S.ecran)){ t.style.display='none'; return; }
@@ -3190,7 +3191,7 @@ function ecranApparence(){
   vue().innerHTML = `
   <div class="pad">
     <button class="retourhaut" data-go="compte">Mon compte</button>
-    <h2 class="titre">Apparence</h2>
+    <h1 class="titre">Apparence</h1>
     <p class="sous" style="margin:8px 0 18px">Même application, deux ambiances. Le choix s'applique tout de suite, partout.</p>
 
     <button class="theme-carte ${S.theme==='sombre'?'on':''}" data-theme-choix="sombre" aria-pressed="${S.theme==='sombre'}">
@@ -3245,7 +3246,7 @@ function rendre(){
     console.error('Écran ' + S.ecran + ' :', err);
     vue().innerHTML = `
       <div class="pad" style="text-align:center;padding-top:60px">
-        <h2 class="titre" style="font-size:22px">Cet écran n'a pas pu s'ouvrir</h2>
+        <h1 class="titre" style="font-size:22px">Cet écran n'a pas pu s'ouvrir</h1>
         <p class="sous" style="margin:10px 0 18px">Le reste de l'application fonctionne. Revenez à l'actualité, ou rechargez.</p>
         <button class="cta" data-go="aujourdhui">Revenir à l'actualité</button>
         <button class="cta creux" style="margin-top:9px" onclick="location.reload()">Recharger</button>
