@@ -86,6 +86,7 @@ const $ = s => document.querySelector(s);
 const vue = () => $('#vue');
 let audioCtx = null;
 function ctx(){
+  if(S.sonCoupe) return null;            // le candidat a coupé le son
   try{ audioCtx = audioCtx || new (window.AudioContext||window.webkitAudioContext)(); return audioCtx; }
   catch(e){ return null; }
 }
@@ -107,6 +108,37 @@ function sonJuste(){
   ton(523.25, 0, 0.22, 0.15);
   ton(659.25, 0.085, 0.22, 0.15);
   ton(783.99, 0.17, 0.26, 0.15);
+}
+/* Sonnerie de départ : trois notes qui montent, comme la cloche d'une
+   salle d'examen. Celle de la mi-parcours est différente, à deux tons
+   qui descendent, pour qu'on ne les confonde pas sans regarder. */
+function sonDepart(){
+  ton(659.25, 0, 0.3, 0.2);
+  ton(880, 0.22, 0.3, 0.2);
+  ton(1318.5, 0.44, 0.55, 0.2);
+}
+function sonMiParcours(){
+  for(let k = 0; k < 2; k++){
+    ton(784, k*0.7, 0.28, 0.2, 'triangle');
+    ton(523.25, k*0.7 + 0.3, 0.34, 0.2, 'triangle');
+  }
+}
+/* Couleur du chronomètre : vert au début, orange passé la moitié,
+   rouge dans le dernier cinquième, rouge qui bat dans la dernière minute. */
+function couleurChrono(reste, total){
+  const r = total > 0 ? reste / total : 1;
+  if(reste <= 60) return 'c-urgent';
+  if(r <= 0.2) return 'c-rouge';
+  if(r <= 0.5) return 'c-orange';
+  return 'c-vert';
+}
+function peindreChrono(el, reste, total){
+  if(!el) return;
+  const c = couleurChrono(reste, total);
+  if(!el.classList.contains(c)){
+    el.classList.remove('c-vert','c-orange','c-rouge','c-urgent');
+    el.classList.add(c);
+  }
 }
 function sonFaux(){
   const a = ctx(); if(!a) return;
@@ -281,6 +313,7 @@ window.addEventListener('beforeunload', e => {
   }
   if(r.qcmPos && typeof r.qcmPos === 'object') S.qcmPos = r.qcmPos;
   if(r.musique) S.musiqueVoulue = true;   // relancée au premier geste du candidat
+  if(r.sonCoupe) S.sonCoupe = true;
 })();
 
 /* Avant le premier dessin : si ce téléphone connaît déjà le candidat,
@@ -303,6 +336,14 @@ function aller(e){
   if(e !== 'lecture') S.matiereOuverte = null;
   if(S.timer && e!=='grille'){clearInterval(S.timer);S.timer=null;}
   if(S.testTimer && e!=='test'){clearInterval(S.testTimer);S.testTimer=null;}
+  /* chaque écran entre dans l'historique : le bouton retour du téléphone
+     ramène à l'écran précédent au lieu de fermer l'application */
+  if(typeof retourEnCours !== 'undefined' && !retourEnCours && e !== S.ecran){
+    try{ history.pushState({ ecran:e }, ''); }catch(err){}
+  }
+  if(e === 'aujourdhui'){ chargerJournee(); chargerEpreuve(); }
+  if(e === 'compte'){ chargerJournee(); chargerRappel(); }
+  if(e === 'qdj' && !S.qdjRep && S.qdjRep !== 0) S.qdj = null;
   S.ecran = e; rendre(); vue().scrollTop = 0;
   try{ vue().focus({preventScroll:true}); }catch(err){}
 }
@@ -311,7 +352,7 @@ function aller(e){
    NAVIGATION
    ===================================================================== */
 const ONGLETS = [
-  {id:'aujourdhui', g:'actualite', l:'Actualité'},
+  {id:'aujourdhui', g:'actualite', l:'Accueil'},
   {id:'revisions',  g:'revisions', l:'Révisions'},
   {id:'grille',     g:'grille',    l:'Composition'},
   {id:'cahier',     g:'erreurs',   l:'Mes erreurs'},
@@ -327,7 +368,7 @@ function nav(){
   n.style.gridTemplateColumns = 'repeat(5,1fr)';
   n.innerHTML = ONGLETS.map(o=>{
     const on = (o.id===S.ecran || (o.id==='grille'&&S.ecran==='copie')
-      || (o.id==='aujourdhui'&&S.ecran==='actualite')
+      || (o.id==='aujourdhui'&&['actualite','pourtoi','qdj','gagnants','question'].includes(S.ecran))
       || (o.id==='revisions'&&(S.ecran==='qcm'||S.ecran==='cours'))) ? 'on':'';
     const p = (o.id==='cahier' && ouvertes()) ? `<i class="pastille num">${ouvertes()}</i>`:'';
     const centre = o.id === 'grille' ? ' pivot' : '';
@@ -335,7 +376,7 @@ function nav(){
   }).join('');
   r.innerHTML = ONGLETS.map(o=>{
     const on = (o.id===S.ecran || (o.id==='grille'&&S.ecran==='copie')
-      || (o.id==='aujourdhui'&&S.ecran==='actualite')
+      || (o.id==='aujourdhui'&&['actualite','pourtoi','qdj','gagnants','question'].includes(S.ecran))
       || (o.id==='revisions'&&(S.ecran==='qcm'||S.ecran==='cours'))) ? 'on':'';
     const p = (o.id==='cahier' && ouvertes()) ? `<span class="pastille num">${ouvertes()}</span>`:'';
     return `<button class="${on}" data-go="${o.id}"${on?' aria-current="page"':''}>
@@ -420,7 +461,7 @@ function ecranTest(){
       <div><h1 class="t">Votre feuille de composition</h1>
         <div class="eyebrow" style="color:#B5AC96">Test de niveau · 10 questions</div></div>
       <div style="text-align:right">
-        <div class="gr-chrono ${S.testChrono<=30?'chaud':''}" id="tchrono">${mmss(S.testChrono)}</div>
+        <div class="gr-chrono ${couleurChrono(S.testChrono, 120)}" id="tchrono">${mmss(S.testChrono)}</div>
         <div class="eyebrow" style="color:#B5AC96">temps restant</div></div>
     </div>
     <div class="sonnerie" id="sonnerie" role="status" aria-live="polite"></div>
@@ -452,11 +493,12 @@ function ecranTest(){
     </div>
   </div>`;
   if(!S.testTimer && !S.testCorrige){
+    if(S.testChrono >= 120){ sonDepart(); setTimeout(() => annonceTemps('L\'épreuve commence'), 50); }
     S.testTimer = setInterval(()=>{
       S.testChrono--;
       const c = document.getElementById('tchrono');
-      if(c){ c.textContent = mmss(S.testChrono); if(S.testChrono<=30) c.classList.add('chaud'); }
-      if(S.testChrono===60){ bip(1); annonceTemps('Il reste 1 minute'); }
+      if(c){ c.textContent = mmss(S.testChrono); peindreChrono(c, S.testChrono, 120); }
+      if(S.testChrono===60){ sonMiParcours(); annonceTemps('Mi-parcours : il reste 1 minute'); }
       if(S.testChrono===30){ bip(3); annonceTemps('Plus que 30 secondes'); }
       if(S.testChrono<=0){ clearInterval(S.testTimer); S.testTimer=null; bip(4); remettreTest(); }
     },1000);
@@ -724,7 +766,7 @@ async function chargerProgression(){
   }).catch(() => {});
 
   chargerCahier();
-
+  chargerJournee();
 }
 
 /* Le cahier d'erreurs vient de la base. Les fautes du test d'entrée,
@@ -847,6 +889,12 @@ function brancherBase(){
   setTimeout(chargerConcours, 300);
   setTimeout(chargerAbonnement, 600);
   setTimeout(chargerNotifications, 900);
+  setTimeout(chargerEpreuve, 400);
+  setTimeout(chargerDirect, 1500);
+  /* un lien direct ouvert avant l'arrivée de la base charge maintenant son contenu */
+  if(S.ecran === 'qdj') chargerQdj();
+  if(S.lienQuestion) chargerQuestionPartagee(S.lienQuestion);
+  if(S.lienEpreuve) chargerClassement(S.lienEpreuve);
 }
 
 
@@ -854,7 +902,7 @@ function brancherBase(){
    OBSERVATION — collecte des événements
    Rien de personnel : ni saisie, ni mot de passe, ni position.
    ===================================================================== */
-const VERSION_APP = 'v14';
+const VERSION_APP = 'v15';
 
 const O = {
   session: null, precedent: null, dernierTemps: Date.now(), entreeEcran: Date.now(),
@@ -1017,7 +1065,12 @@ async function ouvrirComposition(){
   ouvertureEnCours = true;
   S.compoEtat = 'chargement'; rendre();
   try{
-    const { data, error } = await base.rpc('ouvrir_composition', { p_niveau: niveauBase() });
+    /* une composition collective se rejoint par son identifiant ;
+       sinon le serveur choisit le sujet, ou reprend celui en cours */
+    const { data, error } = S.rejoindre
+      ? await base.rpc('rejoindre_epreuve', { p_epreuve: S.rejoindre })
+      : await base.rpc('ouvrir_composition', { p_niveau: niveauBase() });
+    S.rejoindre = null;
     if(error) throw error;
     if(!data || !data.ok){
       S.compoEtat = data && data.connexion ? 'connexion' : data && data.abonnement ? 'abonnement' : 'erreur';
@@ -1029,8 +1082,9 @@ async function ouvrirComposition(){
       S.concours = data.concours || 'Concours direct';
       S.seuil = (typeof data.seuil === 'number') ? data.seuil : null;
       S.dureeCompo = data.duree || 1500;
+      S.epreuveCompo = data.epreuve || null;
       S.grille.length = 0;
-      (data.questions || []).forEach(q => S.grille.push({ id:q.id, q:q.enonce, o:q.options || [], i:null }));
+      (data.questions || []).forEach(q => S.grille.push({ id:q.id, q:q.enonce, o:q.options || [], i:null, m:q.matiere || null }));
       S.chrono = Math.max(0, data.restant ?? S.dureeCompo);
       S.corrige = false; S.grilleNote = null; S.corrigeServeur = null;
       S.compoEtat = 'pret';
@@ -1072,13 +1126,17 @@ async function cloturerComposition(){
     if(data && data.ok){
       S.grilleNote = data.note;
       S.dureeUtilisee = data.duree;
+      /* épreuve collective : la note tout de suite, le corrigé à la fin */
+      S.correctionLe = data.corrige ? null : (data.correction_le || null);
+      S.epreuveRemise = data.epreuve || null;
       S.corrigeServeur = data.corrige || [];
-      S.grille.forEach((g, i) => { const b = S.corrigeServeur[i]; g.bonnes = b || []; g.i = (b && b.length) ? b[0] : null; });
+      if(data.corrige) S.grille.forEach((g, i) => { const b = S.corrigeServeur[i]; g.bonnes = b || []; g.i = (b && b.length) ? b[0] : null; });
       S.remiseEtat = 'ok';
       S.derniereCompo = S.compositionId;
       S.compositionId = null;
       effacerEpreuve();
       chargerCahier(); chargerProgression(); chargerCompositions();
+      if(S.epreuveRemise) chargerEpreuve();
     } else {
       /* déjà remise (par exemple depuis un autre appareil) : on relit la copie */
       S.remiseEtat = 'erreur';
@@ -1157,14 +1215,8 @@ function ecranAujourdhui(){
       <span class="eyebrow">${dateDuJour()}</span>
       ${compteARebours()}
     </div>
-    <h1 class="titre">L'actualité utile au concours</h1>
-    <div class="ligne-direct">
-      ${S.actuDerniere ? `<span class="direct"><i></i>Dernière mise à jour : ${E(dateCourteFr(S.actuDerniere))}</span>` : ''}
-      <span class="sous-titre">National et international</span>
-    </div>
+    <h1 class="titre">${S.util.connecte ? 'Ta préparation aujourd\'hui' : 'Prépare ton concours aujourd\'hui'}</h1>
 
-    <div class="colonnes">
-    <div>
     ${enCours?`
     <button class="reprise-compo" data-go="grille">
       <div class="rc-tete">Vous avez une composition en cours</div>
@@ -1173,6 +1225,18 @@ function ecranAujourdhui(){
       <div class="rc-cta">▶ Reprendre maintenant</div>
     </button>`:''}
 
+    ${carteEpreuve()}
+    ${blocPreparation()}
+    ${blocDefi()}
+
+    <h2 class="titre-section">L'actualité utile au concours</h2>
+    <div class="ligne-direct">
+      ${S.actuDerniere ? `<span class="direct"><i></i>Dernière mise à jour : ${E(dateCourteFr(S.actuDerniere))}</span>` : ''}
+      <span class="sous-titre">National et international</span>
+    </div>
+
+    <div class="colonnes">
+    <div>
     <div class="bloc">
       <div class="carte">
         ${ACTU.length ? ACTU.slice(0,3).map((a,k)=>carteActu(a,k===0)).join('') : blocActuVide()}
@@ -1277,7 +1341,15 @@ function ico(n, t){
     soleil:'<circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.2 5.2l1.4 1.4M17.4 17.4l1.4 1.4M18.8 5.2l-1.4 1.4M6.6 17.4l-1.4 1.4"/>',
     lune:'<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/>',
     sortie:'<path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/><path d="M10 16l-4-4 4-4M6 12h9"/>',
-    cloche:'<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>'
+    cloche:'<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
+    son:'<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>',
+    muet:'<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/>',
+    drapeau:'<path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/>',
+    eclair:'<path d="M13 3L5 13.5h6L10 21l8-10.5h-6z"/>',
+    etoile:'<path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.8z"/>',
+    groupe:'<circle cx="9" cy="8.5" r="3.2"/><path d="M3 19a6 6 0 0 1 12 0"/><circle cx="17" cy="9.5" r="2.5"/><path d="M15.5 14.2A5 5 0 0 1 21 19"/>',
+    question:'<circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.8-2.4 2.2-2.4 3.9"/><circle cx="12" cy="17" r=".6" fill="currentColor"/>',
+    horloge:'<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'
   }[n] || '';
   return `<svg ${o}>${p}</svg>`;
 }
@@ -1846,6 +1918,10 @@ async function partager(quoi){
    navigateur l'enregistre en PDF : aucune bibliothèque à télécharger,
    ce qui compte quand le réseau est faible.
    ===================================================================== */
+/* QR code vers le site, calculé une fois pour toutes (rien à charger) :
+   une feuille imprimée ou partagée amène directement sur Mon Concours. */
+const QR_FEUILLE = '<svg width="78" height="78" aria-label="QR code vers monconcours.vercel.app" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 35 35" shape-rendering="crispEdges"><path fill="#ffffff" d="M0 0h35v35H0z"/><path stroke="#111111" d="M1 1.5h7m3 0h1m2 0h2m1 0h5m2 0h1m2 0h7M1 2.5h1m5 0h1m3 0h1m1 0h4m1 0h1m3 0h2m3 0h1m5 0h1M1 3.5h1m1 0h3m1 0h1m1 0h2m1 0h3m1 0h1m1 0h5m1 0h1m2 0h1m1 0h3m1 0h1M1 4.5h1m1 0h3m1 0h1m1 0h4m2 0h3m3 0h1m1 0h3m1 0h1m1 0h3m1 0h1M1 5.5h1m1 0h3m1 0h1m1 0h1m2 0h1m3 0h1m2 0h1m4 0h1m2 0h1m1 0h3m1 0h1M1 6.5h1m5 0h1m1 0h1m1 0h3m2 0h2m3 0h1m1 0h1m1 0h1m1 0h1m5 0h1M1 7.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M9 8.5h1m1 0h1m1 0h1m2 0h1m5 0h1M1 9.5h1m1 0h5m2 0h2m2 0h1m1 0h3m2 0h1m1 0h3m1 0h5M3 10.5h1m1 0h1m3 0h5m3 0h1m2 0h3m1 0h1m2 0h2m1 0h2m1 0h1M1 11.5h1m2 0h1m1 0h2m3 0h1m1 0h1m2 0h2m1 0h1m2 0h2m2 0h2m1 0h1m1 0h2M1 12.5h1m1 0h1m1 0h1m2 0h2m1 0h2m2 0h2m3 0h7m2 0h3M1 13.5h2m1 0h7m5 0h1m2 0h2m1 0h1m2 0h2m2 0h2m1 0h1M2 14.5h1m1 0h1m6 0h7m3 0h2m1 0h1m2 0h2m1 0h4M2 15.5h1m1 0h1m2 0h2m1 0h1m1 0h4m2 0h3m5 0h2m1 0h4M2 16.5h2m1 0h1m3 0h1m1 0h1m1 0h3m1 0h1m1 0h5m1 0h4m1 0h2M1 17.5h1m2 0h1m1 0h2m1 0h2m2 0h2m3 0h1m1 0h1m2 0h4m1 0h3m2 0h1M3 18.5h1m6 0h1m2 0h3m1 0h4m3 0h1m2 0h2m1 0h2m1 0h1M2 19.5h3m1 0h3m3 0h1m3 0h1m1 0h1m2 0h1m1 0h1m1 0h2m1 0h2m1 0h2M2 20.5h1m3 0h1m1 0h1m2 0h3m1 0h1m1 0h4m3 0h1m2 0h7M1 21.5h10m1 0h3m2 0h1m3 0h6m2 0h2m1 0h2M1 22.5h1m1 0h2m3 0h3m3 0h3m2 0h1m4 0h1m2 0h1m3 0h1m1 0h1M1 23.5h1m1 0h1m1 0h1m1 0h2m3 0h8m1 0h1m1 0h1m2 0h2m3 0h2M1 24.5h1m2 0h3m4 0h2m2 0h2m5 0h2m2 0h1m1 0h4m1 0h1M1 25.5h1m2 0h2m1 0h1m1 0h1m2 0h3m1 0h1m1 0h1m2 0h1m1 0h1m1 0h6m1 0h2M9 26.5h1m1 0h1m2 0h1m4 0h5m1 0h1m3 0h1m1 0h3M1 27.5h7m3 0h1m1 0h1m2 0h1m2 0h1m2 0h1m1 0h2m1 0h1m1 0h1m1 0h1M1 28.5h1m5 0h1m1 0h9m2 0h1m1 0h4m3 0h5M1 29.5h1m1 0h3m1 0h1m1 0h4m1 0h2m3 0h1m2 0h1m2 0h6m1 0h2M1 30.5h1m1 0h3m1 0h1m1 0h2m1 0h1m1 0h1m1 0h2m3 0h4m1 0h1m2 0h3m1 0h1M1 31.5h1m1 0h3m1 0h1m1 0h1m2 0h1m1 0h2m4 0h1m1 0h3m2 0h2m1 0h2M1 32.5h1m5 0h1m2 0h3m4 0h1m2 0h5m1 0h1m2 0h3M1 33.5h7m1 0h2m1 0h1m1 0h1m3 0h1m1 0h2m1 0h4m1 0h1m3 0h1"/></svg>';
+
 function feuilleComposition(source){
   /* source : { grille:[{q, o, bonnes}], reponses:{}, note, duree, date, sujet, concours }
      Sans source, on imprime la composition qui vient d'être corrigée. */
@@ -1862,6 +1938,7 @@ function feuilleComposition(source){
   const mots = (S.util.nom || 'Candidat').trim().split(/\s+/).filter(Boolean);
   const initiales = (mots.length > 1 ? mots[0][0] + mots[mots.length-1][0] : (mots[0]||'C').slice(0,2)).toUpperCase();
   const analyse = analyseCopie(S0.grille, S0.reponses);
+  const matsFeuille = bilanMatieres(S0.grille, S0.reponses);
 
   const recommandations = [];
   if(blancs.length > total * 0.15)
@@ -1900,7 +1977,8 @@ function feuilleComposition(source){
 '<style>' +
 '@page{size:A4;margin:14mm}*{box-sizing:border-box}' +
 'body{font-family:Georgia,"Times New Roman",serif;color:#111;margin:0;line-height:1.45}' +
-'.tete{display:flex;align-items:center;gap:14px;border-bottom:3px double #111;padding-bottom:12px}' +
+'.tete{display:flex;align-items:center;gap:14px;border-bottom:3px double #111;padding-bottom:12px;flex-wrap:wrap}' +
+'body{max-width:190mm;margin:0 auto;padding:0 10px}@media print{body{padding:0}}' +
 '.marque .n{font-size:19px;font-weight:bold;letter-spacing:.04em}.marque .d{font-size:11px;color:#555;font-style:italic}' +
 '.sceau{width:52px;height:52px;border-radius:13px;background:#EDE4D3;border:1px solid #C9BEA9;display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:7px;flex:0 0 auto}' +
 '.sceau i{border-radius:50%;background:#FBFAF7;border:1px solid #C9BEA9}.sceau i:nth-child(2),.sceau i:nth-child(3){background:#1C1C1C;border-color:#1C1C1C}' +
@@ -1923,12 +2001,23 @@ function feuilleComposition(source){
 '.b.faute{background:#fff;border:2px solid #B4231C;color:#B4231C;font-weight:bold;text-decoration:line-through}' +
 '.legende{display:flex;gap:16px;font-size:11px;margin:8px 0 0;font-family:Helvetica,Arial,sans-serif;color:#444;flex-wrap:wrap}' +
 '.legende span{display:flex;align-items:center;gap:5px}.legende i{width:14px;height:14px;border-radius:50%;display:inline-block}' +
-'.pied{margin-top:20px;border-top:1px solid #999;padding-top:7px;font-size:10.5px;color:#555;display:flex;justify-content:space-between}' +
+'.pied{margin-top:20px;border-top:2px solid #111;padding-top:8px;font-size:12px;color:#111;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-family:Helvetica,Arial,sans-serif}' +
+'.pied b{font-size:13px}' +
+'.site{margin-left:auto;display:flex;align-items:center;gap:10px;text-align:right}' +
+'.site .adr{font-family:Helvetica,Arial,sans-serif;font-weight:bold;font-size:15px;color:#000;letter-spacing:.01em}' +
+'.site .sc{font-size:10.5px;color:#333;font-family:Helvetica,Arial,sans-serif}' +
+'.site svg{display:block;border:1px solid #ccc}' +
+'.filigrane{position:fixed;top:50%;left:50%;width:120mm;height:120mm;transform:translate(-50%,-50%) rotate(-12deg);opacity:.045;z-index:-1;pointer-events:none;display:grid;grid-template-columns:1fr 1fr;gap:9mm;padding:12mm;border-radius:28mm;background:#1C1C1C}' +
+'.filigrane i{border-radius:50%;background:#fff}.filigrane i:nth-child(2),.filigrane i:nth-child(3){background:#1C1C1C;border:4mm solid #fff}' +
+'.filigrane b{position:absolute;bottom:-16mm;left:0;right:0;text-align:center;font:bold 13mm Helvetica,Arial,sans-serif;color:#1C1C1C;white-space:nowrap}' +
+'table.mats{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:6px}table.mats td{border:1px solid #bbb;padding:4px 8px}table.mats td.n{text-align:right;width:90px;font-weight:bold}' +
 '@media print{.noimp{display:none}}.noimp{text-align:center;margin:20px 0}' +
 '.noimp button{font:inherit;padding:11px 22px;border:1px solid #111;background:#111;color:#fff;cursor:pointer}' +
 '</style></head><body>' +
+'<div class="filigrane" aria-hidden="true"><i></i><i></i><i></i><i></i><b>MON CONCOURS</b></div>' +
 '<div class="tete"><div class="sceau"><i></i><i></i><i></i><i></i></div>' +
-  '<div class="marque"><div class="n">MON CONCOURS</div><div class="d">Préparation aux concours directs du Burkina Faso</div></div></div>' +
+  '<div class="marque"><div class="n">MON CONCOURS</div><div class="d">Préparation aux concours directs du Burkina Faso</div></div>' +
+  '<div class="site"><div><div class="adr">monconcours.vercel.app</div><div class="sc">Scannez pour réviser gratuitement</div></div>' + QR_FEUILLE + '</div></div>' +
 
 '<h1>Analyse de la copie</h1>' +
 '<div class="ident">' +
@@ -1950,6 +2039,8 @@ function feuilleComposition(source){
   '</table>' +
 '</div>' +
 
+(matsFeuille.length ? '<h1>Résultats par matière</h1><table class="mats">' +
+  matsFeuille.map(x => '<tr><td>' + E(x.nom) + '</td><td class="n">' + x.j + ' / ' + x.n + '</td><td class="n">' + Math.round(x.j / x.n * 100) + ' %</td></tr>').join('') + '</table>' : '') +
 '<h1>Recommandations</h1><ol class="recos">' + recommandations.map(r => '<li>' + E(r) + '</li>').join('') + '</ol>' +
 
 '<div class="saut-page"></div>' +
@@ -1963,7 +2054,7 @@ function feuilleComposition(source){
   '<span><i style="border:2px solid #B4231C"></i> Noirci à tort</span>' +
   '<span><i style="border:1px solid #ccc"></i> Non noirci</span>' +
 '</div>' +
-'<div class="pied"><span>monconcours.vercel.app · Mon Concours</span><span>Document remis le ' + quand + '</span></div>' +
+'<div class="pied"><span><b>monconcours.vercel.app</b> · WhatsApp <b>+226 ' + CONTACT.adminTel.replace(/(\d{2})(?=\d)/g, '$1 ') + '</b></span><span>Document remis le ' + quand + '</span></div>' +
 '<div class="noimp"><button onclick="window.print()">Enregistrer en PDF ou imprimer</button></div>' +
 '<scr' + 'ipt>setTimeout(function(){window.print();},600);<\/scr' + 'ipt>' +
 '</body></html>';
@@ -2077,9 +2168,10 @@ async function feuilleArchive(id){
   try{
     const { data, error } = await base.rpc('ma_copie', { p_composition: id });
     if(error || !data || !data.ok) throw new Error('copie');
+    if(data.correction_le){ toast('Composition collective : la feuille corrigée sera disponible à ' + heureFr(data.correction_le) + '.'); return; }
     const grille = [], reponses = {};
     (data.questions || []).forEach((q, i) => {
-      grille.push({ q:q.enonce, o:q.options || [], bonnes:q.bonnes || [] });
+      grille.push({ q:q.enonce, o:q.options || [], bonnes:q.bonnes || [], m:q.matiere || null });
       if(q.choisies && q.choisies.length) reponses[i] = q.choisies.map(Number);
     });
     feuilleComposition({ grille, reponses, note:data.note || 0, duree:data.duree || 0,
@@ -2251,6 +2343,10 @@ function ecranQcm(){
       </div>
       ${motiv ? `<div class="motiv"><b>${E(motiv)}</b></div>` : ''}
       ${typeof c.quota_restant === 'number' ? `<p class="sous" style="margin-top:8px;font-size:12px">${c.quota_restant} correction${c.quota_restant>1?'s':''} gratuite${c.quota_restant>1?'s':''} restante${c.quota_restant>1?'s':''} aujourd'hui.</p>` : ''}
+      <div class="actions-q">
+        <button class="lien-mini" data-signaler="${E(q.id)}">${ico('drapeau',13)} Signaler une erreur</button>
+        <button class="lien-mini" data-partage-question="${E(q.id)}">${ico('partage',13)} Partager</button>
+      </div>
       <button class="cta" style="margin-top:12px" data-qsuiv="1">Question suivante →</button>` : ''}
   </div>`;
 }
@@ -2270,6 +2366,7 @@ async function repondreQcm(i){
   S.qcmCorrection = r;
   if(r.ok){
     if(r.correcte){ S.qcmJustes++; S.qcmSerie++; sonJuste(); } else { S.qcmSerie = 0; sonFaux(); }
+    compterReponse();
     pister('QUESTION_ANSWERED', { juste: !!r.correcte });
     chargerCahier();
   }
@@ -2314,9 +2411,13 @@ function ecranGrille(){
   <div class="grille">
     <div class="gr-tete">
       <div><h1 class="t">Votre feuille de composition</h1>
-        <div class="eyebrow" style="color:#B5AC96">Entraînement type ${E(S.concours)} · ${nbQ} questions</div></div>
+        <div class="eyebrow" style="color:#B5AC96">${S.epreuveCompo ? 'Composition collective' : 'Entraînement type ' + E(S.concours)} · ${nbQ} questions</div>
+        <div class="gr-outils">
+          <button class="gr-outil" data-quitter="1" aria-label="Quitter l'épreuve">${ico('sortie',14)}<span>Quitter</span></button>
+          <button class="gr-outil" data-son="1" aria-pressed="${!S.sonCoupe}" aria-label="${S.sonCoupe ? 'Remettre le son' : 'Couper le son'}">${ico(S.sonCoupe ? 'muet' : 'son',14)}<span>${S.sonCoupe ? 'Son coupé' : 'Son'}</span></button>
+        </div></div>
       <div style="text-align:right">
-        <div class="gr-chrono ${S.chrono<=300?'chaud':''}" id="chrono">${mmss(S.chrono)}</div>
+        <div class="gr-chrono ${couleurChrono(S.chrono, S.dureeCompo || 1500)}" id="chrono">${mmss(S.chrono)}</div>
         <div class="eyebrow" style="color:#B5AC96">temps restant</div></div>
     </div>
     <div class="sonnerie" id="sonnerie" role="status" aria-live="polite"></div>
@@ -2365,17 +2466,25 @@ function ecranGrille(){
     synchroniserChrono();
     if(S.sync) clearInterval(S.sync);
     S.sync = setInterval(synchroniserChrono, 60000);
+    const total = S.dureeCompo || 1500;
+    const mi = Math.floor(total / 2);
+    /* sonnerie de départ : une seule fois par copie, au vrai début */
+    if(S.compositionId && S.chrono >= total - 20 && S.departSonne !== S.compositionId){
+      S.departSonne = S.compositionId;
+      sonDepart(); setTimeout(() => annonceTemps('L\'épreuve commence. Bon courage.'), 50);
+    }
     S.timer = setInterval(()=>{
       S.chrono--;
       const c = document.getElementById('chrono');
       if(c){
         c.textContent = mmss(S.chrono);
-        if(S.chrono<=300) c.classList.add('chaud');
+        peindreChrono(c, S.chrono, total);
       }
-      if(S.chrono>0 && S.chrono%600===0){
-        bip(2); annonceTemps('Il reste ' + (S.chrono/60) + ' minutes');
+      if(S.chrono === mi){
+        sonMiParcours(); annonceTemps('Mi-parcours : il reste ' + Math.round(S.chrono/60) + ' minutes');
       }
-      if(S.chrono===300){ bip(3); annonceTemps('Plus que 5 minutes'); }
+      if(S.chrono===300 && mi > 300){ bip(3); annonceTemps('Plus que 5 minutes'); }
+      if(S.chrono===60){ bip(2); annonceTemps('Dernière minute'); }
       if(S.chrono<=0){ clearInterval(S.timer); S.timer=null; bip(4); remettre(); }
     },1000);
   }
@@ -2698,6 +2807,27 @@ function ecranCopie(){
       <button class="cta creux" style="margin-top:9px" data-go="aujourdhui">Revenir à l'accueil</button></div>`;
     return;
   }
+  if(S.correctionLe){
+    const fin = new Date(S.correctionLe);
+    const passe = Date.now() >= fin.getTime();
+    vue().innerHTML = `
+    <div class="copie">
+      <button class="retourhaut" data-go="aujourdhui">Accueil</button>
+      <div class="eyebrow">Composition collective · copie remise</div>
+      <h1 class="titre" style="margin-bottom:10px">Votre copie<br>est remise</h1>
+      <div class="cachet-note"><div class="n num">${S.grilleNote ?? 0} / ${S.grille.length}</div>
+        <div class="l">votre note</div></div>
+      <div class="carte" style="margin-top:14px">
+        <p class="sous">${passe
+          ? 'L\'épreuve est terminée : le corrigé et le classement national sont disponibles.'
+          : `Les autres candidats composent encore. Le corrigé et le classement national seront publiés à <b>${fin.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}</b>, à la fin de l'épreuve.`}</p>
+      </div>
+      ${passe ? `<button class="cta" style="margin-top:14px" data-correction-differee="1">Afficher ma correction</button>` : ''}
+      ${S.epreuveRemise ? `<button class="cta ${passe ? 'creux' : ''}" style="margin-top:9px" data-gagnants="${E(S.epreuveRemise)}">Voir le classement</button>` : ''}
+      <button class="cta creux" style="margin-top:9px" data-go="aujourdhui">Revenir à l'accueil</button>
+    </div>`;
+    return;
+  }
   const n = S.grilleNote ?? 0, total = S.grille.length;
   const seuil = S.seuil, admis = seuil !== null && n >= seuil;
   const pos = Math.min(100, total ? n/total*100 : 0);
@@ -2706,6 +2836,7 @@ function ecranCopie(){
   const utilise = S.dureeUtilisee ?? ((S.dureeCompo || 1500) - S.chrono);
   vue().innerHTML = `
   <div class="copie">
+    <button class="retourhaut" data-go="aujourdhui">Accueil</button>
     <div class="eyebrow">Copie corrigée · ${new Date().toLocaleDateString('fr-FR',{day:'numeric',month:'long'})}${S.sujetRef ? ' · <span style="white-space:nowrap">sujet n° ' + E(S.sujetRef) + '</span>' : ''}</div>
     <h1 class="titre" style="margin-bottom:10px">Votre feuille<br>est corrigée</h1>
 
@@ -2745,6 +2876,8 @@ function ecranCopie(){
         ${blancs.length ? `<div class="mat"><div class="nom">Questions laissées blanches</div><div class="val num">${blancs.length}</div></div>` : ''}
       </div>
     </div>
+
+    ${blocMatieresCopie(S.grille, S.reponses, n, total)}
 
     ${analyse ? `<div class="bloc">
       <div class="libelle">À retenir de cette copie</div>
@@ -2859,6 +2992,7 @@ function ecranReprise(){
   const juste = rep === e.i;
   vue().innerHTML = `
   <div class="qzone">
+    <button class="retourhaut" data-sortir-reprise="1" style="margin-bottom:12px">Mes erreurs</button>
     <div class="qmeta"><span>REPRISE · CAHIER</span><span>RATÉE ${e.rate} FOIS</span></div>
     <div class="qtexte">${E(e.q)}</div>
     ${e.opts.map((o,i)=>{
@@ -2874,6 +3008,7 @@ function ecranReprise(){
         <span class="acquis">${[0,1,2].map(i=>`<i class="${i<e.suite?'on':''}"></i>`).join('')}</span>
         <span class="eyebrow">${e.suite>=3?'refermée':'trois bonnes réponses d\'affilée pour la refermer'}</span>
       </div>
+      ${e.id ? `<div class="actions-q" style="margin:-4px 0 10px"><button class="lien-mini" data-signaler="${E(e.id)}">${ico('drapeau',13)} Signaler une erreur dans cette question</button></div>` : ''}
       <button class="cta" data-fin-reprise="1">Continuer</button>`:''}
   </div>`;
 }
@@ -3011,6 +3146,8 @@ function ecranCompte(){
       </div>`;
     })() : ''}
 
+    ${blocMesCompositions()}
+
     <div class="bloc">
       <div class="libelle">Défis</div>
       <button class="grande" style="margin-top:0" data-go="grille">
@@ -3083,6 +3220,8 @@ function ecranCompte(){
           ${ico("partage",16)} Partager Mon Concours à un camarade<small>Qui prépare le concours lui aussi</small></button>
       </div>
 
+      ${blocRappels()}
+
       <div class="carte" style="margin-top:14px;text-align:left">
         <div class="libelle" style="margin-bottom:10px">Aide et contact</div>
         <a class="lien-reseau wa"
@@ -3103,6 +3242,747 @@ function ecranCompte(){
 }
 
 /* =====================================================================
+   PROGRESSION DU JOUR, FIL « POUR TOI », COMPOSITIONS COLLECTIVES,
+   QUESTION DU JOUR, SIGNALEMENTS, RAPPELS
+   Tout ce qui suit lit le serveur et n'invente aucun chiffre : sans
+   donnée, le bloc ne s'affiche pas.
+   ===================================================================== */
+const VAPID_PUBLIC = 'BKKwtq-pIHYWr7Ypi81KhbOYicKmCnOt27bmN_YLN8dhYzoxUHiofDHWBM7VFuOru8nTPAeV8vyWiSW2tfcOqT0';
+const OBJECTIFS = [10, 20, 50, 100];
+const enComposition = () => S.ecran === 'grille' && !S.corrige && S.compoEtat === 'pret' && S.grille.length > 0;
+const heureFr = iso => new Date(iso).toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
+const jourFr = iso => new Date(iso).toLocaleDateString('fr-FR', { weekday:'long', day:'numeric', month:'long' });
+
+async function chargerJournee(){
+  if(!base || !S.util.connecte) return;
+  try{
+    const { data } = await base.rpc('ma_journee');
+    if(data){ S.journee = data; rafraichirSiVisible(); }
+  }catch(e){}
+}
+async function chargerEpreuve(){
+  if(!base) return;
+  try{
+    const { data } = await base.rpc('epreuve_du_moment');
+    S.epreuve = data || null;
+    if(['aujourdhui','gagnants'].includes(S.ecran)) rendre();
+  }catch(e){}
+}
+async function chargerDirect(){
+  if(!base) return;
+  try{
+    const { data } = await base.rpc('activite_en_direct');
+    if(data){ S.direct = data; if(S.ecran === 'aujourdhui') rendre(); }
+  }catch(e){}
+}
+/* l'accueil se tient à jour tant qu'il est ouvert */
+setInterval(() => {
+  if(document.visibilityState !== 'visible' || S.ecran !== 'aujourdhui') return;
+  chargerEpreuve(); chargerDirect();
+}, 60000);
+
+/* Une réponse corrigée de plus : on avance le compteur du jour sans
+   attendre le serveur, et on fête une seule fois l'objectif atteint. */
+function compterReponse(){
+  if(!S.journee) return;
+  S.journee.faites_jour = (S.journee.faites_jour || 0) + 1;
+  const obj = S.journee.objectif || 20;
+  const cle = 'objectifFete-' + new Date().toDateString();
+  if(S.journee.faites_jour >= obj && !lireReglages()[cle]){
+    ecrireReglage(cle, true);
+    setTimeout(() => { sonDepart(); signalCandidat('Objectif du jour atteint : ' + obj + ' questions. Bravo !'); }, 900);
+  }
+}
+
+/* ---------- bilan par matière d'une copie ---------- */
+function bilanMatieres(grille, reponses){
+  const m = {};
+  grille.forEach((g, i) => {
+    if(!g.m) return;
+    const r = reponses[i] || [], bonnes = g.bonnes || [];
+    const juste = r.length && bonnes.length && r.length === bonnes.length && r.every(x => bonnes.includes(x));
+    (m[g.m] = m[g.m] || { nom:g.m, j:0, n:0 }).n++;
+    if(juste) m[g.m].j++;
+  });
+  return Object.values(m).sort((a, b) => (a.j / a.n) - (b.j / b.n));
+}
+function blocMatieresCopie(grille, reponses, note, total){
+  const mats = bilanMatieres(grille, reponses);
+  const prec = ((S.journee && S.journee.compositions) || [])
+    .filter(c => c.id !== S.derniereCompo && c.sur > 0);
+  const pct = total ? Math.round(note / total * 100) : 0;
+  let compar = '';
+  if(prec.length){
+    const moy = Math.round(prec.reduce((a, c) => a + c.score / c.sur, 0) / prec.length * 100);
+    const ecart = pct - moy;
+    compar = `<p class="sous" style="margin-top:10px">Votre moyenne sur les ${prec.length} composition${prec.length>1?'s':''} précédente${prec.length>1?'s':''} : <b>${moy} %</b>. Cette copie : <b>${pct} %</b>, soit ${ecart === 0 ? 'le même niveau' : (ecart > 0 ? '<span style="color:var(--vert-texte)">' + ecart + ' points de plus</span>' : '<span style="color:var(--rouge-texte)">' + Math.abs(ecart) + ' points de moins</span>')}.</p>`;
+  }
+  if(!mats.length && !compar) return '';
+  const faibles = mats.filter(x => x.n >= 2 && x.j / x.n < 0.5);
+  return `<div class="bloc">
+    <div class="libelle">Par matière</div>
+    <div class="carte">
+      ${mats.map(x => {
+        const t = Math.round(x.j / x.n * 100);
+        return `<div class="mat"><div class="nom">${E(x.nom)}<em>${x.j} sur ${x.n}</em></div>
+          <div class="jauge ${t >= 60 ? 'haut' : (t < 40 ? 'bas' : '')}"><i style="width:${t}%"></i></div><div class="val num">${t} %</div></div>`;
+      }).join('')}
+      ${faibles.length ? `<div class="verdict fragile" style="margin-top:12px"><b>À travailler en priorité</b>${faibles.slice(0,2).map(x => E(x.nom)).join(' et ')} : moins d'une bonne réponse sur deux.</div>
+        <button class="cta creux" style="margin-top:10px" data-cible="${E(faibles[0].nom)}">Réviser ${E(faibles[0].nom)}</button>` : ''}
+      ${compar}
+    </div>
+  </div>`;
+}
+
+/* ---------- la prochaine action, avec sa raison ---------- */
+function prochaineAction(){
+  const j = S.journee || {};
+  const enCours = !S.corrige && Object.keys(S.reponses).length > 0;
+  if(enCours) return { t:'Reprendre ta composition', r:'Le chronomètre du serveur continue de tourner : termine ta copie.', a:'data-go="grille"', b:'Reprendre' };
+  /* une composition collective en cours a déjà sa propre carte, juste au-dessus */
+  if(!S.util.connecte) return { t:'Créer ton compte gratuit', r:'Pour garder tes erreurs, voir les corrections et suivre ta progression.', a:'data-modal="inscription"', b:'Créer mon compte' };
+  if(j.dues > 0) return { t:'Revoir tes erreurs du jour', r:`${j.dues} erreur${j.dues>1?'s sont prévues':' est prévue'} aujourd'hui. C'est le bon moment pour ${j.dues>1?'les':'la'} fixer.`, a:'data-pourtoi="10"', b:'Commencer' };
+  const pm = ((S.stats && S.stats.par_matiere) || []).filter(x => x.traitees >= 5).map(x => ({ ...x, taux:Number(x.taux) || 0 }))
+    .sort((a, b) => a.taux - b.taux)[0];
+  if(pm && pm.taux < 60) return { t:'Réviser ' + pm.matiere, r:`${pm.taux} % de bonnes réponses sur ${pm.traitees}. C'est ta matière la plus fragile.`, a:`data-cible="${E(pm.matiere)}"`, b:'Réviser ' + pm.matiere };
+  if(S.journee && !j.compos_semaine) return { t:'Faire une composition', r:'Aucune composition cette semaine. Entraîne-toi en conditions réelles : 50 questions, 25 minutes.', a:'data-go="grille"', b:'Composer' };
+  if(S.journee && j.faites_jour < j.objectif) return { t:'Continuer avec ton fil « Pour toi »', r:`Il te reste ${j.objectif - j.faites_jour} question${j.objectif - j.faites_jour > 1 ? 's' : ''} pour ton objectif du jour.`, a:'data-pourtoi="10"', b:'Continuer' };
+  if(S.journee) return { t:'Objectif du jour atteint', r:'Tu peux t\'arrêter là, lire l\'actualité ou tenter la question du jour.', a:'data-go="qdj"', b:'Question du jour' };
+  return { t:'Ton fil « Pour toi »', r:'Dix questions choisies selon tes erreurs et tes matières faibles.', a:'data-pourtoi="10"', b:'Commencer' };
+}
+
+function carteEpreuve(){
+  const ep = S.epreuve;
+  if(!ep) return '';
+  const moi = ep.moi;
+  let corps = '', bouton = '';
+  if(ep.etat === 'a_venir'){
+    const ms = new Date(ep.debut_le) - Date.now();
+    const h = Math.floor(ms / 3600000), jours = Math.floor(h / 24);
+    const dans = jours >= 1 ? `dans ${jours} jour${jours>1?'s':''}` : (h >= 1 ? `dans ${h} h` : `dans ${Math.max(1, Math.round(ms/60000))} min`);
+    corps = `<b>${E(jourFr(ep.debut_le))} à ${heureFr(ep.debut_le)}</b> · ${dans}<br>${ep.nb_questions} questions, ${Math.round(ep.duree/60)} minutes. Tous les candidats composent le même sujet au même moment.`;
+    bouton = S.rappel ? `<span class="tampon t-ok" style="margin-top:10px">Rappel activé</span>` : `<button class="cta creux" style="margin-top:10px" data-rappel-activer="19">${ico('cloche',15)} Me prévenir avant le début</button>`;
+  } else if(ep.etat === 'en_cours'){
+    corps = `<b>En cours</b> · fin à ${heureFr(ep.fin_le)}${ep.composent > 0 ? ` · <span class="num">${ep.composent}</span> candidat${ep.composent>1?'s':''} compose${ep.composent>1?'nt':''} en ce moment` : ''}`;
+    bouton = moi && moi.terminee
+      ? `<p class="sous" style="margin-top:8px">Copie remise. Classement à ${heureFr(ep.fin_le)}.</p>`
+      : `<button class="cta" style="margin-top:10px" data-rejoindre="${E(ep.id)}">Rejoindre maintenant</button>`;
+  } else {
+    corps = `<b>Terminée</b> · ${ep.participants} participant${ep.participants>1?'s':''}${moi && moi.score !== null && moi.score !== undefined ? ` · ta note : <span class="num">${moi.score}/${moi.sur}</span>` : ''}`;
+    bouton = `<button class="cta" style="margin-top:10px" data-gagnants="${E(ep.id)}">Voir les gagnants et le classement</button>`;
+  }
+  return `<div class="carte collective">
+    <div class="libelle" style="margin-bottom:6px"><span>${ico('groupe',14)} Composition collective</span>${ep.recompense ? `<span class="tampon t-att">${E(ep.recompense)}</span>` : ''}</div>
+    <h2 class="col-titre">${E(ep.titre)}</h2>
+    <p class="sous" style="margin-top:6px">${corps}</p>
+    ${bouton}
+  </div>`;
+}
+
+const DEFIS = [
+  j => ({ t:'Travailler 5 jours cette semaine', v:j.jours_semaine || 0, c:5, u:'jours' }),
+  j => ({ t:'Atteindre 75 % à une composition', v:j.meilleure_semaine || 0, c:75, u:'%' }),
+  j => ({ t:'Refermer 10 erreurs cette semaine', v:j.refermees_semaine || 0, c:10, u:'erreurs' }),
+  j => ({ t:'Faire 3 compositions cette semaine', v:j.compos_semaine || 0, c:3, u:'compositions' })
+];
+function blocDefi(){
+  if(!S.journee) return '';
+  const d = DEFIS[(S.journee.defi || 0) % DEFIS.length](S.journee);
+  const fait = d.v >= d.c;
+  return `<div class="carte" style="margin-top:12px">
+    <div class="libelle" style="margin-bottom:6px"><span>${ico('trophee',14)} Défi de la semaine</span>${fait ? '<span class="tampon t-ok">Réussi</span>' : ''}</div>
+    <div style="font-weight:600;font-size:14.5px">${d.t}</div>
+    <div class="jauge-defi"><i style="width:${Math.min(100, Math.round(d.v / d.c * 100))}%"></i></div>
+    <div class="sous" style="font-size:12.5px">${Math.min(d.v, d.c)}${d.u === '%' ? ' %' : ''} sur ${d.c}${d.u === '%' ? ' %' : ' ' + d.u} · nouveau défi chaque lundi</div>
+  </div>`;
+}
+
+function blocPreparation(){
+  const j = S.journee;
+  const p = prochaineAction();
+  const obj = j ? j.objectif : null, faites = j ? Math.min(j.faites_jour, 9999) : 0;
+  const pct = obj ? Math.min(100, Math.round(faites / obj * 100)) : 0;
+  return `
+    <div class="prochaine">
+      <div class="eyebrow" style="color:var(--laterite-txt)">Prochaine étape</div>
+      <div class="pr-titre">${E(p.t)}</div>
+      <p class="pr-raison">${E(p.r)}</p>
+      <button class="cta" ${p.a}>${E(p.b)}</button>
+    </div>
+    ${j ? `<div class="duo" style="margin-top:12px">
+      <button class="stat lien-stat" data-pourtoi="10">
+        <div class="v num">${j.dues}</div><div class="l">À revoir aujourd'hui</div></button>
+      <div class="stat">
+        <div class="v num">${faites}<small>/${obj}</small></div><div class="l">Objectif du jour</div>
+        <div class="jauge-obj"><i style="width:${pct}%"></i></div>
+        <div class="objectifs" role="group" aria-label="Choisir l'objectif du jour">${OBJECTIFS.map(o => `<button class="${o === obj ? 'on' : ''}" data-objectif="${o}" aria-pressed="${o === obj}">${o}</button>`).join('')}</div>
+      </div>
+    </div>` : ''}
+    <div class="raccourcis">
+      <button data-pourtoi="10">${ico('etoile',18)}<b>Pour toi</b><span>10 questions choisies</span></button>
+      <button data-pourtoi="5">${ico('eclair',18)}<b>Express</b><span>5 questions</span></button>
+      <button data-cahierfreq="1">${ico('erreurs',18)}<b>Erreurs fréquentes</b><span>Les plus ratées d'abord</span></button>
+      <button data-go="qdj">${ico('question',18)}<b>Question du jour</b><span>La même pour tous</span></button>
+    </div>
+    ${S.direct && S.direct.en_ligne >= 3 ? `<p class="direct-ligne"><i></i><span class="num">${S.direct.en_ligne}</span> candidats révisent en ce moment${S.direct.composent >= 2 ? ` · <span class="num">${S.direct.composent}</span> composent` : ''}</p>` : ''}`;
+}
+
+/* ---------- le fil « Pour toi » ---------- */
+async function lancerFil(n){
+  if(!S.util.connecte){ S.modal = 'inscription'; S.erreur = ''; return surcouche(); }
+  S.fil = { liste:null, idx:0, rep:undefined, c:null, justes:0, revues:0, n:+n || 10, attente:false };
+  aller('pourtoi');
+  try{
+    const { data, error } = await base.rpc('fil_pour_toi', { p_niveau: niveauBase(), p_nombre: S.fil.n });
+    if(error) throw error;
+    S.fil.liste = data || [];
+    S.fil.debut = Date.now();
+  }catch(e){ S.fil.liste = []; S.fil.erreur = true; }
+  pister('FEED_OPENED', { n: S.fil.n });
+  if(S.ecran === 'pourtoi') rendre();
+}
+function ecranPourToi(){
+  const f = S.fil;
+  if(!f) return lancerFil(10);
+  const tete = (txt) => `<div class="qcm-tete"><span class="q">${txt}</span>
+      <button class="x" data-go="aujourdhui" aria-label="Fermer">✕</button></div>`;
+  if(f.liste === null){
+    vue().innerHTML = tete('POUR TOI') + `<div class="qzone" style="padding-top:12px"><div class="squelette large"></div><div class="squelette"></div><p class="sous">On choisit tes questions…</p></div>`;
+    return;
+  }
+  if(!f.liste.length){
+    vue().innerHTML = tete('POUR TOI') + `<div class="qzone" style="padding-top:12px"><p class="sous">${f.erreur ? 'Le fil n\'a pas pu être chargé. Vérifie ta connexion.' : 'Aucune question disponible pour ce niveau pour le moment.'}</p>
+      <button class="cta" style="margin-top:12px" data-go="aujourdhui">Revenir à l'accueil</button></div>`;
+    return;
+  }
+  if(f.idx >= f.liste.length){
+    vue().innerHTML = tete('POUR TOI · TERMINÉ') + `<div class="qzone" style="padding-top:18px">
+      <h1 class="titre" style="font-size:26px">${f.liste.length} questions faites</h1>
+      <div class="duo" style="margin-top:14px">
+        <div class="stat"><div class="v num">${f.justes}</div><div class="l">Bonnes réponses</div></div>
+        <div class="stat"><div class="v num">${f.revues}</div><div class="l">Erreurs revues</div></div>
+      </div>
+      <p class="sous" style="margin-top:12px">${f.justes === f.liste.length ? 'Sans faute. Les questions ratées reviendront plus tard pour vérifier qu\'elles tiennent.' : 'Les questions ratées sont dans « Mes erreurs » : elles reviendront jusqu\'à être acquises.'}</p>
+      <button class="cta" style="margin-top:14px" data-pourtoi="10">Encore 10 questions</button>
+      <button class="cta creux" style="margin-top:9px" data-go="aujourdhui">Revenir à l'accueil</button>
+    </div>`;
+    return;
+  }
+  const q = f.liste[f.idx], c = f.c, rep = f.rep;
+  const cl = { 'Prioritaire':'t-feu', 'Recommandée':'t-att', 'À consolider':'t-att' }[q.etiquette] || 't-ok';
+  vue().innerHTML = tete(`POUR TOI · ${f.idx + 1} / ${f.liste.length}`) + `
+  <div class="qzone" style="padding-top:12px">
+    <div class="progression" style="margin-bottom:14px"><i class="on" style="flex:${f.idx + 1}"></i><i style="flex:${f.liste.length - f.idx - 1}"></i></div>
+    <div class="fil-meta"><span class="tampon ${cl}">${E(q.etiquette)}</span><span class="eyebrow">${E(q.matiere || '')}</span></div>
+    <p class="fil-raison">${ico('question',13)} ${E(q.raison)}</p>
+    <div class="qtexte">${E(q.enonce)}</div>
+    ${(q.options || []).map((o, i) => {
+      let k = '';
+      if(c && c.ok){ if((c.bonnes || []).includes(i)) k = 'juste'; else if(i === rep) k = 'faux'; }
+      else if(i === rep) k = 'choisi';
+      return `<button class="opt ${k}" ${rep !== undefined ? 'disabled' : ''} data-fil-rep="${i}"><span class="lettre">${'ABCD'[i] || '•'}</span>${E(o)}</button>`;
+    }).join('')}
+    ${rep !== undefined && f.attente ? `<p class="sous" style="margin-top:12px">Correction en cours…</p>` : ''}
+    ${c && !c.ok ? `<div class="retour mal"><b>Correction indisponible</b>${E(c.message || '')}</div>
+      <button class="cta" style="margin-top:12px" data-fil-suiv="1">Question suivante →</button>` : ''}
+    ${c && c.ok ? `
+      <div class="retour ${c.correcte ? 'bien' : 'mal'}">
+        <b>${c.correcte ? 'Bonne réponse' : 'Réponse incorrecte'}</b>
+        ${c.correcte ? '' : `<div style="margin-bottom:6px">La bonne réponse : <strong class="bonne-rep">${E((c.bonnes || []).map(k => 'ABCD'[k] + '. ' + q.options[k]).join(' + '))}</strong></div>`}
+        ${c.explication ? `<b style="margin-top:2px">Pourquoi ?</b>${E(c.explication)}` : ''}
+        ${c.acquise ? '<div style="margin-top:6px;font-size:12.5px">Trois bonnes réponses d\'affilée : elle sort de « Mes erreurs ».</div>' : (c.correcte ? '' : '<div style="margin-top:6px;font-size:12.5px">Elle reste dans « Mes erreurs ».</div>')}
+      </div>
+      <div class="actions-q">
+        <button class="lien-mini" data-signaler="${E(q.id)}">${ico('drapeau',13)} Signaler une erreur</button>
+        <button class="lien-mini" data-partage-question="${E(q.id)}">${ico('partage',13)} Partager</button>
+      </div>
+      <button class="cta" style="margin-top:12px" data-fil-suiv="1">${f.idx + 1 < f.liste.length ? 'Question suivante →' : 'Voir mon bilan'}</button>` : ''}
+  </div>`;
+}
+async function repondreFil(i){
+  const f = S.fil; if(!f || f.rep !== undefined) return;
+  const q = f.liste[f.idx];
+  f.rep = i; f.attente = true; ecranPourToi();
+  const r = await corrigerAuServeur(q.id, [i], q.contexte === 'erreurs' ? 'erreurs' : 'revision', Date.now() - (f.debut || Date.now()));
+  f.attente = false; f.c = r;
+  if(r.ok){
+    if(r.correcte){ f.justes++; sonJuste(); } else sonFaux();
+    if(q.contexte === 'erreurs') f.revues++;
+    compterReponse();
+    pister('FEED_ANSWERED', { juste: !!r.correcte, etiquette: q.etiquette });
+  }
+  if(S.ecran === 'pourtoi') ecranPourToi();
+}
+
+/* ---------- question du jour ---------- */
+async function chargerQdj(){
+  if(!base) return;
+  try{
+    const { data } = await base.rpc('question_du_jour');
+    S.qdj = (data && data.ok) ? data : { vide:true };
+  }catch(e){ S.qdj = { erreur:true }; }
+  if(S.ecran === 'qdj') rendre();
+}
+function ecranQdj(){
+  const q = S.qdj;
+  if(!q){ chargerQdj(); vue().innerHTML = `<div class="pad"><button class="retourhaut" data-go="aujourdhui">Accueil</button><div class="squelette large" style="margin-top:16px"></div></div>`; return; }
+  if(q.vide || q.erreur){ vue().innerHTML = `<div class="pad"><button class="retourhaut" data-go="aujourdhui">Accueil</button><h1 class="titre">Question du jour</h1><p class="sous">${q.erreur ? 'Elle n\'a pas pu être chargée. Vérifie ta connexion.' : 'Pas de question du jour pour le moment.'}</p></div>`; return; }
+  const c = S.qdjCorrection, rep = S.qdjRep;
+  vue().innerHTML = `
+  <div class="pad">
+    <button class="retourhaut" data-go="aujourdhui">Accueil</button>
+    <div class="eyebrow">${E(dateDuJour())} · ${E(q.matiere || '')}</div>
+    <h1 class="titre">La question du jour</h1>
+    <p class="sous" style="margin:6px 0 14px">La même pour tous les candidats aujourd'hui${q.repondants ? ` · <span class="num">${q.repondants}</span> ont déjà répondu` : ''}.</p>
+    <div class="qtexte">${E(q.enonce)}</div>
+    ${(q.options || []).map((o, i) => {
+      let k = '';
+      if(c && c.ok){ if((c.bonnes || []).includes(i)) k = 'juste'; else if(i === rep) k = 'faux'; }
+      else if(i === rep) k = 'choisi';
+      return `<button class="opt ${k}" ${rep !== undefined ? 'disabled' : ''} data-qdj-rep="${i}"><span class="lettre">${'ABCD'[i] || '•'}</span>${E(o)}</button>`;
+    }).join('')}
+    ${c && c.ok ? `
+      <div class="retour ${c.correcte ? 'bien' : 'mal'}">
+        <b>${c.correcte ? 'Bonne réponse' : 'Réponse incorrecte'}</b>
+        ${c.correcte ? '' : `<div style="margin-bottom:6px">La bonne réponse : <strong class="bonne-rep">${E((c.bonnes || []).map(k => 'ABCD'[k] + '. ' + q.options[k]).join(' + '))}</strong></div>`}
+        ${c.explication ? `<b style="margin-top:2px">Pourquoi ?</b>${E(c.explication)}` : ''}
+      </div>
+      ${c.taux !== null && c.taux !== undefined && c.repondants >= 3 ? `<p class="sous" style="margin-top:10px"><span class="num">${c.taux} %</span> des ${c.repondants} candidats ont trouvé la bonne réponse aujourd'hui.</p>` : ''}
+      <button class="cta" style="margin-top:12px" data-partage-qdj="1">${ico('partage',16)} Défier un camarade<small>Envoie-lui la question du jour sur WhatsApp</small></button>
+      ${S.util.connecte ? `<button class="cta creux" style="margin-top:9px" data-pourtoi="10">Continuer avec 10 questions pour toi</button>`
+        : `<button class="cta creux" style="margin-top:9px" data-modal="inscription">Créer mon compte gratuit<small>Pour garder tes erreurs et ta progression</small></button>`}
+      ${S.util.connecte ? `<div class="actions-q"><button class="lien-mini" data-signaler="${E(q.id)}">${ico('drapeau',13)} Signaler une erreur</button></div>` : ''}` : ''}
+    ${rep !== undefined && !c ? `<p class="sous" style="margin-top:12px">Correction en cours…</p>` : ''}
+    ${c && !c.ok ? `<div class="retour mal"><b>Correction indisponible</b>${E(c.message || 'Réessaie dans un instant.')}</div>` : ''}
+  </div>`;
+}
+async function repondreQdj(i){
+  if(S.qdjRep !== undefined || !base) return;
+  S.qdjRep = i; S.qdjCorrection = null; ecranQdj();
+  try{
+    const { data, error } = await base.rpc('repondre_question_du_jour', { p_choix:[i], p_session: O.session || null });
+    if(error) throw error;
+    S.qdjCorrection = data || { ok:false };
+    if(data && data.ok){ data.correcte ? sonJuste() : sonFaux(); if(S.util.connecte) compterReponse(); }
+  }catch(e){ S.qdjCorrection = { ok:false, message:'Vérifie ta connexion.' }; S.qdjRep = undefined; }
+  pister('DAILY_QUESTION_ANSWERED', { juste: !!(S.qdjCorrection && S.qdjCorrection.correcte) });
+  if(S.ecran === 'qdj') ecranQdj();
+}
+
+/* ---------- une question reçue par lien ---------- */
+async function chargerQuestionPartagee(id){
+  if(!base) return;
+  S.lienQuestion = null;
+  S.qp = { id, charge:false };
+  try{
+    const { data } = await base.rpc('question_publique', { p_id: id });
+    S.qp = (data && data.ok) ? { ...data, charge:true } : { vide:true, charge:true };
+  }catch(e){ S.qp = { erreur:true, charge:true }; }
+  if(S.ecran === 'question') rendre();
+}
+function ecranQuestionPartagee(){
+  const q = S.qp;
+  if(!q || !q.charge){ vue().innerHTML = `<div class="pad"><div class="squelette large" style="margin-top:16px"></div></div>`; return; }
+  if(q.vide || q.erreur){ vue().innerHTML = `<div class="pad"><button class="retourhaut" data-go="aujourdhui">Accueil</button><h1 class="titre">Question indisponible</h1><p class="sous">Cette question n'existe plus ou n'est pas accessible pour le moment.</p><button class="cta" style="margin-top:14px" data-go="qdj">Voir la question du jour</button></div>`; return; }
+  const c = q.c, rep = q.rep;
+  vue().innerHTML = `
+  <div class="pad">
+    <button class="retourhaut" data-go="aujourdhui">Accueil</button>
+    <div class="eyebrow">Question partagée · ${E(q.matiere || '')}</div>
+    <h1 class="titre" style="font-size:24px">Un camarade te défie</h1>
+    <div class="qtexte" style="margin-top:12px">${E(q.enonce)}</div>
+    ${(q.options || []).map((o, i) => {
+      let k = '';
+      if(c && c.ok){ if((c.bonnes || []).includes(i)) k = 'juste'; else if(i === rep) k = 'faux'; }
+      else if(i === rep) k = 'choisi';
+      return `<button class="opt ${k}" ${rep !== undefined ? 'disabled' : ''} data-qp-rep="${i}"><span class="lettre">${'ABCD'[i] || '•'}</span>${E(o)}</button>`;
+    }).join('')}
+    ${rep !== undefined && !S.util.connecte ? `<div class="retour mal"><b>Ta réponse : ${'ABCD'[rep]}</b>Crée ton compte gratuit pour voir la correction et l'explication. Ça prend trente secondes.</div>
+      <button class="cta" style="margin-top:12px" data-modal="inscription">Créer mon compte et voir la correction</button>
+      <button class="cta creux" style="margin-top:9px" data-go="qdj">Essayer la question du jour (correction ouverte à tous)</button>` : ''}
+    ${c && c.ok ? `<div class="retour ${c.correcte ? 'bien' : 'mal'}"><b>${c.correcte ? 'Bonne réponse' : 'Réponse incorrecte'}</b>
+        ${c.correcte ? '' : `<div style="margin-bottom:6px">La bonne réponse : <strong class="bonne-rep">${E((c.bonnes || []).map(k => 'ABCD'[k] + '. ' + q.options[k]).join(' + '))}</strong></div>`}
+        ${c.explication ? `<b style="margin-top:2px">Pourquoi ?</b>${E(c.explication)}` : ''}</div>
+      <button class="cta" style="margin-top:12px" data-pourtoi="10">Continuer avec 10 questions pour toi</button>` : ''}
+    ${c && !c.ok ? `<div class="retour mal"><b>Correction indisponible</b>${E(c.message || '')}</div>` : ''}
+  </div>`;
+}
+async function repondreQuestionPartagee(i){
+  const q = S.qp; if(!q || q.rep !== undefined) return;
+  q.rep = i;
+  if(S.util.connecte){
+    const r = await corrigerAuServeur(q.id, [i], 'revision');
+    q.c = r; if(r.ok){ r.correcte ? sonJuste() : sonFaux(); compterReponse(); }
+  }
+  pister('SHARED_QUESTION_ANSWERED', { connecte: S.util.connecte });
+  rendre();
+}
+function partagerQuestion(id, texteQ){
+  const lien = CONTACT.site + '/?question=' + encodeURIComponent(id);
+  const t = 'Tu trouves la bonne réponse ? ' + (texteQ ? '« ' + texteQ + ' »' : '') + ' Réponds ici :';
+  pister('QUESTION_SHARED');
+  window.open('https://wa.me/?text=' + encodeURIComponent(t + ' ' + lien), '_blank', 'noopener');
+}
+
+/* ---------- les gagnants d'une composition collective ---------- */
+async function chargerClassement(id){
+  S.classementEp = { id, charge:false };
+  if(!base){ S.lienEpreuve = id; return; }
+  S.lienEpreuve = null;
+  if(S.ecran === 'gagnants') rendre();
+  try{
+    const { data } = await base.rpc('classement_epreuve', { p_epreuve: id });
+    S.classementEp = { ...(data || { ok:false }), id, charge:true };
+  }catch(e){ S.classementEp = { id, charge:true, ok:false, erreur:true }; }
+  if(S.ecran === 'gagnants') rendre();
+}
+const initialesPseudo = p => (p || '?').replace(/[^A-Za-zÀ-ÿ]/g, '').slice(0, 2).toUpperCase();
+const mmssLong = s => s ? Math.floor(s/60) + ' min ' + String(s%60).padStart(2,'0') : '—';
+const REACTIONS = [['bravo','Bravo'],['bien_joue','Bien joué'],['respect','Respect']];
+function boutonsReactions(l){
+  if(l.moi) return Object.keys(l.reactions || {}).length
+    ? `<div class="reactions">${REACTIONS.filter(([k]) => l.reactions[k]).map(([k, t]) => `<span class="reac lu">${t} · ${l.reactions[k]}</span>`).join('')}</div>` : '';
+  return `<div class="reactions">${REACTIONS.map(([k, t]) => {
+    const n = (l.reactions || {})[k] || 0, mien = (l.mes_reactions || []).includes(k);
+    return `<button class="reac ${mien ? 'on' : ''}" data-reagir="${E(l.composition)}|${k}" aria-pressed="${mien}">${t}${n ? ' · ' + n : ''}</button>`;
+  }).join('')}</div>`;
+}
+function ecranGagnants(){
+  const c = S.classementEp;
+  const tete = `<button class="retourhaut" data-go="aujourdhui">Accueil</button>`;
+  if(!c || !c.charge){ vue().innerHTML = `<div class="pad">${tete}<div class="squelette large" style="margin-top:16px"></div><div class="squelette"></div></div>`; return; }
+  if(!c.ok){ vue().innerHTML = `<div class="pad">${tete}<h1 class="titre">Classement indisponible</h1><p class="sous">${E(c.message || 'Vérifie ta connexion.')}</p></div>`; return; }
+  if(!c.termine){
+    vue().innerHTML = `<div class="pad">${tete}
+      <div class="eyebrow">Composition collective</div>
+      <h1 class="titre">Le classement arrive à ${heureFr(c.fin_le)}</h1>
+      <p class="sous" style="margin-top:8px"><span class="num">${c.participants}</span> participant${c.participants>1?'s':''} pour l'instant. Le classement national et le corrigé sont publiés à la fin de l'épreuve, pour que personne ne puisse souffler les réponses.</p>
+      <button class="cta creux" style="margin-top:14px" data-gagnants="${E(c.id)}">Actualiser</button></div>`;
+    return;
+  }
+  const liste = c.classement || [];
+  const podium = liste.filter(l => l.rang <= 3).slice(0, 3);
+  const reste = liste.filter(l => !podium.includes(l));
+  const major = podium[0];
+  vue().innerHTML = `
+  <div class="pad">
+    ${tete}
+    <div class="eyebrow">Composition collective · ${E(jourFr(c.debut_le))}</div>
+    <h1 class="titre">${E(c.titre)}</h1>
+    <p class="sous" style="margin-top:6px"><span class="num">${c.participants}</span> participant${c.participants>1?'s':''} · moyenne <span class="num">${c.moyenne ?? '—'}/${c.sur}</span>${c.recompense ? ` · récompense : <b>${E(c.recompense)}</b>` : ''}</p>
+
+    ${major ? `<div class="felicitations">
+      <div class="eyebrow" style="color:var(--or)">Félicitations</div>
+      <p>Bravo à <b>${E(major.pseudo)}</b>, major de cette composition avec <b class="num">${major.score}/${major.sur}</b>${c.recompense ? `. ${E(c.recompense)} lui revient` : ''}. ${podium.length > 1 ? 'Bravo aussi à ' + podium.slice(1).map(l => '<b>' + E(l.pseudo) + '</b>').join(' et ') + ' sur le podium.' : ''}</p>
+      ${c.message ? `<p style="margin-top:8px">${E(c.message)}</p>` : ''}
+    </div>` : '<div class="carte" style="margin-top:14px"><p class="sous">Aucune copie remise pour cette composition.</p></div>'}
+
+    <div class="podium">
+      ${podium.map(l => `<div class="marche r${l.rang}${l.moi ? ' moi' : ''}">
+        <div class="medaille">${l.rang}</div>
+        <div class="av">${E(initialesPseudo(l.pseudo))}</div>
+        <b>${E(l.pseudo)}${l.moi ? ' (toi)' : ''}</b>
+        <div class="note num">${l.score}<small>/${l.sur}</small></div>
+        <div class="duree">${mmssLong(l.duree)}</div>
+        ${boutonsReactions(l)}
+      </div>`).join('')}
+    </div>
+
+    ${c.moi ? `<div class="ma-place"><span>Ta place</span><b class="num">${c.moi.rang}<sup>${c.moi.rang === 1 ? 'er' : 'e'}</sup> sur ${c.participants}</b><span class="num">${c.moi.score}/${c.moi.sur}</span></div>
+      <button class="cta creux" style="margin-top:9px" data-partage-rang="1">${ico('partage',16)} Partager mon résultat</button>` : ''}
+
+    ${reste.length ? `<div class="bloc"><div class="libelle">Classement</div><div class="carte">
+      ${reste.map(l => `<div class="ligne-rang${l.moi ? ' moi' : ''}">
+        <span class="p num">${l.rang}</span>
+        <span class="n">${E(l.pseudo)}${l.moi ? ' (toi)' : ''}<em>${mmssLong(l.duree)}</em></span>
+        <span class="s num">${l.score}/${l.sur}</span>
+        ${boutonsReactions(l)}
+      </div>`).join('')}
+    </div></div>` : ''}
+    <p class="sous" style="margin-top:14px;font-size:12px">Les candidats apparaissent sous leur pseudo, jamais sous leur nom ni leur numéro. À égalité de note, le plus rapide passe devant.${S.journee && S.journee.pseudo ? ` Ton pseudo : <b>${E(S.journee.pseudo)}</b>.` : ''}</p>
+  </div>`;
+}
+async function reagir(val){
+  if(!S.util.connecte){ S.modal = 'connexion'; S.erreur = ''; return surcouche(); }
+  const [id, type] = val.split('|');
+  const c = S.classementEp; if(!c || !c.classement) return;
+  const l = c.classement.find(x => x.composition === id); if(!l) return;
+  /* affichage immédiat, le serveur confirme */
+  l.reactions = l.reactions || {}; l.mes_reactions = l.mes_reactions || [];
+  const avait = l.mes_reactions.includes(type);
+  l.mes_reactions = avait ? l.mes_reactions.filter(x => x !== type) : l.mes_reactions.concat(type);
+  l.reactions[type] = Math.max(0, (l.reactions[type] || 0) + (avait ? -1 : 1));
+  rendre();
+  try{
+    const { data } = await base.rpc('reagir_epreuve', { p_composition: id, p_type: type });
+    if(!data || !data.ok){ if(data && data.message) toast(data.message); chargerClassement(c.id); }
+  }catch(e){ chargerClassement(c.id); }
+}
+
+/* ---------- signaler une erreur dans une question ---------- */
+const MOTIFS = [['reponse_fausse','La bonne réponse est fausse'],['enonce_errone','L\'énoncé est faux ou incomplet'],
+  ['perime','L\'information n\'est plus à jour'],['faute','Faute d\'orthographe ou de frappe'],['autre','Autre chose']];
+function ouvrirSignalement(id){
+  if(!S.util.connecte){ S.modal = 'connexion'; S.erreur = ''; return surcouche(); }
+  S.signal = { id, motif:null };
+  S.modal = 'signal';
+  const v = document.getElementById('voile'); v.hidden = false;
+  v.innerHTML = `
+  <div class="panneau" role="dialog" aria-modal="true" aria-label="Signaler une erreur">
+    <div class="poignee"></div>
+    <h3>Signaler une erreur</h3>
+    <p class="intro">Merci. L'équipe vérifie chaque signalement et corrige la question si besoin.</p>
+    <div class="motifs">${MOTIFS.map(([k, t]) => `<label class="motif"><input type="radio" name="motif" value="${k}"> <span>${t}</span></label>`).join('')}</div>
+    <div class="champ" style="margin-top:12px"><label for="sig-com">Précision (facultatif)</label>
+      <textarea id="sig-com" maxlength="500" rows="3" placeholder="Ex. : la bonne réponse est C, d'après la Constitution de 1991."></textarea></div>
+    <button class="cta" data-signal-envoi="1">Envoyer le signalement</button>
+    <button class="cta creux" style="margin-top:9px" data-fermer-partage="1">Annuler</button>
+  </div>`;
+}
+async function envoyerSignalement(){
+  const choix = document.querySelector('input[name="motif"]:checked');
+  if(!choix){ toast('Choisis ce qui ne va pas.'); return; }
+  const com = (document.getElementById('sig-com') || {}).value || '';
+  try{
+    const { data } = await base.rpc('signaler_question', { p_question: S.signal.id, p_motif: choix.value, p_commentaire: com });
+    document.getElementById('voile').hidden = true; S.modal = null;
+    toast(data && data.ok ? (data.deja ? 'Déjà signalée : merci, elle est en cours de vérification.' : 'Signalement envoyé. Merci !') : ((data && data.message) || 'Envoi impossible.'));
+    pister('QUESTION_REPORTED', { motif: choix.value });
+  }catch(e){ toast('Envoi impossible. Vérifie ta connexion.'); }
+}
+
+/* ---------- quitter une épreuve ---------- */
+function demanderQuitter(){
+  S.modal = 'quitter';
+  const v = document.getElementById('voile'); v.hidden = false;
+  const nb = Object.keys(S.reponses || {}).length;
+  v.innerHTML = `
+  <div class="panneau" role="alertdialog" aria-modal="true" aria-labelledby="q-titre">
+    <div class="poignee"></div>
+    <h3 id="q-titre">Voulez-vous vraiment quitter cette épreuve ?</h3>
+    <p class="intro">Votre copie sera remise et corrigée avec les ${nb} réponse${nb>1?'s':''} déjà noircie${nb>1?'s':''}. Les questions sans réponse compteront comme blanches.</p>
+    <div class="duo">
+      <button class="cta creux" data-quitter-non="1">Non, je continue</button>
+      <button class="cta" style="background:var(--erreur)" data-quitter-oui="1">Oui, je quitte</button>
+    </div>
+  </div>`;
+  setTimeout(() => { const b = document.querySelector('[data-quitter-non]'); if(b) b.focus(); }, 30);
+}
+
+/* ---------- rappels sur le téléphone ---------- */
+const pushPossible = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+function cleVapid(b64){
+  const p = '='.repeat((4 - b64.length % 4) % 4);
+  const s = atob((b64 + p).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from([...s].map(c => c.charCodeAt(0)));
+}
+async function chargerRappel(){
+  if(!base || !S.util.connecte) return;
+  try{ const { data } = await base.rpc('mon_rappel'); S.rappel = data || null; rafraichirSiVisible(); }catch(e){}
+}
+async function activerRappel(heure){
+  if(!S.util.connecte){ S.modal = 'inscription'; S.erreur = ''; return surcouche(); }
+  if(!pushPossible()){ toast('Ce téléphone ne permet pas les rappels. Installe l\'application depuis Chrome pour les recevoir.', 6000); return; }
+  try{
+    const perm = await Notification.requestPermission();
+    if(perm !== 'granted'){ toast('Les notifications sont refusées. Autorise-les dans les réglages du navigateur.', 6000); return; }
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if(!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: cleVapid(VAPID_PUBLIC) });
+    const j = sub.toJSON();
+    const { data } = await base.rpc('enregistrer_rappel', { p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth, p_heure: +heure, p_minute: 0 });
+    if(!data || !data.ok) throw new Error('refus');
+    S.rappel = { heure:+heure, minute:0, actif:true };
+    toast('Rappel activé chaque jour à ' + heure + ' h. Tu seras aussi prévenu des compositions collectives.');
+    pister('REMINDER_ENABLED', { heure:+heure });
+    rendre();
+  }catch(e){ toast('Le rappel n\'a pas pu être activé. Réessaie avec une meilleure connexion.'); }
+}
+async function retirerRappel(){
+  try{
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if(sub){ await base.rpc('retirer_rappel', { p_endpoint: sub.endpoint }); await sub.unsubscribe(); }
+  }catch(e){}
+  S.rappel = null; toast('Rappels désactivés.'); pister('REMINDER_DISABLED'); rendre();
+}
+function blocRappels(){
+  if(!S.util.connecte) return '';
+  const h = S.rappel ? S.rappel.heure : null;
+  return `<div class="carte" style="margin-top:14px;text-align:left">
+    <div class="libelle" style="margin-bottom:8px">${ico('cloche',14)} Rappel quotidien</div>
+    <p class="sous" style="margin:0 0 10px">${h !== null
+      ? `Activé : un rappel à <b>${h} h</b> si ton objectif du jour n'est pas encore atteint. Tu es aussi prévenu avant chaque composition collective.`
+      : 'Choisis une heure : un seul rappel par jour, et seulement si tu n\'as pas encore atteint ton objectif. Tu peux l\'arrêter quand tu veux.'}</p>
+    <div class="objectifs grands" role="group" aria-label="Heure du rappel">
+      ${[6, 12, 17, 19, 20, 21].map(x => `<button class="${x === h ? 'on' : ''}" data-rappel-activer="${x}" aria-pressed="${x === h}">${x} h</button>`).join('')}
+    </div>
+    ${h !== null ? `<button class="lien" data-rappel-retirer="1">Arrêter les rappels</button>` : ''}
+  </div>`;
+}
+
+/* ---------- mes compositions, dans le compte ---------- */
+function blocMesCompositions(){
+  const j = S.journee; if(!j) return '';
+  const cs = (j.compositions || []).filter(c => c.sur > 0);
+  const jours = j.jours14 || [];
+  const maxJ = Math.max(1, ...jours.map(x => x.n));
+  let compo = '';
+  if(cs.length){
+    const pcts = cs.map(c => Math.round(c.score / c.sur * 100));
+    const moy = Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length);
+    const best = Math.max(...pcts);
+    const r3 = pcts.slice(0, 3), p3 = pcts.slice(3, 6);
+    const evol = (r3.length && p3.length) ? Math.round(r3.reduce((a,b)=>a+b,0)/r3.length - p3.reduce((a,b)=>a+b,0)/p3.length) : null;
+    compo = `
+      <div class="trio">
+        <div><b class="num">${cs.length}${cs.length >= 12 ? '+' : ''}</b><span>composition${cs.length>1?'s':''}</span></div>
+        <div><b class="num">${moy} %</b><span>moyenne</span></div>
+        <div><b class="num">${best} %</b><span>meilleure</span></div>
+      </div>
+      ${evol !== null ? `<p class="sous" style="margin-top:8px">Tes 3 dernières compositions : ${evol === 0 ? 'même niveau que les 3 d\'avant' : (evol > 0 ? '<span style="color:var(--vert-texte)">+' + evol + ' points</span>' : '<span style="color:var(--rouge-texte)">' + evol + ' points</span>') + ' par rapport aux 3 d\'avant'}.</p>` : ''}
+      <div class="barres" aria-label="Notes des dernières compositions">${cs.slice().reverse().map(c => {
+        const p = Math.round(c.score / c.sur * 100);
+        return `<i style="height:${Math.max(4, p)}%" title="${p} %${c.collective ? ' (collective)' : ''}" class="${c.collective ? 'col' : ''}"></i>`;
+      }).join('')}</div>
+      <div class="sous" style="font-size:11.5px;margin-top:4px">De la plus ancienne à la plus récente</div>`;
+  }
+  return `<div class="bloc">
+    <div class="libelle">Mes compositions et mon activité</div>
+    <div class="carte">
+      ${compo || '<p class="sous">Aucune composition terminée pour l\'instant.</p>'}
+      <div class="libelle" style="margin-top:16px">Questions par jour · 14 jours</div>
+      <div class="barres fines">${jours.map(x => `<i style="height:${Math.max(3, Math.round(x.n / maxJ * 100))}%" title="${x.n} question${x.n>1?'s':''}"></i>`).join('')}</div>
+      ${j.pseudo ? `<p class="sous" style="margin-top:12px;font-size:12.5px">Ton pseudo dans les classements : <b>${E(j.pseudo)}</b>. Ton nom et ton numéro n'y apparaissent jamais.</p>` : ''}
+    </div>
+  </div>`;
+}
+
+/* ---------- liens directs et bouton retour du téléphone ---------- */
+function ouvrirLienDirect(){
+  const p = new URLSearchParams(location.search);
+  const depuis = p.get('depuis');
+  if(depuis) pister('ARRIVED_FROM', { depuis: depuis.slice(0, 20) });
+  let cible = null;
+  if(p.get('q') === 'jour') cible = 'qdj';
+  else if(/^[0-9a-f-]{36}$/i.test(p.get('question') || '')){ cible = 'question'; S.lienQuestion = p.get('question'); S.qp = null; }
+  else if(/^[0-9a-f-]{36}$/i.test(p.get('epreuve') || '')){ cible = 'gagnants'; S.lienEpreuve = p.get('epreuve'); S.classementEp = null; }
+  if(p.toString()) try{ history.replaceState({ ecran: cible || S.ecran }, '', location.pathname); }catch(e){}
+  if(cible){
+    S.modalDejaVu = true;
+    if(ECRANS_DECOUVERTE.includes(S.ecran)) ecrireMemoire(Object.assign({}, lireMemoire() || {}, { dejaVenu:true }));
+    aller(cible);
+  }
+}
+var retourEnCours = false;
+try{ history.replaceState({ ecran: S.ecran }, ''); }catch(e){}
+window.addEventListener('popstate', ev => {
+  const v = document.getElementById('voile');
+  /* un panneau ouvert se ferme d'abord */
+  if(v && !v.hidden){
+    v.hidden = true; v.innerHTML = ''; S.modal = null;
+    try{ history.pushState({ ecran:S.ecran }, ''); }catch(e){}
+    return;
+  }
+  if(enComposition()){
+    try{ history.pushState({ ecran:'grille' }, ''); }catch(e){}
+    return demanderQuitter();
+  }
+  if(S.ecran === 'cahier' && repriseIdx !== null){
+    repriseIdx = null; repriseRep = undefined;
+    try{ history.pushState({ ecran:'cahier' }, ''); }catch(e){}
+    return rendre();
+  }
+  let e = (ev.state && ev.state.ecran) || 'aujourdhui';
+  if(ECRANS_DECOUVERTE.includes(e) && (S.util.connecte || (lireMemoire() || {}).dejaVenu)) e = 'aujourdhui';
+  retourEnCours = true;
+  aller(e);
+  retourEnCours = false;
+});
+
+/* Les nouveaux boutons ont leur propre écouteur : le grand aiguillage
+   plus bas reste tel quel. */
+document.addEventListener('click', ev => {
+  const t = ev.target.closest('[data-quitter],[data-quitter-oui],[data-quitter-non],[data-son],[data-correction-differee],[data-gagnants],[data-pourtoi],[data-fil-rep],[data-fil-suiv],[data-qdj-rep],[data-qp-rep],[data-signaler],[data-signal-envoi],[data-objectif],[data-rejoindre],[data-rappel-activer],[data-rappel-retirer],[data-reagir],[data-partage-question],[data-partage-qdj],[data-partage-rang],[data-sortir-reprise]');
+  if(!t) return;
+  const d = t.dataset;
+  try{ const cle = Object.keys(d)[0]; pister('BUTTON_CLICKED', { valeur: String(d[cle]).slice(0,40) }, cle); }catch(e){}
+
+  if(d.quitter) return demanderQuitter();
+  if(d.quitterNon){ document.getElementById('voile').hidden = true; S.modal = null; return; }
+  if(d.quitterOui){
+    document.getElementById('voile').hidden = true; S.modal = null;
+    pister('COMPOSITION_QUIT', { traitees: Object.keys(S.reponses).length, restant_s: S.chrono });
+    return remettre();
+  }
+  if(d.son){
+    S.sonCoupe = !S.sonCoupe; ecrireReglage('sonCoupe', S.sonCoupe);
+    const b = t; b.setAttribute('aria-pressed', String(!S.sonCoupe));
+    b.innerHTML = ico(S.sonCoupe ? 'muet' : 'son', 14) + '<span>' + (S.sonCoupe ? 'Son coupé' : 'Son') + '</span>';
+    if(!S.sonCoupe) bip(1);
+    return;
+  }
+  if(d.correctionDifferee){
+    (async () => {
+      try{
+        const { data } = await base.rpc('ma_copie', { p_composition: S.derniereCompo });
+        if(!data || !data.ok || data.correction_le){ toast('La correction n\'est pas encore publiée.'); return; }
+        (data.questions || []).forEach((q, i) => { if(S.grille[i]){ S.grille[i].bonnes = q.bonnes || []; S.grille[i].i = (q.bonnes || [])[0] ?? null; } });
+        S.correctionLe = null; chargerCahier(); rendre();
+      }catch(e){ toast('Vérifie ta connexion.'); }
+    })();
+    return;
+  }
+  if(d.gagnants){ chargerClassement(d.gagnants); return aller('gagnants'); }
+  if(d.pourtoi){ return lancerFil(d.pourtoi); }
+  if(d.filRep !== undefined) return repondreFil(+d.filRep);
+  if(d.filSuiv){ const f = S.fil; f.idx++; f.rep = undefined; f.c = null; f.debut = Date.now(); vue().scrollTop = 0; return ecranPourToi(); }
+  if(d.qdjRep !== undefined) return repondreQdj(+d.qdjRep);
+  if(d.qpRep !== undefined) return repondreQuestionPartagee(+d.qpRep);
+  if(d.signaler) return ouvrirSignalement(d.signaler);
+  if(d.signalEnvoi) return envoyerSignalement();
+  if(d.objectif){
+    const o = +d.objectif;
+    if(S.journee){ S.journee.objectif = o; rendre(); }
+    base && base.rpc('definir_objectif', { p_objectif: o }).then(() => {}, () => toast('Objectif non enregistré : vérifie ta connexion.'));
+    pister('DAILY_GOAL_SET', { objectif:o });
+    return;
+  }
+  if(d.rejoindre){
+    if(!S.util.connecte){ S.modal = 'inscription'; S.erreur = ''; return surcouche(); }
+    S.reponses = {}; S.corrige = false; S.grilleNote = null; S.corrigeServeur = null; effacerEpreuve();
+    S.compoTab = 'feuille'; S.sujetVu = false; S.apercu = null; S.compositionId = null; S.remiseEtat = null;
+    S.grille.length = 0; S.compoEtat = null; S.correctionLe = null;
+    S.rejoindre = d.rejoindre;
+    pister('COLLECTIVE_JOINED');
+    return aller('grille');
+  }
+  if(d.rappelActiver) return activerRappel(d.rappelActiver);
+  if(d.rappelRetirer) return retirerRappel();
+  if(d.reagir) return reagir(d.reagir);
+  if(d.partageQuestion){
+    const q = ((S.fil && S.fil.liste) || []).find(x => x.id === d.partageQuestion);
+    const qb = (S.banque || []).flatMap(m => m.questions).find(x => x.id === d.partageQuestion);
+    return partagerQuestion(d.partageQuestion, q ? q.enonce : (qb ? qb.q : ''));
+  }
+  if(d.partageQdj){
+    const q = S.qdj || {};
+    const t2 = 'Question du jour sur Mon Concours : « ' + (q.enonce || '') + ' » Tu as la réponse ? ' + CONTACT.site + '/?q=jour';
+    pister('DAILY_QUESTION_SHARED');
+    window.open('https://wa.me/?text=' + encodeURIComponent(t2), '_blank', 'noopener');
+    return;
+  }
+  if(d.partageRang){
+    const c = S.classementEp;
+    if(!c || !c.moi) return;
+    const t3 = `J'ai fini ${c.moi.rang}${c.moi.rang === 1 ? 'er' : 'e'} sur ${c.participants} à la composition collective « ${c.titre} » sur Mon Concours (${c.moi.score}/${c.moi.sur}). La prochaine, c'est avec toi : ${CONTACT.site}`;
+    window.open('https://wa.me/?text=' + encodeURIComponent(t3), '_blank', 'noopener');
+    return;
+  }
+  if(d.sortirReprise){ repriseIdx = null; repriseRep = undefined; return rendre(); }
+});
+
+/* =====================================================================
    RENDU + ÉVÉNEMENTS
    ===================================================================== */
 const SANS_TETE = ['test','grille','engagement','testIntro','resultat'];
@@ -3114,7 +3994,8 @@ function apptete(){
   const droite = {aujourdhui: jr === null ? '' : 'J−' + jr, copie:'copie corrigée', cahier:ouvertes()+' en attente',
     compte:S.gratuit ? '' : S.abo.actif?nomFormule(S.abo.formule).toLowerCase():'formule gratuite',
     revisions:S.niveau.toLowerCase(), qcm:S.matiere||'', abonnement:'', paiement:'sécurisé',
-    inscription:'', connexion:'', resultat:'étape 3 sur 3', actualite:'ce matin'}[S.ecran] || '';
+    inscription:'', connexion:'', resultat:'étape 3 sur 3', actualite:'ce matin',
+    pourtoi:'pour toi', qdj:'question du jour', gagnants:'classement'}[S.ecran] || '';
   const nonLues = S.notifications.filter(n => !n.lue).length;
   t.innerHTML = `${logoSvg(24)}<span class="mot">MON <i>CONCOURS</i></span>
     <span class="droite">${droite}</span>
@@ -3134,7 +4015,8 @@ function annoncer(){
   const n = {aujourdhui:"Aujourd'hui", actualite:'Actualité du matin', revisions:'Mes révisions',
     qcm:'Question', grille:'Composition', copie:'Copie corrigée', cahier:'Mon cahier', compte:'Mon compte',
     inscription:'Création de compte', connexion:'Connexion', abonnement:'Formules', paiement:'Paiement',
-    test:'Test de niveau', resultat:'Résultat'}[S.ecran] || '';
+    test:'Test de niveau', resultat:'Résultat', pourtoi:'Fil pour toi', qdj:'Question du jour',
+    question:'Question partagée', gagnants:'Classement de la composition collective'}[S.ecran] || '';
   const a = document.getElementById('annonce');
   if(a && n) a.textContent = 'Écran : ' + n;
 }
@@ -3153,6 +4035,9 @@ const COULEURS = ['Rouge','Bleu','Vert','Jaune','Orange','Noir','Blanc','Marron'
 
 function surcouche(){
   const v = document.getElementById('voile');
+  /* les autres panneaux (partage, notifications, signalement, sortie
+     d'épreuve) se gèrent eux-mêmes : un rendu ne doit pas les fermer */
+  if(S.modal && !['inscription','connexion','oubli'].includes(S.modal)) return;
   if(!S.modal || (S.util.connecte && S.modal !== 'oubli')){ v.hidden = true; v.innerHTML=''; return; }
 
   const mode = S.modal;                       // inscription · connexion · oubli
@@ -3274,7 +4159,8 @@ function rendre(){
     aujourdhui:ecranAujourdhui, actualite:ecranActualite,
     revisions:ecranRevisions, cours:ecranCours, lecture:ecranLecture, qcm:ecranQcm,
     grille:ecranGrille, copie:ecranCopie,
-    cahier:ecranCahier, compte:ecranCompte}[S.ecran] || ecranAujourdhui);
+    cahier:ecranCahier, compte:ecranCompte,
+    pourtoi:ecranPourToi, qdj:ecranQdj, question:ecranQuestionPartagee, gagnants:ecranGagnants}[S.ecran] || ecranAujourdhui);
 
   /* FILET — une erreur dans un seul écran ne doit plus jamais laisser
      le candidat devant une page noire. On affiche ce qui s'est passé
@@ -3306,6 +4192,8 @@ document.addEventListener('click', ev=>{
   }catch(e){}
 
   if(d.go){
+    /* pendant une épreuve, changer d'onglet demande confirmation */
+    if(enComposition() && d.go !== 'grille') return demanderQuitter();
     if(d.go==='testIntro') pister('ONBOARDING_STEP_COMPLETED', {etape:1}, 'engagement');
     if(d.go==='abonnement') pister('SUBSCRIPTION_PAGE_VIEWED');
     if(d.go==='paiement'){ S.paieEtape=0; pister('PAYMENT_STARTED', {formule:S.choixFormule}); }
@@ -3594,7 +4482,7 @@ document.addEventListener('click', ev=>{
   if(d.recommencer){
     S.reponses={}; S.corrige=false; S.grilleNote=null; S.corrigeServeur=null; effacerEpreuve();
     S.compoTab='feuille'; S.sujetVu=false; S.apercu=null; S.compositionId=null; S.remiseEtat=null;
-    S.grille.length = 0; S.compoEtat = null;
+    S.grille.length = 0; S.compoEtat = null; S.epreuveCompo = null; S.correctionLe = null;
     pister('COMPOSITION_RESTARTED', { type: d.recommencer });
     return aller('grille');
   }
@@ -3609,6 +4497,7 @@ document.addEventListener('click', ev=>{
     if(juste) sonJuste(); else sonFaux();
     pister('ERROR_REATTEMPTED', { juste });
     programmer(e, juste);                    // affichage immédiat, même règle que le serveur
+    if(e.id) compterReponse();
     if(juste && e.suite >= 3) pister('ERROR_FIXED');
     if(e.id){
       corrigerAuServeur(e.id, [i], 'erreurs').then(r => {
@@ -3624,4 +4513,5 @@ document.addEventListener('click', ev=>{
   }
 });
 
+ouvrirLienDirect();
 rendre();

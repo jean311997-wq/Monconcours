@@ -1241,3 +1241,104 @@ body.en-transition *{transition:background-color .4s ease, color .4s ease, borde
 }
 @media(prefers-reduced-motion:reduce){.geste-feuille .fleche{animation:none}}
 #demo-swipe.joue{pointer-events:auto}
+
+/* =====================================================================
+   14 octobre — chrono en couleurs, outils de l'épreuve, accueil
+   « Ta préparation aujourd'hui », fil Pour toi, question du jour,
+   composition collective et gagnants, signalement, rappels.
+   ===================================================================== */
+.gr-chrono{transition:color .6s ease, background .6s ease;border-radius:8px;padding:2px 7px}
+.gr-chrono.c-vert{color:#5FD39C}
+.gr-chrono.c-orange{color:#F2A93B}
+.gr-chrono.c-rouge{color:#FF6B57;background:rgba(255,80,60,.12)}
+.gr-chrono.c-urgent{color:#fff;background:#D93A28;animation:urgence .9s ease-in-out infinite}
+@keyframes urgence{0%,100%{box-shadow:0 0 0 0 rgba(217,58,40,.6)}50%{box-shadow:0 0 0 7px rgba(217,58,40,0)}}
+@media(prefers-reduced-motion:reduce){.gr-chrono.c-urgent{animation:none}}
+.gr-outils{display:flex;gap:6px;margin-top:7px}
+.gr-outil{display:inline-flex;align-items:center;gap:5px;font-family:var(--m);font-size:10.5px;letter-spacing:.06em;
+  text-transform:uppercase;color:#D8D0BC;border:1px solid #4A4A40;border-radius:999px;padding:5px 10px;min-height:30px}
+.gr-outil:active{transform:scale(.96)}
+.gr-outil[aria-pressed="false"]{color:#FF9D8A;border-color:#6B3A30}
+
+.titre-section{font-family:var(--d);font-weight:800;font-size:20px;letter-spacing:-.02em;margin:26px 0 4px}
+.prochaine{margin-top:14px;border:1.5px solid var(--laterite);border-radius:16px;padding:16px;
+  background:linear-gradient(160deg,var(--vert-fond),var(--ardoise) 70%)}
+.pr-titre{font-family:var(--d);font-weight:800;font-size:21px;letter-spacing:-.02em;line-height:1.15;margin:6px 0 6px}
+.pr-raison{font-size:13.5px;line-height:1.5;color:var(--craie2);margin-bottom:12px}
+.stat.lien-stat{cursor:pointer;width:100%;color:inherit;font:inherit}
+.stat .v small{font-size:13px;color:var(--craie2);font-weight:400}
+.jauge-obj,.jauge-defi{height:5px;border-radius:3px;background:var(--trait);overflow:hidden;margin:8px 0 6px}
+.jauge-obj i,.jauge-defi i{display:block;height:100%;background:var(--cachet);border-radius:3px;transition:width .6s cubic-bezier(.2,.8,.3,1)}
+.jauge-defi i{background:var(--or)}
+.objectifs{display:flex;gap:4px;justify-content:center;flex-wrap:wrap}
+.objectifs button{font-family:var(--m);font-size:11px;padding:4px 8px;border-radius:999px;border:1px solid var(--trait);color:var(--craie2);min-height:28px}
+.objectifs button.on{background:var(--laterite);border-color:var(--laterite);color:#fff}
+.objectifs.grands{justify-content:flex-start;gap:7px}
+.objectifs.grands button{font-size:12.5px;padding:7px 13px;min-height:36px}
+.raccourcis{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:12px}
+.raccourcis button{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;background:var(--ardoise);
+  border:1px solid var(--trait);border-radius:13px;padding:12px;color:var(--craie);min-height:84px}
+.raccourcis button svg{color:var(--laterite-txt);margin-bottom:3px}
+.raccourcis b{font-size:14px;font-weight:600}
+.raccourcis span{font-size:12px;color:var(--craie2)}
+.raccourcis button:active{transform:scale(.98)}
+@media(min-width:860px){.raccourcis{grid-template-columns:repeat(4,1fr)}}
+.direct-ligne{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:12.5px;color:var(--craie2)}
+.direct-ligne i{width:8px;height:8px;border-radius:50%;background:#3DDC84;box-shadow:0 0 0 3px rgba(61,220,132,.18);animation:battement 1.6s ease-in-out infinite}
+.carte.collective{margin-top:14px;border-color:var(--or-bord);background:linear-gradient(160deg,var(--or-fond),var(--ardoise) 75%)}
+.carte.collective .libelle span:first-child{display:inline-flex;align-items:center;gap:6px;color:var(--or)}
+.col-titre{font-family:var(--d);font-weight:800;font-size:19px;letter-spacing:-.02em;line-height:1.2}
+
+.fil-meta{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+.fil-raison{display:flex;gap:6px;align-items:flex-start;font-size:12.5px;line-height:1.45;color:var(--craie2);margin-bottom:12px}
+.fil-raison svg{flex:none;margin-top:2px}
+.actions-q{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px}
+.lien-mini{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--craie2);text-decoration:underline;text-underline-offset:3px;min-height:32px}
+
+.felicitations{margin-top:16px;border:1px solid var(--or-bord);background:var(--or-fond);border-radius:14px;padding:14px;font-size:14px;line-height:1.55}
+.felicitations p{margin-top:4px}
+.podium{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px;align-items:end}
+.marche{background:var(--ardoise);border:1px solid var(--trait);border-radius:14px;padding:12px 8px;text-align:center;position:relative;min-width:0}
+.marche.r1{order:2;border-color:var(--or);padding-top:20px;box-shadow:0 10px 30px -18px var(--or)}
+.marche.r2{order:1}.marche.r3{order:3}
+.marche.moi{outline:2px solid var(--laterite);outline-offset:2px}
+.marche .medaille{position:absolute;top:-11px;left:50%;transform:translateX(-50%);width:24px;height:24px;border-radius:50%;
+  display:grid;place-items:center;font-family:var(--m);font-size:12px;font-weight:700;color:#1A1405;background:#C9C9C9}
+.marche.r1 .medaille{background:var(--or)}
+.marche.r3 .medaille{background:#C98A55}
+.marche .av{width:46px;height:46px;border-radius:50%;margin:4px auto 8px;display:grid;place-items:center;font-family:var(--d);font-weight:800;
+  background:var(--ardoise2);border:2px solid var(--trait)}
+.marche.r1 .av{width:56px;height:56px;border-color:var(--or);font-size:18px}
+.marche b{display:block;font-size:12.5px;overflow-wrap:anywhere}
+.marche .note{font-family:var(--d);font-weight:800;font-size:22px;margin-top:4px}
+.marche .note small{font-size:12px;color:var(--craie2)}
+.marche .duree{font-size:11px;color:var(--craie2)}
+.ma-place{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-top:16px;padding:12px 14px;border-radius:12px;
+  border:1.5px solid var(--laterite);background:var(--vert-fond);font-size:13px}
+.ma-place b{font-family:var(--d);font-size:22px}
+.ligne-rang{display:grid;grid-template-columns:34px 1fr auto;gap:4px 10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--trait)}
+.ligne-rang.moi{background:var(--vert-fond);border-radius:8px;padding-left:6px}
+.ligne-rang .p{font-family:var(--m);color:var(--craie2)}
+.ligne-rang .n{font-size:14px}.ligne-rang .n em{display:block;font-style:normal;font-size:11.5px;color:var(--craie2)}
+.ligne-rang .s{font-family:var(--m);font-weight:600}
+.ligne-rang .reactions{grid-column:2 / 4}
+.reactions{display:flex;gap:5px;flex-wrap:wrap;justify-content:center;margin-top:8px}
+.ligne-rang .reactions{justify-content:flex-start;margin-top:2px}
+.reac{font-size:11px;padding:4px 9px;border-radius:999px;border:1px solid var(--trait);color:var(--craie2);min-height:28px}
+.reac.on{background:var(--or-fond);border-color:var(--or);color:var(--or)}
+.reac.lu{cursor:default}
+
+.motifs{display:flex;flex-direction:column;gap:6px}
+.motif{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--trait);border-radius:10px;font-size:14px;cursor:pointer}
+.motif input{accent-color:var(--laterite);width:18px;height:18px}
+.motif:has(input:checked){border-color:var(--laterite);background:var(--vert-fond)}
+.panneau textarea{width:100%;background:var(--ardoise);border:1px solid var(--trait);border-radius:11px;padding:10px;color:var(--craie);font:inherit;font-size:14px;resize:vertical}
+
+.trio{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center}
+.trio b{display:block;font-family:var(--d);font-weight:800;font-size:22px}
+.trio span{font-size:11.5px;color:var(--craie2)}
+.barres{display:flex;align-items:flex-end;gap:4px;height:70px;margin-top:12px;border-bottom:1px solid var(--trait)}
+.barres i{flex:1;background:var(--laterite);border-radius:3px 3px 0 0;min-width:4px}
+.barres i.col{background:var(--or)}
+.barres.fines{height:46px;gap:3px}
+.barres.fines i{background:var(--cachet)}

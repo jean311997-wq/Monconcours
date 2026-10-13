@@ -3,12 +3,12 @@
    Un candidat en 2G ne doit pas repayer le chargement à chaque visite,
    et un candidat sans réseau doit pouvoir relire ses cours.
    ===================================================================== */
-const VERSION = 'mc-v16';
+const VERSION = 'mc-v17';
 const COQUE   = VERSION + '-coque';   // les fichiers de l'application
 const DONNEES = VERSION + '-donnees'; // les réponses de la base
 
 const FICHIERS = [
-  '/', '/index.html', '/app.js?v=16', '/styles.css?v=16',
+  '/', '/index.html', '/app.js?v=17', '/styles.css?v=17',
   '/supabase-js.min.js?v=13', '/manifest.webmanifest', '/favicon.png', '/icone-192.png'
 ];
 
@@ -110,4 +110,24 @@ self.addEventListener('message', e => {
   if(e.data && e.data.type === 'active'){ self.skipWaiting(); return; }
   if(!e.data || e.data.type !== 'garder' || !e.data.url) return;
   caches.open(DONNEES).then(c => c.add(e.data.url).catch(() => {}));
+});
+
+/* Rappels : le serveur envoie un titre, un message et un lien. On
+   n'affiche rien d'autre, et un toucher ouvre l'application au bon endroit. */
+self.addEventListener('push', e => {
+  let d = {};
+  try{ d = e.data ? e.data.json() : {}; }catch(err){ d = { message: e.data ? e.data.text() : '' }; }
+  e.waitUntil(self.registration.showNotification(d.titre || 'Mon Concours', {
+    body: d.message || 'Ta séance du jour t\'attend.',
+    icon: '/icone-192.png', badge: '/favicon.png',
+    data: { lien: d.lien || '/' }, tag: (d.lien || 'rappel').slice(0, 60)
+  }));
+});
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const lien = (e.notification.data && e.notification.data.lien) || '/';
+  e.waitUntil(clients.matchAll({ type:'window', includeUncontrolled:true }).then(liste => {
+    for(const c of liste){ if('focus' in c){ c.navigate(lien).catch(() => {}); return c.focus(); } }
+    return clients.openWindow(lien);
+  }));
 });

@@ -226,7 +226,8 @@ function rendre(){
      pedagogie:vuePedagogie, candidats:vueCandidats,
      depot:vueDepot, import:vueImport, bibliotheque:vueBibliotheque,
      validation:vueValidation, questions:vueQuestions, sujets:vueSujets, actualites:vueActualites,
-     referentiel:vueReferentiel, journal:vueJournal, musique:vueMusique, paiements:vuePaiements }[A.vue] || vueApercu)();
+     referentiel:vueReferentiel, journal:vueJournal, musique:vueMusique, paiements:vuePaiements,
+     collectives:vueCollectives, signalements:vueSignalements }[A.vue] || vueApercu)();
   $('#vue').scrollTop = 0;
 }
 
@@ -2239,6 +2240,136 @@ async function vueJournal(pageJ){
     + barrePagination(pageJ, parPage, count || 0);
 
   document.querySelectorAll('[data-page-vers]').forEach(b => b.onclick = () => vueJournal(parseInt(b.dataset.pageVers, 10)));
+}
+
+/* ============================================================
+   COMPOSITIONS COLLECTIVES
+   Même sujet, même heure pour tous. Heure de Ouagadougou = UTC.
+   Prenez un sujet que personne n'a encore composé : pendant
+   l'épreuve, ses questions sont retirées des révisions.
+   ============================================================ */
+async function vueCollectives(){
+  const [{ data: sujets }, { data: compos }, { data: eps }] = await Promise.all([
+    db.from('sujets').select('id, reference, niveau, nb_questions, duree_secondes').eq('statut','publie').order('reference'),
+    db.from('compositions').select('sujet_id'),
+    db.from('epreuves_collectives').select('id, titre, sujet_id, debut_le, fin_le, recompense, message, statut, cree_le').order('debut_le', { ascending:false }).limit(30)
+  ]);
+  const usage = {};
+  (compos || []).forEach(c => { usage[c.sujet_id] = (usage[c.sujet_id] || 0) + 1; });
+  const demain = new Date(Date.now() + 86400000);
+  const defaut = demain.toISOString().slice(0, 10) + 'T15:00';
+
+  $('#vue').innerHTML = `
+    <h2 class="titre">Compositions collectives</h2>
+    <p class="sous">Tous les candidats composent le même sujet au même moment. Le corrigé et le classement (par pseudo) sont publiés à la fin. Chaque candidat reçoit une notification dans l'application, et un rappel sur son téléphone s'il les a activés.</p>
+
+    <div class="bloc">
+      <div class="libelle">Programmer une composition</div>
+      <div class="carte">
+        <div class="deux">
+          <div><label for="ec-titre">Titre</label><input id="ec-titre" maxlength="80" placeholder="Composition du samedi · Culture générale"></div>
+          <div><label for="ec-sujet">Sujet</label><select id="ec-sujet">
+            ${(sujets || []).map(s => `<option value="${E(s.id)}">${E(s.reference)} · ${E(s.niveau || 'tous niveaux')} · ${s.nb_questions} q. · ${Math.round((s.duree_secondes||1500)/60)} min · déjà composé ${usage[s.id] || 0} fois</option>`).join('')}
+          </select></div>
+          <div><label for="ec-debut">Début (heure de Ouagadougou)</label><input id="ec-debut" type="datetime-local" value="${defaut}"></div>
+          <div><label for="ec-recompense">Récompense (facultatif)</label><input id="ec-recompense" maxlength="120" placeholder="1 mois d'abonnement offert au major"></div>
+        </div>
+        <label for="ec-message">Message aux participants (facultatif)</label>
+        <textarea id="ec-message" rows="2" maxlength="400" placeholder="Bravo à tous, rendez-vous samedi prochain."></textarea>
+        <button class="cta vert petit" id="ec-creer" style="margin-top:10px">Programmer et prévenir les candidats</button>
+      </div>
+    </div>
+
+    <div class="bloc">
+      <div class="libelle">Compositions programmées</div>
+      <div class="carte">${!(eps || []).length ? '<div class="vide">Aucune composition collective pour l\'instant.</div>' : `
+        <table><thead><tr><th>Titre</th><th>Début</th><th>État</th><th></th></tr></thead><tbody>
+        ${eps.map(ep => {
+          const maintenant = Date.now(), d = new Date(ep.debut_le).getTime(), f = new Date(ep.fin_le).getTime();
+          const etat = ep.statut === 'annulee' ? 'annulée' : (maintenant < d ? 'à venir' : (maintenant < f ? 'en cours' : 'terminée'));
+          return `<tr><td><b>${E(ep.titre)}</b>${ep.recompense ? '<br><small>' + E(ep.recompense) + '</small>' : ''}</td>
+            <td>${E(new Date(ep.debut_le).toLocaleString('fr-FR', { timeZone:'Africa/Ouagadougou', weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }))} <small>(Ouaga)</small></td><td>${etat}</td>
+            <td style="text-align:right;white-space:nowrap">
+              ${etat === 'terminée' ? `<button class="lien" data-ec-classement="${E(ep.id)}">classement</button>` : ''}
+              ${etat === 'à venir' ? `<button class="lien" style="margin-left:10px" data-ec-annuler="${E(ep.id)}">annuler</button>` : ''}
+            </td></tr>`;
+        }).join('')}</tbody></table>`}
+      </div>
+      <div id="ec-detail"></div>
+    </div>`;
+
+  document.getElementById('ec-creer').onclick = async () => {
+    const titre = document.getElementById('ec-titre').value.trim();
+    const debut = document.getElementById('ec-debut').value;
+    if(!titre) return signal('Donnez un titre.', 'mal');
+    if(!debut) return signal('Choisissez la date et l\'heure.', 'mal');
+    const { data, error } = await db.rpc('programmer_epreuve', {
+      p_titre: titre, p_sujet: document.getElementById('ec-sujet').value,
+      p_debut: new Date(debut + ':00Z').toISOString(),
+      p_recompense: document.getElementById('ec-recompense').value,
+      p_message: document.getElementById('ec-message').value
+    });
+    if(error) return erreur(error, 'Programmation impossible');
+    if(!data || !data.ok) return signal((data && data.message) || 'Programmation impossible.', 'mal');
+    signal('Composition programmée. Les candidats sont prévenus.', 'bien');
+    vueCollectives();
+  };
+  $$('[data-ec-annuler]').forEach(b => b.onclick = async () => {
+    if(!confirm('Annuler cette composition collective ?')) return;
+    const { error } = await db.from('epreuves_collectives').update({ statut:'annulee' }).eq('id', b.dataset.ecAnnuler);
+    if(error) return erreur(error, 'Annulation impossible');
+    signal('Composition annulée.', 'info'); vueCollectives();
+  });
+  $$('[data-ec-classement]').forEach(b => b.onclick = async () => {
+    const { data } = await db.rpc('classement_epreuve', { p_epreuve: b.dataset.ecClassement });
+    const z = document.getElementById('ec-detail');
+    if(!data || !data.ok){ z.innerHTML = '<div class="carte">Classement indisponible.</div>'; return; }
+    z.innerHTML = `<div class="carte" style="margin-top:12px"><b>${E(data.titre)}</b> · ${data.participants} participants · moyenne ${data.moyenne ?? '—'}/${data.sur}
+      <table style="margin-top:8px"><thead><tr><th>Rang</th><th>Pseudo</th><th>Note</th><th>Durée</th></tr></thead><tbody>
+      ${(data.classement || []).map(l => `<tr><td>${l.rang}</td><td>${E(l.pseudo)}</td><td>${l.score}/${l.sur}</td><td>${Math.round((l.duree||0)/60)} min</td></tr>`).join('')}
+      </tbody></table></div>`;
+  });
+}
+
+/* ============================================================
+   SIGNALEMENTS DES CANDIDATS
+   ============================================================ */
+const MOTIFS_SIGNAL = { reponse_fausse:'Bonne réponse fausse', enonce_errone:'Énoncé faux ou incomplet',
+  perime:'Information périmée', faute:'Faute de frappe', autre:'Autre' };
+async function vueSignalements(){
+  const { data, error } = await db.from('signalements')
+    .select('id, motif, commentaire, statut, cree_le, question_id, questions(enonce, explication, question_options(position, texte, est_correcte))')
+    .order('cree_le', { ascending:false }).limit(100);
+  if(error) return erreur(error, 'Lecture impossible');
+  const nouveaux = (data || []).filter(s => s.statut === 'nouveau');
+  $('#vue').innerHTML = `
+    <h2 class="titre">Signalements</h2>
+    <p class="sous">Les candidats signalent une question qui leur paraît fausse. Vérifiez, corrigez la question dans « Questions », puis marquez le signalement.</p>
+    <div class="bloc"><div class="libelle">${nouveaux.length} à traiter · ${(data || []).length} au total</div>
+      ${!(data || []).length ? '<div class="carte"><div class="vide">Aucun signalement.</div></div>' :
+      (data || []).map(s => {
+        const q = s.questions || {};
+        const opts = (q.question_options || []).slice().sort((a, b) => a.position - b.position);
+        return `<div class="carte" style="margin-bottom:10px;${s.statut === 'nouveau' ? '' : 'opacity:.6'}">
+          <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap">
+            <b>${E(MOTIFS_SIGNAL[s.motif] || s.motif)}</b><small>${E(dateHeure(s.cree_le))} · ${E(s.statut)}</small></div>
+          ${s.commentaire ? `<p style="margin:6px 0;font-style:italic">« ${E(s.commentaire)} »</p>` : ''}
+          <p style="margin-top:6px">${E(q.enonce || 'Question supprimée')}</p>
+          <ol type="A" style="margin:4px 0 0 20px">${opts.map(o => `<li${o.est_correcte ? ' style="font-weight:bold;color:var(--vert-texte, #0E7A54)"' : ''}>${E(o.texte)}${o.est_correcte ? ' ✓' : ''}</li>`).join('')}</ol>
+          ${q.explication ? `<p style="margin-top:6px"><small>Explication : ${E(q.explication)}</small></p>` : ''}
+          <small style="display:block;margin-top:6px;color:#888">Identifiant de la question : ${E(s.question_id)}</small>
+          ${s.statut === 'nouveau' ? `<div style="margin-top:8px">
+            <button class="lien" data-sig="${s.id}|corrige">marquer corrigé</button>
+            <button class="lien" style="margin-left:12px" data-sig="${s.id}|rejete">rejeter</button></div>` : ''}
+        </div>`;
+      }).join('')}
+    </div>`;
+  $$('[data-sig]').forEach(b => b.onclick = async () => {
+    const [id, st] = b.dataset.sig.split('|');
+    const { error: e2 } = await db.from('signalements').update({ statut: st }).eq('id', +id);
+    if(e2) return erreur(e2, 'Mise à jour impossible');
+    signal(st === 'corrige' ? 'Marqué corrigé.' : 'Signalement rejeté.', 'info'); vueSignalements();
+  });
 }
 
 /* ============================================================
