@@ -227,7 +227,7 @@ function rendre(){
      depot:vueDepot, import:vueImport, bibliotheque:vueBibliotheque,
      validation:vueValidation, questions:vueQuestions, sujets:vueSujets, actualites:vueActualites,
      referentiel:vueReferentiel, journal:vueJournal, musique:vueMusique, paiements:vuePaiements,
-     collectives:vueCollectives, signalements:vueSignalements }[A.vue] || vueApercu)();
+     collectives:vueCollectives, signalements:vueSignalements, indicateurs:vueIndicateurs, propositions:vuePropositions }[A.vue] || vueApercu)();
   $('#vue').scrollTop = 0;
 }
 
@@ -2369,6 +2369,66 @@ async function vueSignalements(){
     const { error: e2 } = await db.from('signalements').update({ statut: st }).eq('id', +id);
     if(e2) return erreur(e2, 'Mise à jour impossible');
     signal(st === 'corrige' ? 'Marqué corrigé.' : 'Signalement rejeté.', 'info'); vueSignalements();
+  });
+}
+
+/* ============================================================
+   INDICATEURS : est-ce que Mon Concours aide vraiment ?
+   ============================================================ */
+async function vueIndicateurs(){
+  const [{ data: d, error }, { data: sansExpl }] = await Promise.all([
+    db.rpc('indicateurs_produit'),
+    db.from('questions').select('id, enonce, matieres(nom)').eq('statut','publie').is('explication', null).limit(40)
+  ]);
+  if(error) return erreur(error, 'Lecture impossible');
+  const pc = v => (v === null || v === undefined) ? '—' : v + ' %';
+  const a = d.activation || {}, r = d.retention || {}, ap = d.apprentissage || {}, ac = d.acquisition || {};
+  $('#vue').innerHTML = `
+    <h2 class="titre">Indicateurs</h2>
+    <p class="sous">Mesurer l'utilité, pas seulement les visites. Calculé sur les 30 derniers jours sauf mention contraire.</p>
+    <div class="bloc"><div class="carte"><table><tbody>
+      <tr><td><b>Activation</b><br><small>Nouveaux comptes qui font 10 questions ou une composition dès le premier jour</small></td><td class="num">${a.actives ?? 0} / ${a.inscrits ?? 0} (${pc(a.inscrits ? Math.round(100 * a.actives / a.inscrits) : null)})</td></tr>
+      <tr><td><b>Rétention</b><br><small>Comptes revenus travailler 1, 7 et 30 jours après l'inscription</small></td><td class="num">J1 ${pc(r.j1)} · J7 ${pc(r.j7)} · J30 ${pc(r.j30)}</td></tr>
+      <tr><td><b>Apprentissage</b><br><small>Erreurs reprises puis réussies dans « Mes erreurs »</small></td><td class="num">${ap.reussies ?? 0} / ${ap.reprises ?? 0} (${pc(ap.taux)})</td></tr>
+      <tr><td><b>Acquisition par recommandation</b><br><small>Sessions arrivées par un lien partagé · partages faits</small></td><td class="num">${ac.arrivees_lien ?? 0} · ${ac.partages ?? 0}</td></tr>
+      <tr><td><b>À traiter</b></td><td>${d.signalements} signalement(s) · ${d.propositions} proposition(s) · ${d.sans_explication} question(s) sans explication</td></tr>
+    </tbody></table></div></div>
+    <div class="bloc"><div class="libelle">Préparation à l'examen · compositions par semaine</div><div class="carte">
+      ${(d.compositions || []).length ? `<table><thead><tr><th>Semaine du</th><th>Compositions</th><th>Moyenne</th></tr></thead><tbody>
+        ${d.compositions.map(c => `<tr><td>${E(c.semaine)}</td><td class="num">${c.n}</td><td class="num">${c.moyenne ?? '—'} %</td></tr>`).join('')}</tbody></table>` : '<div class="vide">Aucune composition sur la période.</div>'}
+    </div></div>
+    <div class="bloc"><div class="libelle">Questions publiées sans explication (40 premières)</div><div class="carte">
+      <p class="sous">Une explication transforme une erreur en apprentissage. Complétez-les dans « Questions ».</p>
+      ${(sansExpl || []).map(q => `<div style="padding:6px 0;border-bottom:1px solid var(--trait, #333)"><small>${E(q.matieres ? q.matieres.nom : '')}</small><br>${E(q.enonce)}</div>`).join('') || '<div class="vide">Toutes les questions ont une explication.</div>'}
+    </div></div>`;
+}
+
+/* ============================================================
+   PROPOSITIONS DES CANDIDATS
+   ============================================================ */
+async function vuePropositions(){
+  const { data, error } = await db.from('propositions_candidats')
+    .select('id, enonce, options, bonne, explication, source, statut, cree_le, niveau, matieres(nom)')
+    .order('cree_le', { ascending:false }).limit(100);
+  if(error) return erreur(error, 'Lecture impossible');
+  $('#vue').innerHTML = `
+    <h2 class="titre">Propositions des candidats</h2>
+    <p class="sous">Des candidats proposent des questions. Vérifiez la bonne réponse et la source avant de publier : le candidat est prévenu quand sa question entre dans la banque.</p>
+    <div class="bloc">${!(data || []).length ? '<div class="carte"><div class="vide">Aucune proposition.</div></div>' : data.map(p => `
+      <div class="carte" style="margin-bottom:10px;${p.statut === 'nouvelle' ? '' : 'opacity:.6'}">
+        <small>${E(p.matieres ? p.matieres.nom : '—')} · ${E(p.niveau || 'tous niveaux')} · ${E(dateHeure(p.cree_le))} · ${E(p.statut)}</small>
+        <p style="margin-top:6px"><b>${E(p.enonce)}</b></p>
+        <ol type="A" style="margin:4px 0 0 20px">${(p.options || []).map((o, i) => `<li${i === p.bonne ? ' style="font-weight:bold;color:#0E7A54"' : ''}>${E(o)}${i === p.bonne ? ' ✓' : ''}</li>`).join('')}</ol>
+        ${p.explication ? `<p style="margin-top:6px"><small>Explication : ${E(p.explication)}</small></p>` : ''}
+        ${p.source ? `<p><small>Source : ${E(p.source)}</small></p>` : ''}
+        ${p.statut === 'nouvelle' ? `<div style="margin-top:8px"><button class="lien" data-prop="${p.id}|1">publier</button><button class="lien" style="margin-left:12px" data-prop="${p.id}|0">rejeter</button></div>` : ''}
+      </div>`).join('')}</div>`;
+  $$('[data-prop]').forEach(b => b.onclick = async () => {
+    const [id, pub] = b.dataset.prop.split('|');
+    const { data: r, error: e2 } = await db.rpc('valider_proposition_candidat', { p_id: +id, p_publier: pub === '1' });
+    if(e2) return erreur(e2, 'Traitement impossible');
+    signal(r && r.ok ? (pub === '1' ? 'Question publiée.' : 'Proposition rejetée.') : ((r && r.message) || 'Impossible.'), r && r.ok ? 'bien' : 'mal');
+    vuePropositions();
   });
 }
 

@@ -314,6 +314,7 @@ window.addEventListener('beforeunload', e => {
   if(r.qcmPos && typeof r.qcmPos === 'object') S.qcmPos = r.qcmPos;
   if(r.musique) S.musiqueVoulue = true;   // relancée au premier geste du candidat
   if(r.sonCoupe) S.sonCoupe = true;
+  if(r.concentration) S.concentration = true;
 })();
 
 /* Avant le premier dessin : si ce téléphone connaît déjà le candidat,
@@ -341,8 +342,12 @@ function aller(e){
   if(typeof retourEnCours !== 'undefined' && !retourEnCours && e !== S.ecran){
     try{ history.pushState({ ecran:e }, ''); }catch(err){}
   }
-  if(e === 'aujourdhui'){ chargerJournee(); chargerEpreuve(); }
-  if(e === 'compte'){ chargerJournee(); chargerRappel(); }
+  if(e === 'aujourdhui'){ chargerJournee(); chargerEpreuve(); chargerDetails(); }
+  if(e === 'compte' || e === 'parcours'){ chargerJournee(); chargerRappel(); chargerDetails(); chargerMonConcours(); }
+  if(e === 'cahier') chargerDetails();
+  if(e === 'notion') S.notion = null;
+  if(e === 'top') S.top = null;
+  if(['recherche','defi','proposer'].includes(e) && !S.banque) chargerQuestions();
   if(e === 'qdj' && !S.qdjRep && S.qdjRep !== 0) S.qdj = null;
   S.ecran = e; rendre(); vue().scrollTop = 0;
   try{ vue().focus({preventScroll:true}); }catch(err){}
@@ -368,7 +373,8 @@ function nav(){
   n.style.gridTemplateColumns = 'repeat(5,1fr)';
   n.innerHTML = ONGLETS.map(o=>{
     const on = (o.id===S.ecran || (o.id==='grille'&&S.ecran==='copie')
-      || (o.id==='aujourdhui'&&['actualite','pourtoi','qdj','gagnants','question'].includes(S.ecran))
+      || (o.id==='aujourdhui'&&['actualite','pourtoi','qdj','gagnants','question','notion','recherche','defi','top','proposer'].includes(S.ecran))
+      || (o.id==='compte'&&S.ecran==='parcours')
       || (o.id==='revisions'&&(S.ecran==='qcm'||S.ecran==='cours'))) ? 'on':'';
     const p = (o.id==='cahier' && ouvertes()) ? `<i class="pastille num">${ouvertes()}</i>`:'';
     const centre = o.id === 'grille' ? ' pivot' : '';
@@ -376,7 +382,7 @@ function nav(){
   }).join('');
   r.innerHTML = ONGLETS.map(o=>{
     const on = (o.id===S.ecran || (o.id==='grille'&&S.ecran==='copie')
-      || (o.id==='aujourdhui'&&['actualite','pourtoi','qdj','gagnants','question'].includes(S.ecran))
+      || (o.id==='aujourdhui'&&['actualite','pourtoi','qdj','gagnants','question','notion','recherche','defi','top','proposer'].includes(S.ecran))
       || (o.id==='revisions'&&(S.ecran==='qcm'||S.ecran==='cours'))) ? 'on':'';
     const p = (o.id==='cahier' && ouvertes()) ? `<span class="pastille num">${ouvertes()}</span>`:'';
     return `<button class="${on}" data-go="${o.id}"${on?' aria-current="page"':''}>
@@ -594,8 +600,12 @@ function ecranResultat(){
     </div>
 
     <div class="bonne-nouvelle">
-      <h2>La suite</h2>
-      <p>Tes fautes de ce test sont déjà dans « Mes erreurs ». Commence par elles.</p>
+      <h2>Tes trois prochaines actions</h2>
+      <ol class="actions-diag">
+        <li><b>Reprendre tes fautes de ce test.</b> Elles sont déjà dans « Mes erreurs » et reviendront jusqu'à être acquises.</li>
+        <li><b>${faibles.length ? 'Réviser ' + E(faibles[0]) : 'Garder ton avance'}.</b> ${faibles.length ? 'C\'est là que tu as perdu le plus de points : dix questions par jour suffisent pour commencer.' : 'Aucune matière faible sur ce test : passe directement aux questions du niveau de ton concours.'}</li>
+        <li><b>Faire ta première composition.</b> 50 questions en 25 minutes, sur la vraie feuille : tu verras ton niveau en conditions réelles.</li>
+      </ol>
     </div>
 
     <button class="cta" style="margin-top:18px" data-entrer="1">Entrer dans l'application<small>Actualité · révisions · composition · erreurs</small></button>
@@ -783,7 +793,7 @@ async function chargerCahier(){
       return {
         id: e.question_id, q: e.enonce, opts: e.options, i: bonne, bon: e.options[bonne],
         mien, matiere: e.matiere || null, theme: e.theme || null,
-        note: e.explication || '', rate: e.rate || 1, suite: e.suite || 0,
+        note: e.explication || '', rate: e.rate || 1, suite: e.suite || 0, notePerso: e.note_perso || '',
         revoirLe: new Date(e.revoir_le + 'T00:00:00').getTime(), session: 0
       };
     });
@@ -895,6 +905,7 @@ function brancherBase(){
   if(S.ecran === 'qdj') chargerQdj();
   if(S.lienQuestion) chargerQuestionPartagee(S.lienQuestion);
   if(S.lienEpreuve) chargerClassement(S.lienEpreuve);
+  if(S.lienDefi){ const id = S.lienDefi; S.lienDefi = null; ouvrirDefi(id); }
 }
 
 
@@ -902,7 +913,7 @@ function brancherBase(){
    OBSERVATION — collecte des événements
    Rien de personnel : ni saisie, ni mot de passe, ni position.
    ===================================================================== */
-const VERSION_APP = 'v15';
+const VERSION_APP = 'v16';
 
 const O = {
   session: null, precedent: null, dernierTemps: Date.now(), entreeEcran: Date.now(),
@@ -1216,6 +1227,7 @@ function ecranAujourdhui(){
       ${compteARebours()}
     </div>
     <h1 class="titre">${S.util.connecte ? 'Ta préparation aujourd\'hui' : 'Prépare ton concours aujourd\'hui'}</h1>
+    ${bandeauAccueil()}
 
     ${enCours?`
     <button class="reprise-compo" data-go="grille">
@@ -1228,6 +1240,7 @@ function ecranAujourdhui(){
     ${carteEpreuve()}
     ${blocPreparation()}
     ${blocDefi()}
+    ${blocPlus()}
 
     <h2 class="titre-section">L'actualité utile au concours</h2>
     <div class="ligne-direct">
@@ -1709,6 +1722,7 @@ window.filtrerCours = function(v){
   }, 180);
 };
 
+const tailleFr = o => o >= 1048576 ? (o / 1048576).toFixed(1).replace('.', ',') + ' Mo' : Math.max(1, Math.round(o / 1024)) + ' Ko';
 function ecranCours(){
   const q = (S.rechercheCours || '').trim().toLowerCase();
   const dispo = !q ? S.ressources : (S.ressources || []).filter(r =>
@@ -1716,7 +1730,8 @@ function ecranCours(){
       .toLowerCase().includes(q));
   const parMatiere = {};
   const ordreMatieres = [];                 /* on garde l'ordre du programme */
-  (dispo || []).forEach(r => {
+  const annales = (dispo || []).filter(r => r.type_ressource === 'annale');
+  (dispo || []).filter(r => r.type_ressource !== 'annale').forEach(r => {
     const m = r.matiere || 'Autres documents';
     if(!parMatiere[m]){ parMatiere[m] = []; ordreMatieres.push(m); }
     parMatiere[m].push(r);
@@ -1744,6 +1759,14 @@ function ecranCours(){
 
     ${S.erreurCours ? `<div class="carte" style="border-color:var(--rouge-bord);background:var(--rouge-fond)"><p class="sous">${E(S.erreurCours)}</p></div>` : ''}
 
+    ${annales.length ? `<div class="carte cours-mat annales">
+      <div class="cm-tete"><h2>Annales officielles</h2><span class="num">${annales.length}</span></div>
+      <p class="cm-prog">Les vrais sujets des sessions passées, séparés des sujets d'entraînement.</p>
+      ${annales.map(r => r.texte
+        ? `<button class="lien" style="display:block;text-align:left;padding:7px 0" data-lire="${r.id}">${E(r.titre)}${r.matiere ? ' · ' + E(r.matiere) : ''}</button>`
+        : `<div class="fascicule"><div class="ligne1"><span class="ic">PDF</span><div class="co"><b>${E(r.titre)}</b><span>${r.taille_octets ? tailleFr(r.taille_octets) : 'Document'}</span></div></div>
+            <div class="paire"><button class="mini" data-telecharger="${r.id}">Télécharger</button></div></div>`).join('')}
+    </div>` : ''}
     ${dispo === null
       ? `<div class="carte"><p class="sous">Chargement de la bibliothèque…</p></div>`
       : !dispo.length
@@ -1761,7 +1784,7 @@ function ecranCours(){
             ${parMatiere[m].filter(r => r.fichier_chemin && !r.texte).map(r => `
               <div class="fascicule">
                 <div class="ligne1"><span class="ic">PDF</span>
-                  <div class="co"><b>${E(r.titre)}</b><span>Document à télécharger</span></div></div>
+                  <div class="co"><b>${E(r.titre)}</b><span>Document à télécharger${r.taille_octets ? ' · ' + tailleFr(r.taille_octets) : ''}</span></div></div>
                 <div class="paire"><button class="mini" data-telecharger="${r.id}">Télécharger</button></div>
               </div>`).join('')}
           </div>`).join('')}
@@ -2309,6 +2332,7 @@ function ecranQcm(){
   vue().innerHTML = `
   <div class="qcm-tete">
     <span class="q">${E(m.nom.toUpperCase())} · QUESTION ${idx + 1} / ${total}</span>
+    <button class="x-mode ${S.concentration ? 'on' : ''}" data-concentration="1" aria-pressed="${!!S.concentration}" aria-label="Mode concentration">${ico('cible',15)}</button>
     <button class="x" data-go="revisions" aria-label="Fermer">✕</button>
   </div>
   <div class="qzone" style="padding-top:12px">
@@ -2343,6 +2367,7 @@ function ecranQcm(){
       </div>
       ${motiv ? `<div class="motiv"><b>${E(motiv)}</b></div>` : ''}
       ${typeof c.quota_restant === 'number' ? `<p class="sous" style="margin-top:8px;font-size:12px">${c.quota_restant} correction${c.quota_restant>1?'s':''} gratuite${c.quota_restant>1?'s':''} restante${c.quota_restant>1?'s':''} aujourd'hui.</p>` : ''}
+      ${!c.correcte ? `<button class="cta creux" style="margin-top:10px" data-similaires="${E(q.id)}">S'entraîner sur 3 questions similaires</button>` : ''}
       <div class="actions-q">
         <button class="lien-mini" data-signaler="${E(q.id)}">${ico('drapeau',13)} Signaler une erreur</button>
         <button class="lien-mini" data-partage-question="${E(q.id)}">${ico('partage',13)} Partager</button>
@@ -2414,6 +2439,7 @@ function ecranGrille(){
         <div class="eyebrow" style="color:#B5AC96">${S.epreuveCompo ? 'Composition collective' : 'Entraînement type ' + E(S.concours)} · ${nbQ} questions</div>
         <div class="gr-outils">
           <button class="gr-outil" data-quitter="1" aria-label="Quitter l'épreuve">${ico('sortie',14)}<span>Quitter</span></button>
+          <button class="gr-outil" data-plein-ecran="1" aria-label="Plein écran">${ico('examen',14)}<span>${document.fullscreenElement ? 'Quitter le plein écran' : 'Plein écran'}</span></button>
           <button class="gr-outil" data-son="1" aria-pressed="${!S.sonCoupe}" aria-label="${S.sonCoupe ? 'Remettre le son' : 'Couper le son'}">${ico(S.sonCoupe ? 'muet' : 'son',14)}<span>${S.sonCoupe ? 'Son coupé' : 'Son'}</span></button>
         </div></div>
       <div style="text-align:right">
@@ -2934,6 +2960,10 @@ function ecranCahier(){
   const scoreSession = e => (S.cahierDepuisGrille && e.session===S.sessionCounter) ? 1 : 0;
   list = [...list].sort((a,b)=> (scoreSession(b)-scoreSession(a)) || (joursRestants(a)-joursRestants(b)));
   if(S.cahierFiltre) list = [...list].sort((a,b)=>b.rate-a.rate);
+  const vueC = S.cahierVue || 'toutes';
+  const nDiff = list.filter(e => e.rate >= 2 && e.suite < 3).length;
+  if(vueC === 'jour') list = list.filter(e => joursRestants(e) === 0 && e.suite < 3);
+  if(vueC === 'difficiles') list = list.filter(e => e.rate >= 2 && e.suite < 3).sort((a,b) => b.rate - a.rate);
   const closes = S.cahier.filter(e=>e.suite>=3);
   if(repriseIdx !== null){ return ecranReprise(); }
   vue().innerHTML = `
@@ -2949,9 +2979,17 @@ function ecranCahier(){
       <button class="voirplus" style="margin-top:9px" data-toutcahier="1">VOIR TOUT LE CAHIER</button></div>`:''}
     <p class="sous" style="margin-top:8px">Une erreur ne disparaît qu'après trois bonnes réponses d'affilée. Après chaque réussite, elle est reprogrammée : d'abord dans 3 jours, puis dans 7, puis dans 21. ${dues() > 1 ? `<span class="num">${dues()}</span> sont à revoir aujourd'hui.` : dues() === 1 ? `Une est à revoir aujourd'hui.` : `Aucune n'est à revoir aujourd'hui.`}</p>
 
+    <div class="onglets" style="margin-top:12px" role="group" aria-label="Filtrer mes erreurs">
+      <button class="${vueC==='toutes'?'on':''}" data-cahier-vue="toutes">Toutes</button>
+      <button class="${vueC==='jour'?'on':''}" data-cahier-vue="jour">Aujourd'hui · ${dues()}</button>
+      <button class="${vueC==='difficiles'?'on':''}" data-cahier-vue="difficiles">Difficiles · ${nDiff}</button>
+    </div>
+    ${vueC === 'difficiles' ? `<p class="sous" style="margin-top:8px">Les questions ratées au moins deux fois. Lis l'explication lentement, écris-toi une note, puis reprends-les une par une.</p>` : ''}
+    ${S.details && typeof S.details.erreurs_mois === 'number' ? `<p class="sous" style="margin-top:8px">Ce mois-ci : <b class="num">${S.details.erreurs_mois}</b> réponse${S.details.erreurs_mois>1?'s':''} fausse${S.details.erreurs_mois>1?'s':''} · <b class="num">${S.details.refermees_total || 0}</b> erreur${(S.details.refermees_total||0)>1?'s':''} refermée${(S.details.refermees_total||0)>1?'s':''} depuis le début.</p>` : ''}
+    ${ouvertes() ? `<button class="lien-mini" style="margin-top:6px" data-export-cahier="1">${ico('telecharger',13)} Télécharger mon cahier en PDF</button>` : ''}
     ${list.length ? `
     <div class="bloc">
-      ${repartitionErreurs(list)}
+      ${vueC === 'toutes' ? repartitionErreurs(list) : ''}
       <div class="libelle" style="margin-top:16px">Toutes mes erreurs<span class="num">${dues()} à revoir sur ${list.length}</span></div>
       ${list.map(e=>{
         const idx = S.cahier.indexOf(e);
@@ -2962,6 +3000,12 @@ function ecranCahier(){
           ${e.mien ? `<div class="ligne">Votre dernière réponse : « ${E(e.mien)} »</div>` : ''}
           <div class="ligne">Bonne réponse : <b>${E(e.bon)}</b></div>
           <div class="ligne" style="margin-top:6px;color:var(--craie2)">${E(e.note)}</div>
+          ${e.rate >= 3 ? `<div class="alerte-err">${ico('drapeau',13)} Revenue ${e.rate} fois : prends le temps de comprendre pourquoi.</div>` : ''}
+          ${e.id ? (S.noteOuverte === e.id
+            ? `<div class="note-perso"><textarea id="note-${E(e.id)}" maxlength="300" rows="2" placeholder="Ex. : je confonds toujours le Premier ministre et le président de l'Assemblée.">${E(e.notePerso || '')}</textarea>
+                <button class="mini" data-note-save="${E(e.id)}">Enregistrer</button></div>`
+            : (e.notePerso ? `<div class="note-perso lue"><b>Ma note</b> ${E(e.notePerso)} <button class="lien-mini" data-note-edit="${E(e.id)}">modifier</button></div>`
+              : `<button class="lien-mini" data-note-edit="${E(e.id)}">${ico('lire',13)} Ajouter une note personnelle</button>`)) : ''}
           <div class="pied">
             ${validee
               ? `<span class="echeance ok">✓ VALIDÉE</span>`
@@ -3028,7 +3072,10 @@ function recompenses(){
     palier('50', '50 questions', q, 50),
     palier('250', '250 questions', q, 250),
     palier('1000', '1 000 questions', q, 1000),
+    palier('×3', 'En progression : 3 jours d\'affilée', serie, 3, 'jours'),
     palier('×7', '7 jours d\'affilée', serie, 7, 'jours'),
+    palier('R14', 'Régulier : 14 jours de travail', jours, 14, 'jours'),
+    palier('50 %', 'Composition réussie (25/50 ou plus)', st.meilleure_note || 0, 25, 'points'),
     palier('×30', '30 jours de travail', jours, 30, 'jours'),
     palier('C1', 'Première composition', compo, 1),
     palier('C10', '10 compositions', compo, 10),
@@ -3059,6 +3106,12 @@ function ecranCompte(){
       <div class="stat"><div class="v num">${S.stats ? nombreFr(S.stats.questions_resolues) : '—'}</div><div class="l">Questions résolues</div></div>
       <div class="stat"><div class="v num">${S.stats ? S.stats.taux_reussite + ' %' : '—'}</div><div class="l">Taux de réussite</div></div>
     </div>
+
+    ${blocNiveau(true)}
+    <button class="grande" style="margin-top:10px" data-go="parcours">
+      <span class="ic">${ico('diagnostic',19)}</span>
+      <span><b>Mon parcours</b><span>Depuis ton premier jour, matière par matière, et ta carte à partager</span></span>
+      <span class="fl">→</span></button>
 
     <div class="classement">
       <div class="t">${ico('trophee',14)} Position estimée</div>
@@ -3193,6 +3246,9 @@ function ecranCompte(){
         </div>
         <p class="sous" style="margin-top:12px;border-left:2px solid var(--or);padding-left:11px">
           ${S.stats && S.stats.serie >= 3 ? 'Trois jours ou plus d\'affilée : c\'est la régularité qui fait la différence. Ne cassez pas la série.' : 'Un peu chaque jour vaut mieux que beaucoup une fois par semaine. Revenez demain, même pour dix questions.'}</p>
+        ${S.util.connecte && S.details ? (S.details.pause_aujourdhui
+          ? '<p class="sous" style="margin-top:10px;font-size:12.5px">Jour de pause aujourd\'hui : ta série est protégée.</p>'
+          : `<button class="cta creux" style="margin-top:12px" data-pause="1">Prendre un jour de pause<small>Malade, en voyage, en examen : ta série ne casse pas · ${Math.max(0, 2 - (S.details.pauses_mois || 0))} sur 2 ce mois-ci</small></button>`) : ''}
       </div>
     </div>
 
@@ -3220,6 +3276,7 @@ function ecranCompte(){
           ${ico("partage",16)} Partager Mon Concours à un camarade<small>Qui prépare le concours lui aussi</small></button>
       </div>
 
+      ${blocConcoursVise()}
       ${blocRappels()}
 
       <div class="carte" style="margin-top:14px;text-align:left">
@@ -3258,6 +3315,7 @@ async function chargerJournee(){
   try{
     const { data } = await base.rpc('ma_journee');
     if(data){ S.journee = data; rafraichirSiVisible(); }
+    if(!S.details) chargerDetails();
   }catch(e){}
 }
 async function chargerEpreuve(){
@@ -3444,7 +3502,9 @@ async function lancerFil(n){
 function ecranPourToi(){
   const f = S.fil;
   if(!f) return lancerFil(10);
-  const tete = (txt) => `<div class="qcm-tete"><span class="q">${txt}</span>
+  const nomFil = f.titre || 'POUR TOI';
+  const tete = (txt) => `<div class="qcm-tete"><span class="q">${txt.replace('POUR TOI', E(nomFil))}</span>
+      <button class="x-mode ${S.concentration ? 'on' : ''}" data-concentration="1" aria-pressed="${!!S.concentration}" aria-label="Mode concentration">${ico('cible',15)}</button>
       <button class="x" data-go="aujourdhui" aria-label="Fermer">✕</button></div>`;
   if(f.liste === null){
     vue().innerHTML = tete('POUR TOI') + `<div class="qzone" style="padding-top:12px"><div class="squelette large"></div><div class="squelette"></div><p class="sous">On choisit tes questions…</p></div>`;
@@ -3462,7 +3522,9 @@ function ecranPourToi(){
         <div class="stat"><div class="v num">${f.justes}</div><div class="l">Bonnes réponses</div></div>
         <div class="stat"><div class="v num">${f.revues}</div><div class="l">Erreurs revues</div></div>
       </div>
-      <p class="sous" style="margin-top:12px">${f.justes === f.liste.length ? 'Sans faute. Les questions ratées reviendront plus tard pour vérifier qu\'elles tiennent.' : 'Les questions ratées sont dans « Mes erreurs » : elles reviendront jusqu\'à être acquises.'}</p>
+      ${(f.fautes || []).length ? `<div class="bloc"><div class="libelle">À revoir avant de partir</div>
+        ${f.fautes.slice(0, 3).map(x => `<div class="err" style="margin-bottom:8px"><div class="q" style="font-size:13.5px">${E(x.q)}</div><div class="ligne">Bonne réponse : <b>${E(x.bon)}</b></div></div>`).join('')}</div>` : ''}
+      <div class="verdict solide" style="margin-top:12px"><b>Pour ta prochaine visite</b>${E(conseilProchaineVisite(f))}</div>
       <button class="cta" style="margin-top:14px" data-pourtoi="10">Encore 10 questions</button>
       <button class="cta creux" style="margin-top:9px" data-go="aujourdhui">Revenir à l'accueil</button>
     </div>`;
@@ -3492,12 +3554,22 @@ function ecranPourToi(){
         ${c.explication ? `<b style="margin-top:2px">Pourquoi ?</b>${E(c.explication)}` : ''}
         ${c.acquise ? '<div style="margin-top:6px;font-size:12.5px">Trois bonnes réponses d\'affilée : elle sort de « Mes erreurs ».</div>' : (c.correcte ? '' : '<div style="margin-top:6px;font-size:12.5px">Elle reste dans « Mes erreurs ».</div>')}
       </div>
+      ${!c.correcte && q.etiquette !== 'Similaire' ? `<button class="cta creux" style="margin-top:10px" data-similaires="${E(q.id)}">S'entraîner sur 3 questions similaires</button>` : ''}
       <div class="actions-q">
         <button class="lien-mini" data-signaler="${E(q.id)}">${ico('drapeau',13)} Signaler une erreur</button>
         <button class="lien-mini" data-partage-question="${E(q.id)}">${ico('partage',13)} Partager</button>
       </div>
+      <p class="sous glisser-info">Glisse vers le haut pour la suite</p>
       <button class="cta" style="margin-top:12px" data-fil-suiv="1">${f.idx + 1 < f.liste.length ? 'Question suivante →' : 'Voir mon bilan'}</button>` : ''}
   </div>`;
+}
+function conseilProchaineVisite(f){
+  const j = S.journee || {};
+  const taux = f.liste.length ? f.justes / f.liste.length : 0;
+  if((f.fautes || []).length >= 3) return 'Reviens demain : tes fautes d\'aujourd\'hui reviendront en premier, c\'est le meilleur moment pour les fixer.';
+  if(taux >= 0.8 && !j.compos_semaine) return 'Tu es prêt pour une composition complète en conditions réelles : 50 questions, 25 minutes.';
+  if(taux >= 0.8) return 'Très bonne série. Demain, essaie les questions les plus ratées par tous.';
+  return 'Demain, dix minutes suffisent : le fil reprendra là où tu bloques.';
 }
 async function repondreFil(i){
   const f = S.fil; if(!f || f.rep !== undefined) return;
@@ -3508,6 +3580,7 @@ async function repondreFil(i){
   if(r.ok){
     if(r.correcte){ f.justes++; sonJuste(); } else sonFaux();
     if(q.contexte === 'erreurs') f.revues++;
+    if(!r.correcte){ f.fautes = f.fautes || []; f.fautes.push({ q:q.enonce, bon:(r.bonnes || []).map(k => q.options[k]).join(' + ') }); }
     compterReponse();
     pister('FEED_ANSWERED', { juste: !!r.correcte, etiquette: q.etiquette });
   }
@@ -3825,7 +3898,7 @@ function blocRappels(){
 function blocMesCompositions(){
   const j = S.journee; if(!j) return '';
   const cs = (j.compositions || []).filter(c => c.sur > 0);
-  const jours = j.jours14 || [];
+  const jours = (j.jours14 || []).slice(-(S.graph || 7));
   const maxJ = Math.max(1, ...jours.map(x => x.n));
   let compo = '';
   if(cs.length){
@@ -3851,7 +3924,8 @@ function blocMesCompositions(){
     <div class="libelle">Mes compositions et mon activité</div>
     <div class="carte">
       ${compo || '<p class="sous">Aucune composition terminée pour l\'instant.</p>'}
-      <div class="libelle" style="margin-top:16px">Questions par jour · 14 jours</div>
+      <div class="libelle" style="margin-top:16px"><span>Questions par jour</span>
+        <span class="bascule-graph"><button class="${(S.graph || 7) === 7 ? 'on' : ''}" data-graph="7">7 j</button><button class="${S.graph === 30 ? 'on' : ''}" data-graph="30">30 j</button></span></div>
       <div class="barres fines">${jours.map(x => `<i style="height:${Math.max(3, Math.round(x.n / maxJ * 100))}%" title="${x.n} question${x.n>1?'s':''}"></i>`).join('')}</div>
       ${j.pseudo ? `<p class="sous" style="margin-top:12px;font-size:12.5px">Ton pseudo dans les classements : <b>${E(j.pseudo)}</b>. Ton nom et ton numéro n'y apparaissent jamais.</p>` : ''}
     </div>
@@ -3867,6 +3941,7 @@ function ouvrirLienDirect(){
   if(p.get('q') === 'jour') cible = 'qdj';
   else if(/^[0-9a-f-]{36}$/i.test(p.get('question') || '')){ cible = 'question'; S.lienQuestion = p.get('question'); S.qp = null; }
   else if(/^[0-9a-f-]{36}$/i.test(p.get('epreuve') || '')){ cible = 'gagnants'; S.lienEpreuve = p.get('epreuve'); S.classementEp = null; }
+  else if(/^[0-9a-f-]{36}$/i.test(p.get('defi') || '')){ cible = 'defi'; S.lienDefi = p.get('defi'); S.defi = { etat:'chargement', id:p.get('defi') }; }
   if(p.toString()) try{ history.replaceState({ ecran: cible || S.ecran }, '', location.pathname); }catch(e){}
   if(cible){
     S.modalDejaVu = true;
@@ -3983,6 +4058,563 @@ document.addEventListener('click', ev => {
 });
 
 /* =====================================================================
+   SUITE DES PROPOSITIONS : niveaux, mission du jour, citations, notion
+   du jour, questions similaires et pièges, recherche, défis entre amis,
+   top 10, propositions de questions, parcours, carte de progression,
+   pause de série, concours visé, plein écran, concentration, installation.
+   ===================================================================== */
+async function chargerDetails(){
+  if(!base || !S.util.connecte) return;
+  try{ const { data } = await base.rpc('mes_details'); if(data){ S.details = data; rafraichirSiVisible(); verifierNiveau(); } }catch(e){}
+}
+
+/* ---------- les niveaux : Débutant, Confirmé, Prêt pour le concours ---------- */
+const NIVEAUX_C = [
+  { nom:'Débutant', crit:[] },
+  { nom:'Confirmé', crit:[['questions', 150, 'questions résolues'], ['taux', 50, '% de bonnes réponses']] },
+  { nom:'Prêt pour le concours', crit:[['questions', 500, 'questions résolues'], ['taux', 65, '% de bonnes réponses'], ['compos', 5, 'compositions'], ['moyenne', 50, '% de moyenne aux compositions (30 jours)']] }
+];
+function valeursNiveau(){
+  const st = S.stats || {}, dt = S.details || {};
+  return { questions: st.questions_resolues || 0, taux: Number(st.taux_reussite) || 0, compos: st.compositions || 0, moyenne: dt.moyenne_30j || 0 };
+}
+function niveauCandidat(){
+  const v = valeursNiveau();
+  let n = 0;
+  NIVEAUX_C.forEach((x, i) => { if(x.crit.every(([k, c]) => v[k] >= c)) n = i; });
+  return { i:n, nom:NIVEAUX_C[n].nom, suivant:NIVEAUX_C[n + 1] || null, v };
+}
+function verifierNiveau(){
+  if(!S.stats) return;
+  const n = niveauCandidat().i, avant = lireReglages().niveauAtteint;
+  if(typeof avant === 'number' && n > avant){
+    setTimeout(() => { sonDepart(); signalCandidat('Nouveau niveau : ' + NIVEAUX_C[n].nom + '. Bravo, continue !'); }, 600);
+    pister('LEVEL_REACHED', { niveau: NIVEAUX_C[n].nom });
+  }
+  ecrireReglage('niveauAtteint', n);
+}
+function blocNiveau(court){
+  if(!S.stats) return '';
+  const n = niveauCandidat();
+  const etapes = NIVEAUX_C.map((x, i) => `<span class="niv-etape ${i <= n.i ? 'on' : ''}">${x.nom}</span>`).join('<i class="niv-trait"></i>');
+  const reste = n.suivant ? n.suivant.crit.filter(([k, c]) => n.v[k] < c).map(([k, c, l]) => `${k === 'taux' || k === 'moyenne' ? c + ' ' + l : c + ' ' + l} (toi : ${n.v[k]}${k === 'taux' || k === 'moyenne' ? ' %' : ''})`) : [];
+  return `<div class="carte niveau-carte" ${court ? 'style="margin-top:12px"' : ''}>
+    <div class="libelle" style="margin-bottom:8px"><span>Ton niveau</span><b style="color:var(--or)">${n.nom}</b></div>
+    <div class="niv-chemin">${etapes}</div>
+    ${n.suivant ? `<p class="sous" style="margin-top:10px;font-size:12.5px">Pour passer « ${n.suivant.nom} » : ${reste.join(' · ')}.</p>`
+      : '<p class="sous" style="margin-top:10px;font-size:12.5px">Tu as atteint le dernier niveau. Garde le rythme jusqu\'au jour du concours.</p>'}
+  </div>`;
+}
+
+/* ---------- citations (attributions vérifiées) ---------- */
+const CITATIONS = [
+  ['Oser inventer l\'avenir.', 'Thomas Sankara'],
+  ['N\'an lara, an sara : si nous nous couchons, nous sommes morts.', 'Joseph Ki-Zerbo'],
+  ['Le savoir est une lumière qui est en l\'homme.', 'Amadou Hampâté Bâ'],
+  ['L\'éducation est l\'arme la plus puissante pour changer le monde.', 'Nelson Mandela'],
+  ['Cela semble toujours impossible, jusqu\'à ce qu\'on le fasse.', 'Nelson Mandela']
+];
+const jourAnnee = () => Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0)) / 86400000);
+function blocCitation(){
+  const [t, a] = CITATIONS[jourAnnee() % CITATIONS.length];
+  return `<figure class="citation"><blockquote>« ${E(t)} »</blockquote><figcaption>${E(a)}</figcaption></figure>`;
+}
+
+/* ---------- mission du jour : elle change chaque jour ---------- */
+function missionDuJour(){
+  const pm = ((S.stats && S.stats.par_matiere) || []).filter(x => x.traitees >= 5).map(x => ({ ...x, taux:Number(x.taux) || 0 })).sort((a, b) => a.taux - b.taux)[0];
+  const m = [
+    { t:'Revoir tes erreurs prévues aujourd\'hui', a:'data-pourtoi="10"' },
+    pm ? { t:`Série de 10 questions en ${pm.matiere}, ta matière la plus fragile`, a:`data-cible="${E(pm.matiere)}"` } : { t:'Série de 10 questions dans une matière de ton choix', a:'data-go="revisions"' },
+    { t:'Mini-test express : 5 questions sans t\'arrêter', a:'data-pourtoi="5"' },
+    { t:'Lire la notion du jour et répondre à ses 3 questions', a:'data-go="notion"' },
+    { t:'Composer en conditions réelles : 50 questions, 25 minutes', a:'data-go="grille"' },
+    { t:'Relever un défi : 10 questions en 5 minutes', a:'data-go="defi"' }
+  ];
+  return m[jourAnnee() % m.length];
+}
+
+/* ---------- l'en-tête de l'accueil : série, temps, niveau ---------- */
+function bandeauAccueil(){
+  if(!S.util.connecte || !S.stats) return '';
+  const serie = S.stats.serie || 0, min = S.details ? S.details.minutes_semaine || 0 : null;
+  const tps = min === null ? '' : (min >= 60 ? Math.floor(min / 60) + ' h ' + String(min % 60).padStart(2, '0') : min + ' min');
+  return `<div class="bandeau-accueil">
+    <span>${ico('flamme',16)} <b class="num">${serie}</b> jour${serie > 1 ? 's' : ''} d'affilée</span>
+    ${tps ? `<span>${ico('horloge',16)} <b class="num">${tps}</b> cette semaine</span>` : ''}
+    <span class="niv">${E(niveauCandidat().nom)}</span>
+  </div>`;
+}
+
+/* ---------- le prolongement de l'accueil ---------- */
+function blocPlus(){
+  const debutant = !S.stats || (S.stats.questions_resolues || 0) < 50;
+  const mission = missionDuJour();
+  const dernier = lireReglages().dernierQcm;
+  const pos = dernier && S.qcmPos ? (S.qcmPos[dernier] || 0) : 0;
+  return `
+    ${S.util.connecte ? `<div class="carte mission" style="margin-top:12px">
+      <div class="libelle" style="margin-bottom:6px"><span>${ico('cible',14)} Mission du jour</span></div>
+      <div style="font-weight:600;font-size:14.5px;margin-bottom:10px">${E(mission.t)}</div>
+      <button class="cta creux" ${mission.a}>Lancer la mission</button>
+    </div>` : ''}
+    ${dernier && pos > 0 ? `<button class="grande" style="margin-top:12px" data-mat="${E(dernier)}">
+      <span class="ic">${ico('revisions',19)}</span><span><b>Reprendre ${E(dernier)}</b><span>Question ${pos + 1}, là où tu t'es arrêté</span></span><span class="fl">→</span></button>` : ''}
+    ${debutant ? `<div class="carte" style="margin-top:12px"><div class="libelle" style="margin-bottom:6px">Pour bien commencer</div>
+      <p class="sous" style="margin-bottom:10px">Commence par les bases : quelques questions chaque jour, puis ta première composition. Ton cahier d'erreurs se remplit tout seul et te guide.</p>
+      <button class="cta creux" data-retest="1">Refaire le test de niveau</button></div>` : ''}
+    <div class="libelle" style="margin-top:22px">Pour aller plus loin</div>
+    <div class="raccourcis">
+      <button data-go="notion">${ico('lire',18)}<b>Notion du jour</b><span>Une fiche, puis 3 questions</span></button>
+      ${!debutant ? `<button data-pieges="1">${ico('drapeau',18)}<b>Les plus ratées</b><span>Les 10 pièges de tous</span></button>` : ''}
+      <button data-go="defi">${ico('duel',18)}<b>Défier un ami</b><span>10 questions en 5 min</span></button>
+      <button data-go="top">${ico('trophee',18)}<b>Top 10 de la semaine</b><span>Classement par pseudo</span></button>
+      <button data-go="recherche">${ico('question',18)}<b>Chercher une question</b><span>Dans toute la banque</span></button>
+      <button data-go="proposer">${ico('etoile',18)}<b>Proposer une question</b><span>Elle sera vérifiée</span></button>
+    </div>
+    ${blocCitation()}
+    ${S.installer ? `<button class="cta creux" style="margin-top:12px" data-installer="1">${ico('telecharger',16)} Installer l'application<small>Elle s'ouvre comme une appli, même avec peu de réseau</small></button>` : ''}`;
+}
+
+/* ---------- fil générique : une liste venue du serveur ---------- */
+async function lancerFilRpc(nom, params, titre){
+  if(!S.util.connecte){ S.modal = 'inscription'; S.erreur = ''; return surcouche(); }
+  S.fil = { liste:null, idx:0, rep:undefined, c:null, justes:0, revues:0, n:0, attente:false, titre: titre || 'POUR TOI', fautes:[] };
+  aller('pourtoi');
+  try{
+    const { data, error } = await base.rpc(nom, params || {});
+    if(error) throw error;
+    S.fil.liste = Array.isArray(data) ? data : ((data && data.questions) || []);
+    S.fil.debut = Date.now();
+  }catch(e){ S.fil.liste = []; S.fil.erreur = true; }
+  if(S.ecran === 'pourtoi') rendre();
+}
+function lancerFilListe(liste, titre){
+  S.fil = { liste, idx:0, rep:undefined, c:null, justes:0, revues:0, n:liste.length, attente:false, titre, fautes:[], debut:Date.now() };
+  aller('pourtoi');
+}
+
+/* ---------- notion du jour ---------- */
+async function chargerNotion(){
+  if(!base) return;
+  try{ const { data } = await base.rpc('notion_du_jour', { p_niveau: niveauBase() }); S.notion = data || { vide:true }; }
+  catch(e){ S.notion = { erreur:true }; }
+  if(S.ecran === 'notion') rendre();
+}
+function ecranNotion(){
+  const n = S.notion;
+  const tete = `<button class="retourhaut" data-go="aujourdhui">Accueil</button>`;
+  if(!n){ chargerNotion(); vue().innerHTML = `<div class="pad">${tete}<div class="squelette large" style="margin-top:16px"></div><div class="squelette"></div></div>`; return; }
+  if(n.vide || n.erreur){ vue().innerHTML = `<div class="pad">${tete}<h1 class="titre">Notion du jour</h1><p class="sous">${n.erreur ? 'Elle n\'a pas pu être chargée.' : 'Pas de notion disponible pour ce niveau.'}</p></div>`; return; }
+  vue().innerHTML = `
+  <div class="pad">
+    ${tete}
+    <div class="eyebrow">${E(dateDuJour())} · ${E(n.matiere || '')}${n.theme ? ' · ' + E(n.theme) : ''}</div>
+    <h1 class="titre">${E(n.titre)}</h1>
+    <p class="sous" style="margin:6px 0 12px">La notion du jour : lis-la, puis vérifie que tu l'as comprise avec 3 questions.</p>
+    <div class="carte lecon">${miseEnPage(n.texte)}${n.coupe ? '<p class="sous"><i>… la suite est dans la bibliothèque.</i></p>' : ''}</div>
+    ${(n.questions || []).length ? `<button class="cta" style="margin-top:14px" data-notion-q="1">Répondre aux ${n.questions.length} questions</button>` : ''}
+    ${n.coupe && n.matiere ? `<button class="cta creux" style="margin-top:9px" data-matiere="${encodeURIComponent(n.matiere)}">Lire le cours complet</button>` : ''}
+  </div>`;
+}
+
+/* ---------- recherche dans les questions ---------- */
+function ecranRecherche(){
+  if(!S.banque && S.banqueEtat !== 'chargement') chargerQuestions();
+  const q = (S.rechQ || '').trim().toLowerCase();
+  const toutes = (S.banque || []).flatMap(m => m.questions.map(x => ({ ...x, matiere:m.nom })));
+  const res = q.length >= 3 ? toutes.filter(x => (x.q + ' ' + x.o.join(' ')).toLowerCase().includes(q)).slice(0, 30) : [];
+  vue().innerHTML = `
+  <div class="pad">
+    <button class="retourhaut" data-go="aujourdhui">Accueil</button>
+    <h1 class="titre">Chercher une question</h1>
+    <p class="sous" style="margin:6px 0 12px">Dans les ${nombreFr(toutes.length)} questions du niveau ${E(S.niveau.toLowerCase())}. Tape au moins 3 lettres : un mot, un nom, une date.</p>
+    <div class="champ"><input id="rech-q" type="search" value="${E(S.rechQ || '')}" placeholder="Ex. : constitution, Sankara, glycémie…" oninput="filtrerQuestions(this.value)" autocomplete="off"></div>
+    ${q.length >= 3 ? `<p class="sous" style="margin-bottom:8px">${res.length}${res.length === 30 ? '+' : ''} résultat${res.length > 1 ? 's' : ''}</p>` : ''}
+    ${res.map(x => `<button class="resultat-q" data-ouvrirq="${E(x.id)}"><span class="eyebrow">${E(x.matiere)}</span><b>${E(x.q)}</b></button>`).join('')}
+    ${S.banqueEtat === 'chargement' ? '<div class="squelette"></div>' : ''}
+  </div>`;
+}
+let minuteurRechQ = null;
+window.filtrerQuestions = function(v){
+  S.rechQ = v; clearTimeout(minuteurRechQ);
+  minuteurRechQ = setTimeout(() => {
+    if(S.ecran !== 'recherche') return;
+    ecranRecherche();
+    const c = document.getElementById('rech-q'); if(c){ c.focus(); c.setSelectionRange(c.value.length, c.value.length); }
+  }, 220);
+};
+
+/* ---------- défis entre amis ---------- */
+async function creerDefi(matiere){
+  if(!S.util.connecte){ S.modal = 'inscription'; S.erreur = ''; return surcouche(); }
+  S.defi = { etat:'chargement' }; rendre();
+  try{
+    const { data } = await base.rpc('creer_defi', { p_matiere: matiere || null, p_niveau: niveauBase() });
+    if(!data || !data.ok){ S.defi = { etat:'erreur', message:(data && data.message) || 'Défi impossible.' }; return rendre(); }
+    pister('CHALLENGE_CREATED', { matiere });
+    return ouvrirDefi(data.id);
+  }catch(e){ S.defi = { etat:'erreur', message:'Vérifie ta connexion.' }; rendre(); }
+}
+async function ouvrirDefi(id){
+  S.defi = { etat:'chargement', id };
+  if(S.ecran !== 'defi') aller('defi'); else rendre();
+  if(!base){ S.lienDefi = id; return; }
+  try{
+    const { data } = await base.rpc('ouvrir_defi', { p_defi: id });
+    if(!data || !data.ok){ S.defi = { etat: data && data.connexion ? 'connexion' : 'erreur', id, message:(data && data.message) || 'Défi introuvable.', auteur:data && data.auteur, matiere:data && data.matiere }; return rendre(); }
+    if(data.termine){ S.defi = { etat:'resultat', id, ...data, ...(data.resultat || {}) }; return rendre(); }
+    S.defi = { etat:'jeu', id, ...data, rep:{}, chrono:data.restant };
+    rendre();
+    clearInterval(S.defiTimer);
+    sonDepart();
+    S.defiTimer = setInterval(() => {
+      if(!S.defi || S.defi.etat !== 'jeu'){ clearInterval(S.defiTimer); return; }
+      S.defi.chrono--;
+      const c = document.getElementById('dchrono');
+      if(c){ c.textContent = mmss(Math.max(0, S.defi.chrono)); peindreChrono(c, S.defi.chrono, S.defi.duree); }
+      if(S.defi.chrono === 60){ bip(2); }
+      if(S.defi.chrono <= 0){ clearInterval(S.defiTimer); bip(4); remettreDefi(); }
+    }, 1000);
+  }catch(e){ S.defi = { etat:'erreur', id, message:'Vérifie ta connexion.' }; rendre(); }
+}
+async function remettreDefi(){
+  const d = S.defi; if(!d || d.etat !== 'jeu') return;
+  clearInterval(S.defiTimer); d.etat = 'envoi'; rendre();
+  try{
+    const { data } = await base.rpc('remettre_defi', { p_defi: d.id, p_reponses: d.rep });
+    if(!data || !data.ok) throw new Error((data && data.message) || 'envoi');
+    S.defi = { ...d, etat:'resultat', score:data.score, sur:data.sur, duree:data.duree, corrige:data.corrige, ...(data.resultat || {}) };
+    data.score >= data.sur * 0.7 ? sonJuste() : sonFaux();
+    pister('CHALLENGE_DONE', { score:data.score });
+    chargerCahier(); chargerJournee();
+  }catch(e){ d.etat = 'jeu'; toast('Envoi impossible. Vérifie ta connexion et réessaie.'); }
+  rendre();
+}
+function lienDefi(id){ return CONTACT.site + '/?defi=' + encodeURIComponent(id); }
+function ecranDefi(){
+  const d = S.defi;
+  const tete = `<button class="retourhaut" data-go="aujourdhui">Accueil</button>`;
+  if(!d){
+    const mats = (S.banque || []).map(m => m.nom);
+    if(!S.banque && S.banqueEtat !== 'chargement') chargerQuestions();
+    vue().innerHTML = `<div class="pad">${tete}
+      <div class="eyebrow">Défi entre amis</div>
+      <h1 class="titre">10 questions, 5 minutes</h1>
+      <p class="sous" style="margin:6px 0 14px">Tu composes d'abord. Ensuite tu envoies le lien : ton ami reçoit exactement les mêmes questions, avec le même temps. Le classement du défi compare vos notes, puis le temps.</p>
+      <div class="libelle">Choisis la matière</div>
+      <div class="choix-mat">
+        <button data-creer-defi="">Toutes les matières</button>
+        ${mats.map(m => `<button data-creer-defi="${E(m)}">${E(m)}</button>`).join('')}
+      </div>
+    </div>`;
+    return;
+  }
+  if(d.etat === 'chargement' || d.etat === 'envoi'){ vue().innerHTML = `<div class="pad">${tete}<div class="squelette large" style="margin-top:16px"></div><p class="sous">${d.etat === 'envoi' ? 'Correction…' : 'Préparation du défi…'}</p></div>`; return; }
+  if(d.etat === 'connexion'){ vue().innerHTML = `<div class="pad">${tete}<div class="eyebrow">Défi${d.matiere ? ' · ' + E(d.matiere) : ''}</div>
+    <h1 class="titre">${d.auteur ? E(d.auteur) + ' te défie' : 'Un ami te défie'}</h1>
+    <p class="sous" style="margin:8px 0 14px">10 questions, 5 minutes, les mêmes pour vous deux. Crée ton compte gratuit (trente secondes) pour relever le défi.</p>
+    <button class="cta" data-modal="inscription">Créer mon compte et relever le défi</button>
+    <button class="cta creux" style="margin-top:9px" data-modal="connexion">J'ai déjà un compte</button></div>`; return; }
+  if(d.etat === 'erreur'){ vue().innerHTML = `<div class="pad">${tete}<h1 class="titre">Défi indisponible</h1><p class="sous">${E(d.message || '')}</p><button class="cta" style="margin-top:14px" data-defi-nouveau="1">Lancer un autre défi</button></div>`; return; }
+  if(d.etat === 'jeu'){
+    vue().innerHTML = `
+    <div class="defi-tete"><span class="eyebrow">${d.mien ? 'Ton défi' : 'Défi de ' + E(d.auteur || 'un ami')}${d.matiere ? ' · ' + E(d.matiere) : ''}</span>
+      <span class="gr-chrono ${couleurChrono(d.chrono, d.duree)}" id="dchrono">${mmss(Math.max(0, d.chrono))}</span></div>
+    <div class="pad" style="padding-top:10px">
+      ${(d.questions || []).map((q, i) => `<div class="defi-q">
+        <div class="sq-no">Question ${i + 1}</div>
+        <div class="qtexte" style="font-size:16px">${E(q.enonce)}</div>
+        ${(q.options || []).map((o, k) => `<button class="opt ${(d.rep[i] || []).includes(k) ? 'choisi' : ''}" data-defi-rep="${i}-${k}"><span class="lettre">${'ABCD'[k]}</span>${E(o)}</button>`).join('')}
+      </div>`).join('')}
+      <button class="cta" style="margin-top:14px" data-defi-remettre="1">Remettre (${Object.keys(d.rep).length}/${(d.questions || []).length} répondues)</button>
+    </div>`;
+    return;
+  }
+  /* résultat */
+  const cl = d.classement || [];
+  vue().innerHTML = `<div class="pad">${tete}
+    <div class="eyebrow">Défi${d.matiere ? ' · ' + E(d.matiere) : ''}</div>
+    ${typeof d.score === 'number' ? `<h1 class="titre">${d.score}/${d.sur} en ${mmssLong(d.duree)}</h1>` : '<h1 class="titre">Résultat du défi</h1>'}
+    ${d.corrige && d.questions ? `<div class="carte" style="margin-top:12px">${d.questions.map((q, i) => {
+        const b = d.corrige[i] || [], r = d.rep[i] || [];
+        const ok = r.length && r.length === b.length && r.every(x => b.includes(x));
+        return `<div class="defi-corr ${ok ? 'ok' : 'ko'}"><b>${i + 1}.</b> ${E(q.enonce)}<br><span>${ok ? '✓' : '✗'} Bonne réponse : ${E(b.map(k => q.options[k]).join(' + '))}</span></div>`;
+      }).join('')}</div>` : ''}
+    <div class="bloc"><div class="libelle">Classement du défi · ${d.participants || cl.length} participant${(d.participants || cl.length) > 1 ? 's' : ''}</div><div class="carte">
+      ${cl.map(l => `<div class="ligne-rang${l.moi ? ' moi' : ''}"><span class="p num">${l.rang}</span><span class="n">${E(l.pseudo)}${l.moi ? ' (toi)' : ''}${l.auteur ? ' · a lancé le défi' : ''}<em>${mmssLong(l.duree)}</em></span><span class="s num">${l.score}/${d.sur}</span></div>`).join('')}
+    </div></div>
+    <button class="cta" style="margin-top:12px" data-partage-defi="${E(d.id)}">${ico('partage',16)} Envoyer ce défi sur WhatsApp</button>
+    <button class="cta creux" style="margin-top:9px" data-copier="${encodeURIComponent(lienDefi(d.id))}">Copier le lien du défi</button>
+    <button class="cta creux" style="margin-top:9px" data-defi-nouveau="1">Lancer un nouveau défi</button>
+  </div>`;
+}
+
+/* ---------- top 10 de la semaine ---------- */
+async function chargerTop(){
+  if(!base) return;
+  try{ const { data } = await base.rpc('top_semaine'); S.top = data || { top:[] }; }catch(e){ S.top = { erreur:true }; }
+  if(S.ecran === 'top') rendre();
+}
+function ecranTop(){
+  const t = S.top;
+  const tete = `<button class="retourhaut" data-go="aujourdhui">Accueil</button>`;
+  if(!t){ chargerTop(); vue().innerHTML = `<div class="pad">${tete}<div class="squelette large" style="margin-top:16px"></div></div>`; return; }
+  vue().innerHTML = `<div class="pad">${tete}
+    <div class="eyebrow">Depuis lundi</div>
+    <h1 class="titre">Top 10 de la semaine</h1>
+    <p class="sous" style="margin:6px 0 14px">Classé par points gagnés cette semaine (bonnes réponses, compositions, erreurs refermées). Les candidats apparaissent sous leur pseudo. Remise à zéro chaque lundi.</p>
+    ${t.erreur ? '<p class="sous">Le classement n\'a pas pu être chargé.</p>' : `<div class="carte">
+      ${(t.top || []).length ? t.top.map(l => `<div class="ligne-rang${l.moi ? ' moi' : ''}"><span class="p num">${l.rang}</span><span class="n">${E(l.pseudo)}${l.moi ? ' (toi)' : ''}</span><span class="s num">${nombreFr(l.points)} pts</span></div>`).join('') : '<p class="sous">Personne n\'a encore marqué de points cette semaine. Sois le premier.</p>'}
+    </div>
+    ${t.moi && t.moi.rang > 10 ? `<div class="ma-place"><span>Ta place</span><b class="num">${t.moi.rang}<sup>e</sup> sur ${t.participants}</b><span class="num">${nombreFr(t.moi.points)} pts</span></div>` : ''}`}
+    <button class="cta" style="margin-top:14px" data-pourtoi="10">Gagner des points maintenant</button>
+  </div>`;
+}
+
+/* ---------- proposer une question ---------- */
+function ecranProposer(){
+  if(!S.banque && S.banqueEtat !== 'chargement') chargerQuestions();
+  const mats = (S.banque || []).map(m => m.nom);
+  const f = S.prop || (S.prop = { enonce:'', o:['','','',''], bonne:null, expl:'', source:'', matiere:mats[0] || '' });
+  vue().innerHTML = `<div class="pad">
+    <button class="retourhaut" data-go="aujourdhui">Accueil</button>
+    <h1 class="titre">Proposer une question</h1>
+    <p class="sous" style="margin:6px 0 14px">Tu connais une question tombée au concours, ou une notion qui piège souvent ? Propose-la. L'équipe la vérifie avant de la publier, et tu es prévenu quand elle entre dans la banque.</p>
+    ${S.erreur ? `<div class="alerte" role="alert">${E(S.erreur)}</div>` : ''}
+    <div class="champ"><label for="p-mat">Matière</label><select id="p-mat" onchange="majProp('matiere',this.value)">${mats.map(m => `<option ${m === f.matiere ? 'selected' : ''}>${E(m)}</option>`).join('')}</select></div>
+    <div class="champ"><label for="p-en">La question</label><textarea id="p-en" rows="3" maxlength="400" oninput="majProp('enonce',this.value)" placeholder="Ex. : En quelle année la Haute-Volta est-elle devenue le Burkina Faso ?">${E(f.enonce)}</textarea></div>
+    ${[0,1,2,3].map(i => `<div class="champ prop-opt"><label for="p-o${i}">Proposition ${'ABCD'[i]}</label>
+      <div class="avec-oeil"><input id="p-o${i}" maxlength="160" value="${E(f.o[i])}" oninput="majPropOpt(${i},this.value)">
+      <button class="oeil ${f.bonne === i ? 'bonne' : ''}" data-prop-bonne="${i}" aria-pressed="${f.bonne === i}">${f.bonne === i ? '✓ bonne' : 'bonne ?'}</button></div></div>`).join('')}
+    <div class="champ"><label for="p-ex">Explication (facultatif mais précieux)</label><textarea id="p-ex" rows="2" maxlength="600" oninput="majProp('expl',this.value)">${E(f.expl)}</textarea></div>
+    <div class="champ"><label for="p-src">Source (facultatif)</label><input id="p-src" maxlength="200" value="${E(f.source)}" oninput="majProp('source',this.value)" placeholder="Ex. : concours ENAREF 2023, Constitution art. 31"></div>
+    <button class="cta" data-prop-envoyer="1">Envoyer ma proposition</button>
+  </div>`;
+}
+window.majProp = (k, v) => { S.prop[k] = v; };
+window.majPropOpt = (i, v) => { S.prop.o[i] = v; };
+
+/* ---------- mon parcours ---------- */
+function ecranParcours(){
+  if(!S.util.connecte){ S.modal = 'connexion'; surcouche(); return ecranCompte(); }
+  const st = S.stats || {}, dt = S.details || {};
+  const debut = dt.premier_jour || dt.inscrit_le;
+  const jours = debut ? Math.max(1, Math.ceil((Date.now() - new Date(debut)) / 86400000)) : null;
+  const mats = (dt.par_matiere || []).filter(m => m.n_recent + m.n_avant >= 5);
+  vue().innerHTML = `<div class="pad">
+    <button class="retourhaut" data-go="compte">Mon compte</button>
+    <div class="eyebrow">Mon parcours</div>
+    <h1 class="titre">${debut ? 'Depuis le ' + E(new Date(debut).toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' })) : 'Ton chemin'}</h1>
+    ${jours ? `<p class="sous" style="margin-top:6px">${jours} jour${jours > 1 ? 's' : ''} depuis ta première séance.</p>` : ''}
+    <div class="trio" style="margin-top:14px">
+      <div><b class="num">${nombreFr(st.questions_resolues || 0)}</b><span>questions</span></div>
+      <div><b class="num">${st.record || 0}</b><span>jours travaillés</span></div>
+      <div><b class="num">${st.compositions || 0}</b><span>compositions</span></div>
+    </div>
+    <div class="trio" style="margin-top:10px">
+      <div><b class="num">${dt.refermees_total || 0}</b><span>erreurs refermées</span></div>
+      <div><b class="num">${dt.defis || 0}</b><span>défis relevés</span></div>
+      <div><b class="num">${dt.propositions || 0}</b><span>questions publiées</span></div>
+    </div>
+    ${blocNiveau(true)}
+    ${typeof dt.percentile === 'number' ? `<div class="carte" style="margin-top:12px"><div class="libelle" style="margin-bottom:6px">Par rapport aux autres</div>
+      <p class="sous">Sur les 30 derniers jours, ta moyenne aux compositions (<b>${dt.moyenne_30j} %</b>) dépasse celle de <b>${dt.percentile} %</b> des candidats de Mon Concours.</p></div>` : ''}
+    ${mats.length ? `<div class="bloc"><div class="libelle">Matière par matière</div><div class="carte">
+      ${mats.map(m => {
+        const evo = (m.taux_recent !== null && m.taux_avant !== null && m.n_avant >= 5 && m.n_recent >= 5) ? m.taux_recent - m.taux_avant : null;
+        const err = (m.erreurs_mois_avant >= 3) ? Math.round((m.erreurs_mois - m.erreurs_mois_avant) / m.erreurs_mois_avant * 100) : null;
+        return `<div class="mat"><div class="nom">${E(m.matiere)}<em>${m.minutes} min de révision${m.taux_recent !== null ? ' · ' + m.taux_recent + ' % ce mois-ci' : ''}${evo !== null ? ' · <span style="color:' + (evo >= 0 ? 'var(--vert-texte)' : 'var(--rouge-texte)') + '">' + (evo >= 0 ? '+' : '') + evo + ' points</span>' : ''}${err !== null ? ' · erreurs ' + (err <= 0 ? '<span style="color:var(--vert-texte)">' + err + ' %</span>' : '<span style="color:var(--rouge-texte)">+' + err + ' %</span>') + ' sur le mois' : ''}</em></div></div>`;
+      }).join('')}
+    </div></div>` : ''}
+    <button class="cta" style="margin-top:14px" data-carte-progres="1">${ico('partage',16)} Partager ma carte de progression<small>Une image avec ton pseudo et tes chiffres, sans ton nom ni ton numéro</small></button>
+  </div>`;
+}
+
+/* ---------- carte de progression à partager (image) ---------- */
+async function carteProgression(){
+  const st = S.stats || {}, j = S.journee || {}, n = niveauCandidat();
+  const c = document.createElement('canvas'); c.width = 1080; c.height = 1080;
+  const x = c.getContext('2d');
+  const g = x.createLinearGradient(0, 0, 0, 1080); g.addColorStop(0, '#0F241C'); g.addColorStop(1, '#0C1512');
+  x.fillStyle = g; x.fillRect(0, 0, 1080, 1080);
+  x.fillStyle = '#E3A82B'; x.font = '700 40px Helvetica, Arial, sans-serif'; x.fillText('MON CONCOURS', 80, 130);
+  x.fillStyle = '#A2B2AA'; x.font = '32px Helvetica, Arial, sans-serif'; x.fillText('Ma préparation aux concours directs', 80, 180);
+  x.fillStyle = '#E9EEEA'; x.font = '800 84px Helvetica, Arial, sans-serif'; x.fillText(j.pseudo || 'Candidat', 80, 320);
+  x.fillStyle = '#4FC28F'; x.font = '600 46px Helvetica, Arial, sans-serif'; x.fillText('Niveau : ' + n.nom, 80, 400);
+  const cases = [[nombreFr(st.questions_resolues || 0), 'questions'], [(st.taux_reussite || 0) + ' %', 'de réussite'], [String(st.serie || 0), 'jours d\'affilée'], [String(st.compositions || 0), 'compositions']];
+  cases.forEach(([v, l], i) => {
+    const cx = 80 + (i % 2) * 470, cy = 480 + Math.floor(i / 2) * 230;
+    x.fillStyle = '#14211C'; x.strokeStyle = '#26372F'; x.lineWidth = 3;
+    x.beginPath(); x.roundRect(cx, cy, 440, 200, 28); x.fill(); x.stroke();
+    x.fillStyle = '#E9EEEA'; x.font = '800 76px Helvetica, Arial, sans-serif'; x.fillText(v, cx + 36, cy + 105);
+    x.fillStyle = '#A2B2AA'; x.font = '34px Helvetica, Arial, sans-serif'; x.fillText(l, cx + 36, cy + 160);
+  });
+  x.fillStyle = '#E3A82B'; x.font = '700 44px Helvetica, Arial, sans-serif'; x.fillText('monconcours.vercel.app', 80, 1010);
+  const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+  const fichier = new File([blob], 'ma-progression-mon-concours.png', { type:'image/png' });
+  pister('PROGRESS_CARD_SHARED');
+  try{
+    if(navigator.canShare && navigator.canShare({ files:[fichier] })){
+      await navigator.share({ files:[fichier], title:'Ma progression', text:'Je prépare mon concours sur Mon Concours : ' + CONTACT.site });
+      return;
+    }
+  }catch(e){ return; }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fichier.name; a.click();
+  toast('Image enregistrée : partage-la sur ton statut WhatsApp.');
+}
+
+/* ---------- concours visé ---------- */
+async function chargerMonConcours(){
+  if(!base || !S.util.connecte) return;
+  try{
+    const { data } = await base.rpc('mon_concours');
+    S.monConcours = data || null;
+    const c = data && data.choisi;
+    if(c && c.date_ecrit){ S.dateConcours = c.date_ecrit; S.nomConcours = c.sigle || c.nom; }
+    rafraichirSiVisible();
+  }catch(e){}
+}
+function blocConcoursVise(){
+  const m = S.monConcours; if(!m) return '';
+  const id = m.choisi ? m.choisi.id : '';
+  return `<div class="carte" style="margin-top:14px;text-align:left">
+    <div class="libelle" style="margin-bottom:8px">${ico('cible',14)} Mon concours visé</div>
+    <select id="concours-vise" onchange="choisirConcours(this.value)" aria-label="Concours visé">
+      <option value="">— choisir —</option>
+      ${(m.liste || []).map(c => `<option value="${E(c.id)}" ${c.id === id ? 'selected' : ''}>${E(c.nom)}</option>`).join('')}
+    </select>
+    <p class="sous" style="margin-top:8px;font-size:12.5px">${m.choisi && m.choisi.date_ecrit ? 'Écrit le ' + E(new Date(m.choisi.date_ecrit).toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' })) + ' : le compte à rebours de l\'accueil le suit.' : 'Le compte à rebours de l\'accueil suivra la date de ce concours dès qu\'elle est publiée.'}</p>
+  </div>`;
+}
+window.choisirConcours = async function(id){
+  try{
+    const { data } = await base.rpc('definir_concours', { p_concours: id || null });
+    if(data && data.ok){ toast('Concours visé enregistré.'); pister('TARGET_EXAM_SET'); chargerMonConcours(); }
+  }catch(e){ toast('Non enregistré : vérifie ta connexion.'); }
+};
+
+/* ---------- installer l'application ---------- */
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); S.installer = e; if(S.ecran === 'aujourdhui') rendre(); });
+window.addEventListener('appinstalled', () => { S.installer = null; pister('APP_INSTALLED'); });
+
+/* ---------- export du cahier d'erreurs ---------- */
+function exporterCahier(){
+  const list = S.cahier.filter(e => e.suite < 3);
+  if(!list.length){ toast('Ton cahier est vide.'); return; }
+  const html = '<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Mon cahier d\'erreurs</title><style>' +
+    '@page{size:A4;margin:14mm}body{font-family:Georgia,serif;color:#111;max-width:190mm;margin:0 auto;padding:0 10px;line-height:1.45}' +
+    'h1{font-size:20px;border-bottom:3px double #111;padding-bottom:8px}.e{break-inside:avoid;border-bottom:1px solid #ccc;padding:9px 0;font-size:13px}' +
+    '.m{font:11px Helvetica,Arial,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#666}.b{color:#0E7A54;font-weight:bold}.n{font-style:italic;color:#444}' +
+    '.pied{margin-top:16px;border-top:2px solid #111;padding-top:6px;font:12px Helvetica,Arial,sans-serif}.noimp{text-align:center;margin:16px}@media print{.noimp{display:none}}</style></head><body>' +
+    '<h1>Mon cahier d\'erreurs · ' + E(S.util.nom || '') + '</h1><p style="font-size:12px">' + list.length + ' erreur(s) encore ouverte(s), le ' + new Date().toLocaleDateString('fr-FR') + '.</p>' +
+    list.map((e, i) => '<div class="e"><div class="m">' + E(e.matiere || '') + ' · ratée ' + e.rate + ' fois</div><b>' + (i + 1) + '.</b> ' + E(e.q) +
+      '<br>Bonne réponse : <span class="b">' + E(e.bon) + '</span>' + (e.note ? '<br>' + E(e.note) : '') +
+      (e.notePerso ? '<br><span class="n">Ma note : ' + E(e.notePerso) + '</span>' : '') + '</div>').join('') +
+    '<div class="pied"><b>monconcours.vercel.app</b> · WhatsApp <b>+226 ' + CONTACT.adminTel.replace(/(\d{2})(?=\d)/g, '$1 ') + '</b></div>' +
+    '<div class="noimp"><button onclick="window.print()">Enregistrer en PDF ou imprimer</button></div><scr' + 'ipt>setTimeout(function(){window.print();},600);<\/scr' + 'ipt></body></html>';
+  const f = window.open('', '_blank');
+  if(!f){ toast('Autorise les fenêtres pour télécharger ton cahier.'); return; }
+  f.document.write(html); f.document.close();
+  pister('ERRORS_EXPORTED', { n: list.length });
+}
+
+/* ---------- mode concentration et plein écran ---------- */
+function appliquerConcentration(){ document.body.classList.toggle('concentration', !!S.concentration && ['qcm','pourtoi','reprise','defi','notion'].includes(S.ecran)); }
+function basculerPleinEcran(){
+  try{
+    if(document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen({ navigationUI:'hide' }).catch(() => toast('Le plein écran n\'est pas disponible sur ce téléphone.'));
+  }catch(e){ toast('Le plein écran n\'est pas disponible sur ce téléphone.'); }
+}
+document.addEventListener('fullscreenchange', () => { if(S.ecran === 'grille' && !S.corrige) ecranGrille(); });
+
+/* ---------- glisser vers le haut pour la question suivante (fil) ---------- */
+(function(){
+  let y0 = null, x0 = null;
+  document.addEventListener('touchstart', e => { if(S.ecran !== 'pourtoi' || !e.touches[0]) return; y0 = e.touches[0].clientY; x0 = e.touches[0].clientX; }, { passive:true });
+  document.addEventListener('touchend', e => {
+    if(S.ecran !== 'pourtoi' || y0 === null || !e.changedTouches[0]) return;
+    const dy = y0 - e.changedTouches[0].clientY, dx = Math.abs(e.changedTouches[0].clientX - x0); y0 = null;
+    const v = vue(); const enBas = v.scrollTop + v.clientHeight >= v.scrollHeight - 4;
+    if(dy > 70 && dx < 50 && S.fil && S.fil.c && enBas){ const b = document.querySelector('[data-fil-suiv]'); if(b) b.click(); }
+  }, { passive:true });
+})();
+
+document.addEventListener('click', ev => {
+  const t = ev.target.closest('[data-pieges],[data-similaires],[data-notion-q],[data-ouvrirq],[data-creer-defi],[data-defi-rep],[data-defi-remettre],[data-defi-nouveau],[data-partage-defi],[data-prop-bonne],[data-prop-envoyer],[data-carte-progres],[data-pause],[data-installer],[data-export-cahier],[data-cahier-vue],[data-note-edit],[data-note-save],[data-plein-ecran],[data-concentration],[data-son-global],[data-graph]');
+  if(!t) return;
+  const d = t.dataset;
+  try{ const cle = Object.keys(d)[0]; pister('BUTTON_CLICKED', { valeur: String(d[cle]).slice(0,40) }, cle); }catch(e){}
+  if(d.pieges) return lancerFilRpc('questions_plus_ratees', { p_niveau: niveauBase() }, 'LES PLUS RATÉES');
+  if(d.similaires) return lancerFilRpc('questions_similaires', { p_question: d.similaires, p_nombre: 3 }, 'QUESTIONS SIMILAIRES');
+  if(d.notionQ && S.notion) return lancerFilListe(S.notion.questions || [], 'NOTION DU JOUR');
+  if(d.ouvrirq){
+    const x = (S.banque || []).flatMap(m => m.questions.map(q => ({ ...q, matiere:m.nom }))).find(q => q.id === d.ouvrirq);
+    if(!x) return;
+    S.qp = { id:x.id, enonce:x.q, options:x.o, matiere:x.matiere, charge:true };
+    return aller('question');
+  }
+  if(d.creerDefi !== undefined) return creerDefi(d.creerDefi);
+  if(d.defiRep){
+    const [i, k] = d.defiRep.split('-').map(Number), r = S.defi.rep;
+    r[i] = (r[i] || []).includes(k) ? r[i].filter(x => x !== k) : [k];
+    if(!r[i].length) delete r[i];
+    const bloc = t.closest('.defi-q');
+    bloc.querySelectorAll('[data-defi-rep]').forEach(b => b.classList.toggle('choisi', (r[i] || []).includes(+b.dataset.defiRep.split('-')[1])));
+    const bt = document.querySelector('[data-defi-remettre]'); if(bt) bt.textContent = `Remettre (${Object.keys(r).length}/${S.defi.questions.length} répondues)`;
+    return;
+  }
+  if(d.defiRemettre) return remettreDefi();
+  if(d.defiNouveau){ S.defi = null; return rendre(); }
+  if(d.partageDefi){
+    const m = S.defi && S.defi.matiere ? ' en ' + S.defi.matiere : '';
+    const sc = S.defi && typeof S.defi.score === 'number' ? ` J'ai eu ${S.defi.score}/${S.defi.sur}.` : '';
+    pister('CHALLENGE_SHARED');
+    window.open('https://wa.me/?text=' + encodeURIComponent(`Je te défie sur Mon Concours : 10 questions${m} en 5 minutes.${sc} Tu fais mieux ? ${lienDefi(d.partageDefi)}`), '_blank', 'noopener');
+    return;
+  }
+  if(d.propBonne !== undefined){ S.prop.bonne = +d.propBonne; return ecranProposer(); }
+  if(d.propEnvoyer){
+    const f = S.prop;
+    if(!S.util.connecte){ S.modal = 'connexion'; return surcouche(); }
+    if(f.enonce.trim().length < 10){ S.erreur = 'Écris la question en entier.'; return ecranProposer(); }
+    if(f.o.some(o => !o.trim())){ S.erreur = 'Remplis les quatre propositions.'; return ecranProposer(); }
+    if(f.bonne === null){ S.erreur = 'Touche « bonne ? » à côté de la bonne réponse.'; return ecranProposer(); }
+    S.erreur = '';
+    base.rpc('proposer_question', { p_matiere:f.matiere, p_niveau:niveauBase(), p_enonce:f.enonce, p_options:f.o, p_bonne:f.bonne, p_explication:f.expl, p_source:f.source })
+      .then(({ data }) => {
+        if(data && data.ok){ S.prop = null; toast('Merci ! Ta question est envoyée à l\'équipe pour vérification.'); pister('QUESTION_PROPOSED'); aller('aujourdhui'); }
+        else { S.erreur = (data && data.message) || 'Envoi impossible.'; ecranProposer(); }
+      }, () => { S.erreur = 'Envoi impossible. Vérifie ta connexion.'; ecranProposer(); });
+    return;
+  }
+  if(d.carteProgres) return carteProgression();
+  if(d.pause){
+    base.rpc('prendre_pause').then(({ data }) => {
+      toast(data && data.ok ? 'Jour de pause pris : ta série est protégée aujourd\'hui.' : ((data && data.message) || 'Pause impossible.'), 5000);
+      chargerProgression(); chargerDetails();
+    }, () => toast('Vérifie ta connexion.'));
+    return;
+  }
+  if(d.installer && S.installer){ S.installer.prompt(); S.installer.userChoice.then(() => { S.installer = null; rendre(); }); return; }
+  if(d.exportCahier) return exporterCahier();
+  if(d.cahierVue){ S.cahierVue = d.cahierVue; S.cahierFiltre = false; return rendre(); }
+  if(d.noteEdit){ S.noteOuverte = d.noteEdit; return rendre(); }
+  if(d.noteSave){
+    const e = S.cahier.find(x => x.id === d.noteSave); const champ = document.getElementById('note-' + d.noteSave);
+    if(!e || !champ) return;
+    e.notePerso = champ.value.trim(); S.noteOuverte = null; rendre();
+    base.rpc('noter_erreur', { p_question: e.id, p_note: e.notePerso }).then(() => toast('Note enregistrée.'), () => toast('Note non enregistrée.'));
+    return;
+  }
+  if(d.pleinEcran) return basculerPleinEcran();
+  if(d.concentration){ S.concentration = !S.concentration; ecrireReglage('concentration', S.concentration); return rendre(); }
+  if(d.sonGlobal){ S.sonCoupe = !S.sonCoupe; ecrireReglage('sonCoupe', S.sonCoupe); if(!S.sonCoupe) bip(1); return rendre(); }
+  if(d.graph){ S.graph = +d.graph; return rendre(); }
+});
+
+/* =====================================================================
    RENDU + ÉVÉNEMENTS
    ===================================================================== */
 const SANS_TETE = ['test','grille','engagement','testIntro','resultat'];
@@ -3995,7 +4627,7 @@ function apptete(){
     compte:S.gratuit ? '' : S.abo.actif?nomFormule(S.abo.formule).toLowerCase():'formule gratuite',
     revisions:S.niveau.toLowerCase(), qcm:S.matiere||'', abonnement:'', paiement:'sécurisé',
     inscription:'', connexion:'', resultat:'étape 3 sur 3', actualite:'ce matin',
-    pourtoi:'pour toi', qdj:'question du jour', gagnants:'classement'}[S.ecran] || '';
+    pourtoi:'pour toi', qdj:'question du jour', gagnants:'classement', notion:'notion du jour', defi:'défi', top:'top 10', parcours:'mon parcours'}[S.ecran] || '';
   const nonLues = S.notifications.filter(n => !n.lue).length;
   t.innerHTML = `${logoSvg(24)}<span class="mot">MON <i>CONCOURS</i></span>
     <span class="droite">${droite}</span>
@@ -4016,7 +4648,8 @@ function annoncer(){
     qcm:'Question', grille:'Composition', copie:'Copie corrigée', cahier:'Mon cahier', compte:'Mon compte',
     inscription:'Création de compte', connexion:'Connexion', abonnement:'Formules', paiement:'Paiement',
     test:'Test de niveau', resultat:'Résultat', pourtoi:'Fil pour toi', qdj:'Question du jour',
-    question:'Question partagée', gagnants:'Classement de la composition collective'}[S.ecran] || '';
+    question:'Question partagée', gagnants:'Classement de la composition collective', notion:'Notion du jour', recherche:'Recherche de questions',
+    defi:'Défi entre amis', top:'Top 10 de la semaine', proposer:'Proposer une question', parcours:'Mon parcours'}[S.ecran] || '';
   const a = document.getElementById('annonce');
   if(a && n) a.textContent = 'Écran : ' + n;
 }
@@ -4129,6 +4762,12 @@ function ecranApparence(){
       <div class="demo"><i style="background:#F5F5F0"></i><i style="background:#FFFFFF"></i><i style="background:#0B6B4A"></i></div>
       <b>Mode clair</b><span>Fond clair, cartes blanches, texte foncé, mêmes couleurs</span>
     </button>
+
+    <div class="carte reglages" style="margin-top:16px">
+      <button data-son-global="1" aria-pressed="${!S.sonCoupe}">Sons (sonneries, bonnes et mauvaises réponses)<span>${S.sonCoupe ? 'COUPÉS' : 'ACTIVÉS'}</span></button>
+      <button data-concentration="1" aria-pressed="${!!S.concentration}">Mode concentration<span>${S.concentration ? 'ACTIVÉ' : 'DÉSACTIVÉ'}</span></button>
+    </div>
+    <p class="sous" style="margin-top:8px;font-size:12.5px">Le mode concentration cache l'en-tête et le menu pendant les questions : il ne reste que la question. Il se règle aussi d'un geste, avec la cible en haut de chaque question.</p>
   </div>`;
 }
 
@@ -4160,7 +4799,8 @@ function rendre(){
     revisions:ecranRevisions, cours:ecranCours, lecture:ecranLecture, qcm:ecranQcm,
     grille:ecranGrille, copie:ecranCopie,
     cahier:ecranCahier, compte:ecranCompte,
-    pourtoi:ecranPourToi, qdj:ecranQdj, question:ecranQuestionPartagee, gagnants:ecranGagnants}[S.ecran] || ecranAujourdhui);
+    pourtoi:ecranPourToi, qdj:ecranQdj, question:ecranQuestionPartagee, gagnants:ecranGagnants,
+    notion:ecranNotion, recherche:ecranRecherche, defi:ecranDefi, top:ecranTop, proposer:ecranProposer, parcours:ecranParcours}[S.ecran] || ecranAujourdhui);
 
   /* FILET — une erreur dans un seul écran ne doit plus jamais laisser
      le candidat devant une page noire. On affiche ce qui s'est passé
@@ -4178,7 +4818,7 @@ function rendre(){
         <button class="cta creux" style="margin-top:9px" onclick="location.reload()">Recharger</button>
       </div>`;
   }
-  try{ nav(); apptete(); annoncer(); surcouche(); }catch(e){ console.error(e); }
+  try{ nav(); apptete(); annoncer(); surcouche(); appliquerConcentration(); }catch(e){ console.error(e); }
 }
 
 document.addEventListener('click', ev=>{
@@ -4215,7 +4855,8 @@ document.addEventListener('click', ev=>{
         S.erreur = ''; S.util = {nom:f.nom.trim(), tel:tel, pin:'', connecte:true};
         ecrireMemoire({ nom:f.nom.trim(), tel:tel, niveau:S.niveau });
         pister('ACCOUNT_CREATED', { niveau: S.niveau });
-        S.modal = null; chargerProgression(); aller('aujourdhui');
+        S.modal = null; chargerProgression();
+        if(S.defi && S.defi.etat === 'connexion') ouvrirDefi(S.defi.id); else aller('aujourdhui');
       });
       return;
     }
@@ -4252,7 +4893,7 @@ document.addEventListener('click', ev=>{
       S.modal = null;
       await reprendreSession();
       await chargerProgression();
-      aller('aujourdhui');
+      if(S.defi && S.defi.etat === 'connexion') ouvrirDefi(S.defi.id); else aller('aujourdhui');
     })();
     return;
   }
@@ -4393,6 +5034,7 @@ document.addEventListener('click', ev=>{
   if(d.lire){ S.ressourceOuverte = d.lire; pister('COURSE_OPENED'); return aller('lecture'); }
   if(d.telecharger){ telechargerRessource(d.telecharger); return; }
   if(d.mat){
+    ecrireReglage('dernierQcm', d.mat);
     S.matiere = d.mat; S.qcmIdx = (S.qcmPos && S.qcmPos[d.mat]) || 0; S.qcmRep=undefined; S.qcmCorrection=null; S.qcmSerie=0; S.qcmDebut=Date.now(); S.ecran='qcm';
     pister('COURSE_STARTED', { matiere: d.mat, niveau: S.niveau });
     return rendre();
@@ -4435,6 +5077,7 @@ document.addEventListener('click', ev=>{
   if(d.cible){
     /* les cours portent parfois un nom de matière différent de la banque */
     const nom = banqueDe(d.cible) ? d.cible : ((S.banque || []).find(m => m.nom.toLowerCase().startsWith(d.cible.toLowerCase().slice(0,5))) || {}).nom || d.cible;
+    ecrireReglage('dernierQcm', nom);
     S.matiere = nom; S.qcmIdx = (S.qcmPos && S.qcmPos[nom]) || 0; S.qcmRep=undefined; S.qcmCorrection=null; S.qcmSerie=0; S.qcmDebut=Date.now(); return aller('qcm');
   }
   if(d.test){ S.ecran='test'; pister('DIAGNOSTIC_STARTED'); return rendre(); }

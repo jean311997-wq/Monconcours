@@ -1342,3 +1342,56 @@ body.en-transition *{transition:background-color .4s ease, color .4s ease, borde
 .barres i.col{background:var(--or)}
 .barres.fines{height:46px;gap:3px}
 .barres.fines i{background:var(--cachet)}
+
+/* ---------- suite : niveaux, mission, citation, défis, cahier, concentration ---------- */
+.qcm-tete .x-mode{margin-left:auto;margin-right:12px;width:32px;height:32px;display:grid;place-items:center;border-radius:50%;color:var(--craie2);border:1px solid var(--trait)}
+.qcm-tete .x-mode.on{color:#fff;background:var(--laterite);border-color:var(--laterite)}
+body.concentration .apptete,body.concentration .nav,body.concentration .rail{display:none !important}
+body.concentration .app{grid-template-columns:minmax(0,1fr) !important;grid-template-rows:minmax(0,1fr) !important}
+.bandeau-accueil{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin:4px 0 2px;font-size:13px;color:var(--craie2)}
+.bandeau-accueil span{display:inline-flex;align-items:center;gap:5px}
+.bandeau-accueil svg{color:var(--or)}
+.bandeau-accueil b{color:var(--craie)}
+.bandeau-accueil .niv{font-family:var(--m);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--or);border:1px solid var(--or-bord);border-radius:999px;padding:3px 9px}
+.niv-chemin{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.niv-etape{font-size:12px;padding:5px 10px;border-radius:999px;border:1px solid var(--trait);color:var(--craie2)}
+.niv-etape.on{border-color:var(--or);color:var(--or);background:var(--or-fond)}
+.niv-trait{width:14px;height:1px;background:var(--trait)}
+.carte.mission{border-color:var(--vert-bord)}
+.carte.mission .libelle span{display:inline-flex;align-items:center;gap:6px;color:var(--vert-texte)}
+.citation{margin:18px 0 0;padding:14px 16px;border-left:3px solid var(--or);background:var(--ardoise);border-radius:0 12px 12px 0}
+.citation blockquote{font-family:var(--d);font-size:17px;line-height:1.35;letter-spacing:-.01em}
+.citation figcaption{margin-top:6px;font-size:12.5px;color:var(--craie2)}
+.citation figcaption::before{content:'— '}
+.resultat-q{display:block;width:100%;text-align:left;background:var(--ardoise);border:1px solid var(--trait);border-radius:12px;padding:11px 13px;margin-bottom:8px;color:var(--craie)}
+.resultat-q b{display:block;font-weight:500;font-size:14px;line-height:1.4;margin-top:3px}
+.choix-mat{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.choix-mat button{background:var(--ardoise);border:1px solid var(--trait);border-radius:12px;padding:13px 10px;font-size:13.5px;font-weight:600;color:var(--craie);min-height:52px}
+.choix-mat button:first-child{grid-column:1 / -1;border-color:var(--laterite)}
+.defi-tete{position:sticky;top:0;z-index:5;display:flex;justify-content:space-between;align-items:center;padding:12px 18px;background:#20211C;color:#D8D0BC}
+.defi-tete .gr-chrono{font-size:20px}
+.defi-q{margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid var(--trait)}
+.defi-q .sq-no{font-family:var(--m);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--craie2);margin-bottom:6px}
+.defi-corr{font-size:13px;padding:8px 0;border-bottom:1px solid var(--trait);line-height:1.45}
+.defi-corr span{display:block;margin-top:3px;font-size:12.5px}
+.defi-corr.ok span{color:var(--vert-texte)}.defi-corr.ko span{color:var(--rouge-texte)}
+.alerte-err{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12.5px;color:var(--rouge-texte)}
+.note-perso{margin-top:8px}
+.note-perso textarea{width:100%;background:var(--ardoise2);border:1px solid var(--trait);border-radius:10px;padding:8px 10px;color:var(--craie);font:inherit;font-size:13.5px;margin-bottom:6px}
+.note-perso.lue{font-size:13px;background:var(--or-fond);border:1px solid var(--or-bord);border-radius:10px;padding:8px 10px;line-height:1.45}
+.note-perso.lue b{color:var(--or);margin-right:4px}
+.glisser-info{text-align:center;font-size:11.5px;margin-top:10px}
+@media(hover:hover){.glisser-info{display:none}}
+.bascule-graph{display:inline-flex;gap:4px}
+.bascule-graph button{font-family:var(--m);font-size:10.5px;padding:3px 8px;border-radius:999px;border:1px solid var(--trait);color:var(--craie2)}
+.bascule-graph button.on{background:var(--ardoise2);color:var(--craie)}
+.actions-diag{margin:8px 0 0 18px;font-size:13px;line-height:1.55;color:var(--craie2)}
+.actions-diag li{margin-bottom:6px}.actions-diag b{color:var(--craie)}
+.prop-opt .oeil{min-width:76px}
+.prop-opt .oeil.bonne{color:#fff;background:var(--cachet);border-color:var(--cachet)}
+.carte.annales{border-color:var(--or-bord)}
+#concours-vise{width:100%;background:var(--ardoise2);border:1px solid var(--trait);border-radius:10px;padding:10px;color:var(--craie);font:inherit}
+.champ textarea{width:100%;background:var(--ardoise);border:1px solid var(--trait);border-radius:11px;padding:12px 13px;color:var(--craie);font:inherit;font-size:15px;line-height:1.45;resize:vertical}
+.champ textarea::placeholder{color:var(--craie2)}
+.champ textarea:focus{outline:2px solid var(--cachet);outline-offset:1px;border-color:var(--cachet)}
+.reglages button[aria-pressed]{text-align:left}

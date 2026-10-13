@@ -503,7 +503,7 @@ begin
     'jours14', coalesce((select jsonb_agg(jsonb_build_object('jour', j, 'n',
                     (select count(*) from public.tentatives_question t where t.user_id = v_user
                         and t.cree_le >= j and t.cree_le < j + interval '1 day')) order by j)
-                  from generate_series(current_date - 13, current_date, '1 day') j), '[]'::jsonb)
+                  from generate_series(current_date - 29, current_date, '1 day') j), '[]'::jsonb)
   );
 end $$;
 
