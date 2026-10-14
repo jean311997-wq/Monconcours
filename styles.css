@@ -1395,3 +1395,122 @@ body.concentration .app{grid-template-columns:minmax(0,1fr) !important;grid-temp
 .champ textarea::placeholder{color:var(--craie2)}
 .champ textarea:focus{outline:2px solid var(--cachet);outline-offset:1px;border-color:var(--cachet)}
 .reglages button[aria-pressed]{text-align:left}
+
+/* =====================================================================
+   14 octobre (3) — composition nationale, onglet Actualité,
+   révisions fusionnées, départ 3-2-1, feuille plus compacte,
+   cahier d'erreurs, niveaux et rappels.
+   ===================================================================== */
+/* tâches faites : barrées, lisiblement */
+.etape.fait h3,.etape.fait p{text-decoration:line-through;text-decoration-color:currentColor;text-decoration-thickness:1.5px;color:var(--craie2)}
+
+/* carte de la composition nationale */
+.carte.nationale{margin-top:16px;border:1.5px solid var(--or-bord);background:linear-gradient(160deg,var(--or-fond),var(--ardoise) 78%);padding:16px}
+.cn-tete{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;font-family:var(--m);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase}
+.cn-tete span:first-child{display:inline-flex;align-items:center;gap:6px;color:var(--or)}
+.cn-samedi{color:var(--craie2);white-space:nowrap}
+.cn-tete span:first-child{white-space:nowrap}
+.cn-quand{margin-top:4px;font-size:14px;font-weight:600;text-transform:none}
+.cn-quand::first-letter{text-transform:uppercase}
+.cn-faits{margin-top:8px;font-size:12.5px}
+.cn-inscrit{display:flex;align-items:center;gap:7px;margin-top:12px;padding:10px 12px;border-radius:10px;background:var(--vert-fond);border:1px solid var(--vert-bord);color:var(--vert-texte);font-weight:600;font-size:13.5px}
+.cn-direct{display:inline-flex;align-items:center;gap:6px;color:var(--rouge-texte);margin-right:6px}
+.cn-direct i{width:8px;height:8px;border-radius:50%;background:var(--rouge-texte);animation:battement 1.2s ease-in-out infinite}
+.rebours{display:flex;gap:6px;margin-top:10px}
+.rebours span{flex:1;max-width:76px;text-align:center;background:var(--encre);border:1px solid var(--or-bord);border-radius:10px;padding:7px 4px}
+.rebours b{display:block;font-family:var(--m);font-size:21px;font-weight:600;color:var(--or);line-height:1.1}
+.rebours small{font-family:var(--m);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--craie2)}
+
+/* la question « Voulez-vous participer ? » */
+.pop-nat h3{font-family:var(--d);font-size:21px;margin-top:4px}
+.pop-nat .rebours{margin:0 0 12px}
+.pn-q{font-weight:700;font-size:15px;margin:4px 0 10px}
+.pn-nom{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;color:var(--craie2);margin-bottom:14px;line-height:1.4}
+.pn-nom input{margin-top:2px;accent-color:var(--cachet)}
+.pn-ok{display:grid;place-items:center;color:var(--vert-texte);margin:6px 0 4px}
+
+/* résultats : statut personnel */
+.statut-nat{margin-top:16px;border-radius:14px;padding:14px 16px;border:1.5px solid var(--trait);background:var(--ardoise);font-size:13.5px;line-height:1.5}
+.statut-nat.sn-admis{border-color:var(--vert-bord);background:var(--vert-fond)}
+.statut-nat.sn-attente{border-color:var(--ambre-bord);background:var(--ambre-fond)}
+.statut-nat.sn-echoue{border-color:var(--rouge-bord);background:var(--rouge-fond)}
+.sn-tampon{display:inline-block;font-family:var(--m);font-size:11px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;border:2px solid currentColor;border-radius:6px;padding:3px 9px;transform:rotate(-2deg)}
+.statut-nat.sn-admis .sn-tampon{color:var(--vert-texte)}
+.statut-nat.sn-attente .sn-tampon{color:var(--ambre-texte)}
+.statut-nat.sn-echoue .sn-tampon{color:var(--rouge-texte)}
+.sn-titre{font-family:var(--d);font-weight:800;font-size:18px;margin:8px 0 4px;letter-spacing:-.01em}
+
+/* bas de l'accueil */
+.defis-duo{display:grid;gap:10px;margin-top:10px}
+@media(min-width:620px){.defis-duo{grid-template-columns:1fr 1fr}}
+.defis-duo .carte{margin-top:0}
+
+/* révisions : une carte par matière, cours et QCM ensemble */
+.mat-rev{background:var(--ardoise);border:1px solid var(--trait);border-radius:14px;padding:13px;margin-top:10px}
+.mr-tete{display:flex;gap:11px;align-items:flex-start}
+.mr-tete .ic{width:36px;height:36px;flex:none;border-radius:9px;background:var(--ardoise2);border:1px solid var(--trait);display:grid;place-items:center;font-family:var(--m);font-size:11px;font-weight:600}
+.mr-co{flex:1;min-width:0}
+.mr-co b{display:block;font-size:14.5px;font-weight:600}
+.mr-co .bar{display:block;height:4px;background:var(--trait);border-radius:2px;margin-top:7px;overflow:hidden}
+.mr-co .bar i{display:block;height:100%;background:var(--cachet)}
+.mr-co .pc{display:block;font-size:12px;color:var(--craie2);margin-top:5px;line-height:1.4}
+.mr-actions{display:flex;gap:6px;margin-top:11px}
+.mr-actions button{flex:1;display:flex;align-items:center;justify-content:center;gap:5px;min-height:40px;padding:6px 8px;border-radius:10px;border:1px solid var(--trait);font-size:12.5px;font-weight:600;color:var(--craie);background:none}
+.mr-actions button.plein{background:var(--cachet);border-color:var(--cachet);color:#fff}
+.mr-actions button:active{transform:scale(.97)}
+@media(max-width:360px){.mr-actions button svg{display:none}}
+
+/* départ de l'épreuve : 3, 2, 1, c'est parti */
+.decompte{position:absolute;inset:0;z-index:30;display:grid;place-items:center;background:rgba(20,18,13,.86);pointer-events:none}
+.decompte span{font-family:var(--d);font-weight:800;font-size:110px;color:#FBF7EA;animation:decompte .8s ease-out both}
+.decompte span.parti{font-size:46px;color:#5FD39C;text-align:center;padding:0 20px}
+@keyframes decompte{0%{transform:scale(1.6);opacity:0}30%{opacity:1}100%{transform:scale(.9);opacity:.95}}
+.gr-chrono{font-size:21px;border:1.5px solid currentColor;padding:3px 9px}
+.gr-chrono.chrono-allume{animation:allume .65s ease-in-out 4}
+@keyframes allume{0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(95,211,156,.55)}50%{transform:scale(1.14);box-shadow:0 0 0 9px rgba(95,211,156,0)}}
+@media(prefers-reduced-motion:reduce){.decompte span,.gr-chrono.chrono-allume{animation:none}}
+
+/* barre « Glisser vers la feuille » et pied de copie : fins, le sujet respire */
+.geste-feuille{padding:4px 12px;font-size:11.5px;gap:7px}
+.geste-feuille .fleche{width:18px;height:18px;font-size:11px;animation-name:flecheDroite}
+@keyframes flecheDroite{0%,100%{transform:translateX(0)}50%{transform:translateX(4px)}}
+.gr-pied.compact{display:flex;align-items:center;gap:10px;padding-top:6px;padding-bottom:calc(6px + env(safe-area-inset-bottom,0px))}
+.gr-pied.compact .compteur-copie{margin:0;flex:1;min-width:0;white-space:nowrap}
+.gr-pied.compact .compteur-copie .cc-v{font-size:16px}
+.gr-pied.compact .compteur-copie .cc-l{font-size:11.5px;overflow:hidden;text-overflow:ellipsis}
+.gr-pied.compact .remettre{width:auto;flex:none;padding:9px 14px;font-size:13px}
+
+/* cahier d'erreurs */
+.conseil-err{display:flex;gap:9px;align-items:flex-start;margin-top:10px;padding:10px 12px;border-radius:10px;border:1px solid var(--ambre-bord);background:var(--ambre-fond);font-size:12.5px;line-height:1.5}
+.conseil-err svg{flex:none;margin-top:2px;color:var(--ambre-texte)}
+.btn-cahier{font-weight:600;border-width:1.5px;border-color:var(--craie2)}
+
+/* niveaux : ce qui reste, en barres */
+.nd-titre{font-size:15px;margin-bottom:10px}
+.nd-palier{margin-top:16px;padding-top:12px;border-top:1px solid var(--trait)}
+.nd-nom{font-family:var(--m);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--or);margin-bottom:6px}
+.nd-crit{margin-top:10px}
+.nd-l{display:flex;justify-content:space-between;gap:10px;font-size:13px}
+.nd-barre{height:8px;border-radius:5px;background:var(--trait);overflow:hidden;margin-top:5px}
+.nd-barre i{display:block;height:100%;background:var(--or);border-radius:5px;transition:width .8s cubic-bezier(.2,.8,.3,1)}
+.nd-barre.ok i{background:var(--cachet)}
+.nd-s{font-size:12px;color:var(--craie2);margin-top:4px}
+
+/* mes dernières copies */
+.copie-l{display:grid;grid-template-columns:minmax(0,1.3fr) 1fr auto auto;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--trait)}
+.copie-l:last-of-type{border-bottom:none}
+.cl-g b{display:block;font-size:13px;font-weight:600}
+.cl-g span{font-size:11.5px;color:var(--craie2)}
+.cl-barre{height:6px;border-radius:4px;background:var(--trait);overflow:hidden}
+.cl-barre i{display:block;height:100%;background:var(--or)}
+.cl-barre i.haut{background:var(--cachet)}.cl-barre i.bas{background:var(--rouge-texte)}
+.cl-n{font-size:13px}
+.copie-l .mini{padding:6px 8px;min-height:32px}
+
+/* rappels : une ligne de choix */
+.puces-rappel{display:flex;flex-wrap:wrap;gap:6px}
+.puces-rappel button{font-size:12px;padding:6px 10px;border-radius:999px;border:1px solid var(--trait);color:var(--craie);min-height:34px}
+.puces-rappel button.on{border-color:var(--cachet);background:var(--vert-fond);color:var(--vert-texte);font-weight:600}
+.rappel-heure{display:flex;gap:8px;margin-top:9px;align-items:center}
+.rappel-heure select{font:inherit;padding:7px 10px;border-radius:9px;border:1px solid var(--trait);background:var(--encre);color:var(--craie)}
+.mr-actions button{white-space:nowrap;font-size:12px;padding:6px 4px;gap:4px}

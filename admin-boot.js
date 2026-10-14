@@ -5,7 +5,7 @@
 (function(){
   function demarrerAdmin(){
     var s = document.createElement('script');
-    s.src = 'admin.js?v=15';
+    s.src = 'admin.js?v=16';
     document.body.appendChild(s);
   }
   var t = document.createElement('script');

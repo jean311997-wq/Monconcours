@@ -357,7 +357,7 @@ function aller(e){
    NAVIGATION
    ===================================================================== */
 const ONGLETS = [
-  {id:'aujourdhui', g:'actualite', l:'Accueil'},
+  {id:'aujourdhui', g:'actualite', l:'Actualité'},
   {id:'revisions',  g:'revisions', l:'Révisions'},
   {id:'grille',     g:'grille',    l:'Composition'},
   {id:'cahier',     g:'erreurs',   l:'Mes erreurs'},
@@ -761,6 +761,7 @@ async function chargerProgression(){
   if(!base) return;
   const uid = await utilisateurCourant();
   if(!uid) return;
+  if(S.sessionPrete) chargerEpreuve();
 
   S.classementCharge = false;
 
@@ -844,6 +845,9 @@ async function ouvrirSession(tel, pin){
 
 async function reprendreSession(){
   if(!base) return;
+  try{ await reprendreSession0(); }finally{ S.sessionPrete = true; chargerEpreuve(); }
+}
+async function reprendreSession0(){
   const { data } = await base.auth.getSession();
   if(!data || !data.session){
     /* La session du serveur a expiré : on corrige l'affichage optimiste,
@@ -913,7 +917,7 @@ function brancherBase(){
    OBSERVATION — collecte des événements
    Rien de personnel : ni saisie, ni mot de passe, ni position.
    ===================================================================== */
-const VERSION_APP = 'v16';
+const VERSION_APP = 'v17';
 
 const O = {
   session: null, precedent: null, dernierTemps: Date.now(), entreeEcran: Date.now(),
@@ -1076,7 +1080,7 @@ async function ouvrirComposition(){
   ouvertureEnCours = true;
   S.compoEtat = 'chargement'; rendre();
   try{
-    /* une composition collective se rejoint par son identifiant ;
+    /* une composition nationale se rejoint par son identifiant ;
        sinon le serveur choisit le sujet, ou reprend celui en cours */
     const { data, error } = S.rejoindre
       ? await base.rpc('rejoindre_epreuve', { p_epreuve: S.rejoindre })
@@ -1226,8 +1230,6 @@ function ecranAujourdhui(){
       <span class="eyebrow">${dateDuJour()}</span>
       ${compteARebours()}
     </div>
-    <h1 class="titre">${S.util.connecte ? 'Ta préparation aujourd\'hui' : 'Prépare ton concours aujourd\'hui'}</h1>
-    ${bandeauAccueil()}
 
     ${enCours?`
     <button class="reprise-compo" data-go="grille">
@@ -1237,12 +1239,7 @@ function ecranAujourdhui(){
       <div class="rc-cta">▶ Reprendre maintenant</div>
     </button>`:''}
 
-    ${carteEpreuve()}
-    ${blocPreparation()}
-    ${blocDefi()}
-    ${blocPlus()}
-
-    <h2 class="titre-section">L'actualité utile au concours</h2>
+    <h1 class="titre">L'actualité utile au concours</h1>
     <div class="ligne-direct">
       ${S.actuDerniere ? `<span class="direct"><i></i>Dernière mise à jour : ${E(dateCourteFr(S.actuDerniere))}</span>` : ''}
       <span class="sous-titre">National et international</span>
@@ -1256,7 +1253,6 @@ function ecranAujourdhui(){
       </div>
       ${ACTU.length > 3 ? `<button class="voirplus" data-go="actualite">VOIR LES ${ACTU.length} INFORMATIONS →</button>` : ''}
     </div>
-
     </div>
     <div>
     <div class="bloc">
@@ -1274,19 +1270,22 @@ function ecranAujourdhui(){
             <p>Une épreuve chronométrée sur la feuille de réponses. Cochée à la remise de la copie.</p>
             <span class="dur">25 min</span></div>
         </div>
-        <div class="etape ${S.taches[2]?'fait':''}">
+        <div class="etape ${S.taches[2]?'fait':(S.taches[1]?'actif':'')}">
           <div class="puce">${S.taches[2]?'✓':'3'}</div>
-          <div><h3>Revoir mes erreurs</h3>
+          <div><h3>Revoir mes erreurs fréquentes</h3>
             <p>${ouvertes() ? ouvertes() + ' erreur' + (ouvertes()>1?'s':'') + ' ouverte' + (ouvertes()>1?'s':'') + ', les plus ratées en premier.' : 'Aucune erreur ouverte pour l\'instant.'}</p>
             <span class="dur">10 min</span></div>
         </div>
       </div>
-      ${!S.taches[0] ? `<button class="cta" data-go="actualite" style="margin-top:12px">Lire l'actualité<small>Tâche 1 sur 3</small></button>`
+      ${f === 3 ? '' : !S.taches[0] ? `<button class="cta" data-go="actualite" style="margin-top:12px">Lire l'actualité<small>Tâche 1 sur 3</small></button>`
         : (!S.taches[1] ? `<button class="cta" data-go="grille" style="margin-top:12px">Composer<small>Tâche 2 sur 3</small></button>`
         : `<button class="cta" data-cahierfreq="1" style="margin-top:12px">Revoir mes erreurs fréquentes<small>Tâche 3 sur 3</small></button>`)}
     </div>
     </div>
     </div>
+
+    ${carteEpreuve()}
+    ${blocPlus()}
   </div>`;
 }
 
@@ -1296,7 +1295,7 @@ function ecranActualite(){
   const liste = ACTU.filter(a=>a.c===S.actuOnglet);
   vue().innerHTML = `
   <div class="pad">
-    <button class="retourhaut" data-go="aujourdhui">Aujourd'hui</button>
+    <button class="retourhaut" data-go="aujourdhui">Actualité</button>
     <h1 class="titre">Actualité</h1>
     <p class="sous" style="margin-top:6px">Seules les informations utiles au concours entrent ici : grandes décisions nationales, organisations internationales, dates et chiffres. Un fait divers local n'y a pas sa place.</p>
 
@@ -1362,7 +1361,8 @@ function ico(n, t){
     etoile:'<path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.8z"/>',
     groupe:'<circle cx="9" cy="8.5" r="3.2"/><path d="M3 19a6 6 0 0 1 12 0"/><circle cx="17" cy="9.5" r="2.5"/><path d="M15.5 14.2A5 5 0 0 1 21 19"/>',
     question:'<circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.8-2.4 2.2-2.4 3.9"/><circle cx="12" cy="17" r=".6" fill="currentColor"/>',
-    horloge:'<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'
+    horloge:'<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+    coche:'<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16.5 9.5"/>'
   }[n] || '';
   return `<svg ${o}>${p}</svg>`;
 }
@@ -1659,40 +1659,61 @@ const sigle = nom => SIGLE[nom] || (nom || '?').slice(0, 2).toUpperCase();
 
 function ecranRevisions(){
   if(!S.banque && S.banqueEtat !== 'chargement') chargerQuestions();
+  if((S.ressources === null || S.ressources === undefined) && !S.ressourcesEnCours) chargerRessources();
+  chargerLectures();
   const banque = S.banque || [];
   const total = banque.reduce((a, m) => a + m.questions.length, 0);
   const prog = S.progression || {};
+  const lus = S.lus || [];
+  /* une seule liste : chaque matière avec son cours et ses QCM */
+  const mats = [];
+  banque.forEach(m => mats.push(m.nom));
+  (S.ressources || []).filter(r => r.type_ressource !== 'annale' && r.matiere !== 'Autres documents')
+    .forEach(r => { if(!mats.includes(r.matiere)) mats.push(r.matiere); });
   vue().innerHTML = `
   <div class="pad">
     <div class="eyebrow">Mes révisions</div>
-    <h1 class="titre">Choisis ton niveau</h1>
-    <p class="sous" style="margin:8px 0 16px">Les questions changent selon le niveau du concours visé. Les matières communes (culture générale, institutions, droit, économie) sont proposées à tous les niveaux.</p>
+    <h1 class="titre">Cours et QCM</h1>
 
-    <div class="niveaux" role="group" aria-label="Niveau">
+    <button class="cta" style="margin-top:14px" data-go="cours">${ico('lire',17)} Lire ou télécharger les cours<small>Toute la bibliothèque, les annales et la recherche</small></button>
+
+    <div class="niveaux" role="group" aria-label="Niveau" style="margin-top:16px">
       ${['Troisième','Terminale','Licence'].map(n=>`<button class="${S.niveau===n?'on':''}" data-niv="${n}" aria-pressed="${S.niveau===n}">${n}</button>`).join('')}
     </div>
 
     <div class="bandeau-niveau reveal" key="${S.niveau}">
       <div><b>${PROGRAMME[S.niveau]}</b>
-        <span>${S.banqueEtat === 'pret' ? `${banque.length} matière${banque.length>1?'s':''} · <span class="num">${total.toLocaleString('fr-FR')}</span> question${total>1?'s':''} à ce niveau` : 'Chargement de la banque…'}</span></div>
+        <span>${S.banqueEtat === 'pret' ? `${mats.length} matière${mats.length>1?'s':''} · <span class="num">${total.toLocaleString('fr-FR')}</span> question${total>1?'s':''} à ce niveau` : 'Chargement…'}</span></div>
       <span class="tampon t-ok">${S.niveau}</span>
     </div>
 
     ${S.banqueEtat === 'erreur' ? `<div class="carte"><p class="sous">La banque de questions n'a pas pu être chargée. Vérifiez votre connexion et revenez sur cet écran.</p></div>` : ''}
-    ${S.banqueEtat === 'pret' && !banque.length ? `<div class="carte"><p class="sous">Aucune question n'est encore publiée pour ce niveau. La banque se remplit au fur et à mesure des validations.</p></div>` : ''}
+    ${S.banqueEtat === 'pret' && !mats.length ? `<div class="carte"><p class="sous">Rien n'est encore publié pour ce niveau. La banque se remplit au fur et à mesure des validations.</p></div>` : ''}
 
     <div class="reveal" id="listecours">
-    ${banque.map(m=>{
-      const p = prog[m.nom], nb = m.questions.length;
+    ${mats.map(nom => {
+      const m = banque.find(x => x.nom === nom);
+      const nb = m ? m.questions.length : 0, p = prog[nom];
       const faites = p ? Math.min(p.faites, nb) : 0;
       const pc = nb ? Math.round(faites / nb * 100) : 0;
-      return `<button class="cours" data-mat="${E(m.nom)}">
-        <span class="ic">${E(sigle(m.nom))}</span>
-        <span class="co"><b>${E(m.nom)}</b>
-          <span class="bar"><i style="width:${pc}%"></i></span>
-          <span class="pc">${faites} sur ${nb} question${nb>1?'s':''} déjà travaillée${nb>1?'s':''}${p && p.faites ? ' · ' + Math.round(100 * p.reussies / Math.max(1, p.faites)) + ' % de réussite' : ''}</span></span>
-        <span class="fl">${faites>0?'CONTINUER':'COMMENCER'} →</span>
-      </button>`;
+      const chap = (S.ressources || []).filter(r => r.matiere === nom && r.texte && r.type_ressource !== 'annale');
+      const fich = (S.ressources || []).filter(r => r.matiere === nom && r.fichier_chemin && r.type_ressource !== 'annale');
+      const nLus = chap.filter(r => lus.includes(r.id)).length;
+      return `<div class="mat-rev">
+        <div class="mr-tete">
+          <span class="ic">${E(sigle(nom))}</span>
+          <div class="mr-co"><b>${E(nom)}</b>
+            ${nb ? `<span class="bar"><i style="width:${pc}%"></i></span>
+            <span class="pc">${faites} sur ${nb} question${nb>1?'s':''} travaillée${nb>1?'s':''}${p && p.faites ? ' · ' + Math.round(100 * p.reussies / Math.max(1, p.faites)) + ' % de réussite' : ''}</span>` : ''}
+            ${chap.length ? `<span class="pc">${chap.length} chapitre${chap.length>1?'s':''} de cours${S.util.connecte ? ' · ' + nLus + ' lu' + (nLus>1?'s':'') : ''}</span>` : ''}
+          </div>
+        </div>
+        <div class="mr-actions">
+          ${chap.length ? `<button data-matiere="${encodeURIComponent(nom)}">${ico('lire',16)}<span>Lire le cours</span></button>` : ''}
+          ${chap.length || fich.length ? `<button data-telecharger-mat="${encodeURIComponent(nom)}">${ico('telecharger',16)}<span>Télécharger</span></button>` : ''}
+          ${nb ? `<button class="plein" data-mat="${E(nom)}">${ico('revisions',16)}<span>${faites > 0 ? 'Continuer les QCM' : 'Faire les QCM'}</span></button>` : ''}
+        </div>
+      </div>`;
     }).join('')}
     </div>
 
@@ -1701,10 +1722,37 @@ function ecranRevisions(){
     </div>` : (!S.abo.actif && !S.gratuit ? `<div class="carte" style="margin-top:12px">
       <p class="sous">Formule gratuite : 20 corrections par jour. L'abonnement les rend illimitées et ouvre les compositions.</p>
     </div>` : '')}
-
-    <button class="cta creux" style="margin-top:12px" data-go="cours">
-      Lire ou télécharger les cours<small>Lecture en ligne, ou hors connexion une fois ouverts</small></button>
   </div>`;
+}
+
+/* Télécharger le cours d'une matière : le texte mis en page, prêt pour le PDF */
+function telechargerCoursMatiere(nom){
+  const chap = (S.ressources || []).filter(r => r.matiere === nom && r.texte && r.type_ressource !== 'annale');
+  const fich = (S.ressources || []).filter(r => r.matiere === nom && r.fichier_chemin && r.type_ressource !== 'annale');
+  if(!chap.length){
+    if(fich.length === 1) return telechargerRessource(fich[0].id);
+    return aller('cours');
+  }
+  const html = '<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>' + E(nom) + ' · Mon Concours</title><style>' +
+    '@page{size:A4;margin:16mm}body{font-family:Georgia,"Times New Roman",serif;color:#111;max-width:180mm;margin:0 auto;padding:0 10px;line-height:1.55;font-size:13.5px}' +
+    '.tete{border-bottom:3px double #111;padding-bottom:8px;display:flex;justify-content:space-between;align-items:flex-end;gap:10px;flex-wrap:wrap}' +
+    '.tete b{font-size:18px;letter-spacing:.04em}.tete span{font-size:11px;color:#555}' +
+    'h1{font-size:24px;margin:18px 0 4px}h2{font-size:17px;margin:26px 0 6px;border-bottom:1px solid #111;padding-bottom:3px;break-after:avoid}' +
+    '.som{font-size:13px}.som li{margin:2px 0}h3{font-size:14px;letter-spacing:.06em;margin:14px 0 4px}p{margin:6px 0}' +
+    '.formule{font-family:"Courier New",monospace;background:#f4f1ea;padding:4px 8px}' +
+    '.pied{margin-top:24px;border-top:1px solid #111;padding-top:6px;font-size:11px;font-family:Helvetica,Arial,sans-serif;display:flex;justify-content:space-between}' +
+    '@media print{.noimp{display:none}}.noimp{text-align:center;margin:20px 0}.noimp button{font:inherit;padding:11px 22px;border:1px solid #111;background:#111;color:#fff}' +
+    '</style></head><body>' +
+    '<div class="tete"><b>MON CONCOURS</b><span>monconcours.vercel.app · ' + E(S.niveau) + '</span></div>' +
+    '<h1>' + E(nom) + '</h1><ol class="som">' + chap.map(r => '<li>' + E(r.titre) + '</li>').join('') + '</ol>' +
+    chap.map((r, i) => '<h2>' + (i + 1) + '. ' + E(r.titre) + '</h2>' + miseEnPage(r.texte)).join('') +
+    '<div class="pied"><span>monconcours.vercel.app</span><span>WhatsApp +226 ' + CONTACT.adminTel.replace(/(\d{2})(?=\d)/g, '$1 ') + '</span></div>' +
+    '<div class="noimp"><button onclick="window.print()">Enregistrer en PDF ou imprimer</button></div>' +
+    '<scr' + 'ipt>setTimeout(function(){window.print();},600);<\/scr' + 'ipt></body></html>';
+  const f = window.open('', '_blank');
+  if(!f){ toast('Autorisez les fenêtres pour télécharger le cours.'); return; }
+  f.document.write(html); f.document.close();
+  pister('COURSE_DOWNLOADED', { matiere: nom });
 }
 
 /* --- les fascicules de cours --- */
@@ -2191,7 +2239,7 @@ async function feuilleArchive(id){
   try{
     const { data, error } = await base.rpc('ma_copie', { p_composition: id });
     if(error || !data || !data.ok) throw new Error('copie');
-    if(data.correction_le){ toast('Composition collective : la feuille corrigée sera disponible à ' + heureFr(data.correction_le) + '.'); return; }
+    if(data.correction_le){ toast('Composition nationale : la feuille corrigée sera disponible à ' + heureFr(data.correction_le) + '.'); return; }
     const grille = [], reponses = {};
     (data.questions || []).forEach((q, i) => {
       grille.push({ q:q.enonce, o:q.options || [], bonnes:q.bonnes || [], m:q.matiere || null });
@@ -2203,12 +2251,27 @@ async function feuilleArchive(id){
 }
 
 /* Barre de progression : elle avance avec le défilement du cours. */
-function suivreLecture(){
+/* un cours lu jusqu'au bout compte pour le niveau « Prêt pour le concours » */
+async function marquerLus(ids){
+  ids = (ids || []).filter(id => !(S.lus || []).includes(id));
+  if(!ids.length || !base || !S.util.connecte) return;
+  S.lus = (S.lus || []).concat(ids);
+  try{ await base.rpc('marquer_lu', { p_ressources: ids }); if(S.details) S.details.cours_lus = (S.details.cours_lus || 0) + ids.length; }catch(e){}
+  pister('COURSE_READ', { n: ids.length });
+}
+async function chargerLectures(){
+  if(!base || !S.util.connecte || S.lusCharges) return;
+  try{ const { data } = await base.rpc('mes_lectures'); S.lus = data || []; S.lusCharges = true; if(S.ecran === 'revisions') rendre(); }catch(e){}
+}
+function suivreLecture(ids){
   const zone = vue(), barre = document.getElementById('jauge-lecture-barre');
-  if(!zone || !barre) return;
+  if(!zone) return;
+  let fait = false;
   const maj = () => {
     const h = zone.scrollHeight - zone.clientHeight;
-    barre.style.width = (h <= 0 ? 100 : Math.min(100, Math.max(0, zone.scrollTop / h * 100))) + '%';
+    const f = h <= 0 ? 1 : Math.min(1, Math.max(0, zone.scrollTop / h));
+    if(barre) barre.style.width = f * 100 + '%';
+    if(!fait && f >= 0.92 && ids){ fait = true; marquerLus(ids); }
   };
   zone.removeEventListener('scroll', zone._suivi || (()=>{}));
   zone._suivi = maj;
@@ -2226,7 +2289,7 @@ function ecranLecture(){
     vue().innerHTML = `
     <div class="pad">
       <div class="jauge-lecture" aria-hidden="true"><i id="jauge-lecture-barre"></i></div>
-      <button class="retourhaut" data-go="cours">La bibliothèque</button>
+      <button class="retourhaut" data-go="revisions">Mes révisions</button>
       <div class="eyebrow">${commun ? 'Toutes classes' : S.niveau}</div>
       <h1 class="titre">${E(S.matiereOuverte)}</h1>
       <p class="sous" style="margin:8px 0 0">${lot.length} chapitre${lot.length>1?'s':''} · lecture continue</p>
@@ -2250,9 +2313,9 @@ function ecranLecture(){
         <button class="cta" data-cible="${E(S.matiereOuverte)}">Faire les QCM de ce cours</button>
         <button class="cta creux" style="margin-top:8px" data-partage="cours">${ico("partage",16)} Partager ce cours</button>
       </div>
-      <button class="cta creux" style="margin-top:12px" data-go="cours">Retour à la bibliothèque</button>
+      <button class="cta creux" style="margin-top:12px" data-go="revisions">Retour aux révisions</button>
     </div>`;
-    suivreLecture();
+    suivreLecture(lot.map(x => x.id));
     return;
   }
 
@@ -2267,10 +2330,12 @@ function ecranLecture(){
     <div class="carte lecon" style="margin-top:16px">${miseEnPage(r.texte)}</div>
     ${r.fichier_chemin ? `<button class="cta creux" style="margin-top:14px" data-telecharger="${r.id}">Télécharger le fichier</button>` : ''}
   </div>`;
+  suivreLecture([r.id]);
 }
 
 async function chargerRessources(){
   if(!base) return;
+  S.ressourcesEnCours = true;
   try{
     const niveau = S.niveau.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
     /* Un cours sans niveau est commun aux trois classes : il doit apparaitre partout. */
@@ -2291,7 +2356,8 @@ async function chargerRessources(){
         || (x.theme || '').localeCompare(y.theme || '', 'fr')
         || x.titre.localeCompare(y.titre, 'fr'));
   }catch(e){ S.ressources = []; }
-  if(['cours','lecture'].includes(S.ecran)) rendre();
+  S.ressourcesEnCours = false;
+  if(['cours','lecture','revisions'].includes(S.ecran)) rendre();
 }
 
 async function telechargerRessource(id){
@@ -2424,6 +2490,29 @@ function ecranCompoAttente(){
   </div>`;
 }
 
+/* « 3, 2, 1, c'est parti » : le départ se voit, puis le chrono s'allume */
+function decompteDepart(){
+  const zone = document.querySelector('.grille');
+  if(!zone) return sonDepart();
+  const d = document.createElement('div');
+  d.className = 'decompte'; d.setAttribute('role', 'status'); d.setAttribute('aria-live', 'assertive');
+  zone.appendChild(d);
+  const etapes = ['3', '2', '1', 'C\'est parti !'];
+  let i = 0;
+  const suivant = () => {
+    if(i >= etapes.length){
+      d.remove();
+      const c = document.getElementById('chrono');
+      if(c){ c.classList.add('chrono-allume'); setTimeout(() => c.classList.remove('chrono-allume'), 2600); }
+      return;
+    }
+    d.innerHTML = `<span class="${i === 3 ? 'parti' : ''}">${etapes[i]}</span>`;
+    if(i < 3) bip(1); else { sonDepart(); annonceTemps('L\'épreuve commence. Bon courage.'); }
+    i++;
+    setTimeout(suivant, i === 4 ? 1000 : 800);
+  };
+  suivant();
+}
 function ecranGrille(){
   if(S.compoEtat !== 'pret' || !S.grille.length){
     if(S.compoEtat !== 'chargement' && S.compoEtat !== 'abonnement' && S.compoEtat !== 'connexion') ouvrirComposition();
@@ -2436,11 +2525,10 @@ function ecranGrille(){
   <div class="grille">
     <div class="gr-tete">
       <div><h1 class="t">Votre feuille de composition</h1>
-        <div class="eyebrow" style="color:#B5AC96">${S.epreuveCompo ? 'Composition collective' : 'Entraînement type ' + E(S.concours)} · ${nbQ} questions</div>
+        <div class="eyebrow" style="color:#B5AC96">${S.epreuveCompo ? 'Composition nationale' : 'Entraînement type ' + E(S.concours)} · ${nbQ} questions</div>
         <div class="gr-outils">
           <button class="gr-outil" data-quitter="1" aria-label="Quitter l'épreuve">${ico('sortie',14)}<span>Quitter</span></button>
           <button class="gr-outil" data-plein-ecran="1" aria-label="Plein écran">${ico('examen',14)}<span>${document.fullscreenElement ? 'Quitter le plein écran' : 'Plein écran'}</span></button>
-          <button class="gr-outil" data-son="1" aria-pressed="${!S.sonCoupe}" aria-label="${S.sonCoupe ? 'Remettre le son' : 'Couper le son'}">${ico(S.sonCoupe ? 'muet' : 'son',14)}<span>${S.sonCoupe ? 'Son coupé' : 'Son'}</span></button>
         </div></div>
       <div style="text-align:right">
         <div class="gr-chrono ${couleurChrono(S.chrono, S.dureeCompo || 1500)}" id="chrono">${mmss(S.chrono)}</div>
@@ -2463,7 +2551,7 @@ function ecranGrille(){
     </div>
 
     ${feuille ? '' : `<button class="geste-feuille" data-compotab="feuille" aria-label="Aller à la feuille de réponses">
-      <span class="fleche" aria-hidden="true">←</span><span>Glisser vers la feuille pour cocher</span></button>`}
+      <span>Glisser vers la feuille pour cocher</span><span class="fleche" aria-hidden="true">→</span></button>`}
 
     ${feuille ? '' : `<div class="scrub" id="scrub" aria-hidden="true">
       <div class="rail-s"></div>
@@ -2472,7 +2560,7 @@ function ecranGrille(){
 
     ${(feuille && S.apercu!==null) ? apercuQuestion() : ''}
 
-    <div class="gr-pied">
+    <div class="gr-pied compact">
       <div class="compteur-copie">
         <span class="cc-v num">${rep}</span><span class="cc-s num">/ ${nbQ}</span>
         <span class="cc-l">question${rep>1?'s':''} traitée${rep>1?'s':''}</span>
@@ -2497,7 +2585,7 @@ function ecranGrille(){
     /* sonnerie de départ : une seule fois par copie, au vrai début */
     if(S.compositionId && S.chrono >= total - 20 && S.departSonne !== S.compositionId){
       S.departSonne = S.compositionId;
-      sonDepart(); setTimeout(() => annonceTemps('L\'épreuve commence. Bon courage.'), 50);
+      decompteDepart();
     }
     S.timer = setInterval(()=>{
       S.chrono--;
@@ -2830,7 +2918,7 @@ function ecranCopie(){
       <h1 class="titre" style="font-size:22px">La copie n'est pas encore corrigée</h1>
       <p class="sous" style="margin:10px 0 18px">${E(S.remiseMessage || 'Envoi impossible.')}</p>
       ${S.compositionId ? `<button class="cta" data-remise-relancer="1">Renvoyer ma copie</button>` : ''}
-      <button class="cta creux" style="margin-top:9px" data-go="aujourdhui">Revenir à l'accueil</button></div>`;
+      <button class="cta creux" style="margin-top:9px" data-go="aujourdhui">Revenir à l'actualité</button></div>`;
     return;
   }
   if(S.correctionLe){
@@ -2838,8 +2926,8 @@ function ecranCopie(){
     const passe = Date.now() >= fin.getTime();
     vue().innerHTML = `
     <div class="copie">
-      <button class="retourhaut" data-go="aujourdhui">Accueil</button>
-      <div class="eyebrow">Composition collective · copie remise</div>
+      <button class="retourhaut" data-go="aujourdhui">Actualité</button>
+      <div class="eyebrow">Composition nationale · copie remise</div>
       <h1 class="titre" style="margin-bottom:10px">Votre copie<br>est remise</h1>
       <div class="cachet-note"><div class="n num">${S.grilleNote ?? 0} / ${S.grille.length}</div>
         <div class="l">votre note</div></div>
@@ -2850,7 +2938,7 @@ function ecranCopie(){
       </div>
       ${passe ? `<button class="cta" style="margin-top:14px" data-correction-differee="1">Afficher ma correction</button>` : ''}
       ${S.epreuveRemise ? `<button class="cta ${passe ? 'creux' : ''}" style="margin-top:9px" data-gagnants="${E(S.epreuveRemise)}">Voir le classement</button>` : ''}
-      <button class="cta creux" style="margin-top:9px" data-go="aujourdhui">Revenir à l'accueil</button>
+      <button class="cta creux" style="margin-top:9px" data-go="aujourdhui">Revenir à l'actualité</button>
     </div>`;
     return;
   }
@@ -2862,7 +2950,7 @@ function ecranCopie(){
   const utilise = S.dureeUtilisee ?? ((S.dureeCompo || 1500) - S.chrono);
   vue().innerHTML = `
   <div class="copie">
-    <button class="retourhaut" data-go="aujourdhui">Accueil</button>
+    <button class="retourhaut" data-go="aujourdhui">Actualité</button>
     <div class="eyebrow">Copie corrigée · ${new Date().toLocaleDateString('fr-FR',{day:'numeric',month:'long'})}${S.sujetRef ? ' · <span style="white-space:nowrap">sujet n° ' + E(S.sujetRef) + '</span>' : ''}</div>
     <h1 class="titre" style="margin-bottom:10px">Votre feuille<br>est corrigée</h1>
 
@@ -2960,10 +3048,9 @@ function ecranCahier(){
   const scoreSession = e => (S.cahierDepuisGrille && e.session===S.sessionCounter) ? 1 : 0;
   list = [...list].sort((a,b)=> (scoreSession(b)-scoreSession(a)) || (joursRestants(a)-joursRestants(b)));
   if(S.cahierFiltre) list = [...list].sort((a,b)=>b.rate-a.rate);
-  const vueC = S.cahierVue || 'toutes';
+  const vueC = S.cahierVue === 'jour' ? 'jour' : 'toutes';
   const nDiff = list.filter(e => e.rate >= 2 && e.suite < 3).length;
   if(vueC === 'jour') list = list.filter(e => joursRestants(e) === 0 && e.suite < 3);
-  if(vueC === 'difficiles') list = list.filter(e => e.rate >= 2 && e.suite < 3).sort((a,b) => b.rate - a.rate);
   const closes = S.cahier.filter(e=>e.suite>=3);
   if(repriseIdx !== null){ return ecranReprise(); }
   vue().innerHTML = `
@@ -2977,16 +3064,14 @@ function ecranCahier(){
       <div style="font-size:12.5px;font-weight:600;margin-bottom:4px">Erreurs les plus fréquentes d'abord</div>
       <p class="sous">Triées par nombre de rechutes. Ce sont celles qui te coûteront le plus cher le jour du concours.</p>
       <button class="voirplus" style="margin-top:9px" data-toutcahier="1">VOIR TOUT LE CAHIER</button></div>`:''}
-    <p class="sous" style="margin-top:8px">Une erreur ne disparaît qu'après trois bonnes réponses d'affilée. Après chaque réussite, elle est reprogrammée : d'abord dans 3 jours, puis dans 7, puis dans 21. ${dues() > 1 ? `<span class="num">${dues()}</span> sont à revoir aujourd'hui.` : dues() === 1 ? `Une est à revoir aujourd'hui.` : `Aucune n'est à revoir aujourd'hui.`}</p>
 
     <div class="onglets" style="margin-top:12px" role="group" aria-label="Filtrer mes erreurs">
       <button class="${vueC==='toutes'?'on':''}" data-cahier-vue="toutes">Toutes</button>
       <button class="${vueC==='jour'?'on':''}" data-cahier-vue="jour">Aujourd'hui · ${dues()}</button>
-      <button class="${vueC==='difficiles'?'on':''}" data-cahier-vue="difficiles">Difficiles · ${nDiff}</button>
     </div>
-    ${vueC === 'difficiles' ? `<p class="sous" style="margin-top:8px">Les questions ratées au moins deux fois. Lis l'explication lentement, écris-toi une note, puis reprends-les une par une.</p>` : ''}
-    ${S.details && typeof S.details.erreurs_mois === 'number' ? `<p class="sous" style="margin-top:8px">Ce mois-ci : <b class="num">${S.details.erreurs_mois}</b> réponse${S.details.erreurs_mois>1?'s':''} fausse${S.details.erreurs_mois>1?'s':''} · <b class="num">${S.details.refermees_total || 0}</b> erreur${(S.details.refermees_total||0)>1?'s':''} refermée${(S.details.refermees_total||0)>1?'s':''} depuis le début.</p>` : ''}
-    ${ouvertes() ? `<button class="lien-mini" style="margin-top:6px" data-export-cahier="1">${ico('telecharger',13)} Télécharger mon cahier en PDF</button>` : ''}
+    ${S.details && typeof S.details.erreurs_mois === 'number' ? `<p class="sous" style="margin-top:10px">Ce mois-ci : <b class="num">${S.details.erreurs_mois}</b> réponse${S.details.erreurs_mois>1?'s':''} fausse${S.details.erreurs_mois>1?'s':''} · <b class="num">${S.details.refermees_total || 0}</b> erreur${(S.details.refermees_total||0)>1?'s':''} refermée${(S.details.refermees_total||0)>1?'s':''} depuis le début.</p>` : ''}
+    ${nDiff ? `<div class="conseil-err">${ico('drapeau',14)}<p><b>${nDiff} question${nDiff>1?'s':''} ratée${nDiff>1?'s':''} au moins deux fois.</b> Lis l'explication lentement, écris-toi une note, puis reprends-les une par une.</p></div>` : ''}
+    ${ouvertes() ? `<button class="cta creux btn-cahier" style="margin-top:12px" data-export-cahier="1">${ico('telecharger',17)} Télécharger mon cahier d'erreurs en PDF</button>` : ''}
     ${list.length ? `
     <div class="bloc">
       ${vueC === 'toutes' ? repartitionErreurs(list) : ''}
@@ -3004,7 +3089,7 @@ function ecranCahier(){
           ${e.id ? (S.noteOuverte === e.id
             ? `<div class="note-perso"><textarea id="note-${E(e.id)}" maxlength="300" rows="2" placeholder="Ex. : je confonds toujours le Premier ministre et le président de l'Assemblée.">${E(e.notePerso || '')}</textarea>
                 <button class="mini" data-note-save="${E(e.id)}">Enregistrer</button></div>`
-            : (e.notePerso ? `<div class="note-perso lue"><b>Ma note</b> ${E(e.notePerso)} <button class="lien-mini" data-note-edit="${E(e.id)}">modifier</button></div>`
+            : (e.notePerso ? `<button class="lien-mini" data-note-edit="${E(e.id)}">${ico('coche',13)} Note enregistrée · la relire</button>`
               : `<button class="lien-mini" data-note-edit="${E(e.id)}">${ico('lire',13)} Ajouter une note personnelle</button>`)) : ''}
           <div class="pied">
             ${validee
@@ -3116,8 +3201,8 @@ function ecranCompte(){
     <div class="classement">
       <div class="t">${ico('trophee',14)} Position estimée</div>
       ${S.classement ? `
-      <div class="rangbig">Estimation : <span class="num">${nombreFr(S.classement.rang)}ᵉ</span></div>
-      <div class="pts">sur <span class="num">${nombreFr(S.classement.population)}</span> candidats · <span class="num">${nombreFr(S.classement.points)}</span> point${S.classement.points>1?'s':''}</div>
+      <div class="rangbig"><span class="num">${nombreFr(S.classement.rang)}ᵉ</span></div>
+      <div class="pts">sur <span class="num">${nombreFr(S.classement.population)}</span> candidats inscrits · <span class="num">${nombreFr(S.classement.points)}</span> point${S.classement.points>1?'s':''}</div>
       <div class="up ${S.classement.places_semaine < 0 ? 'baisse' : ''}">${
         S.classement.places_semaine > 0
           ? '▲ Vous avez gagné ' + S.classement.places_semaine + ' place' + (S.classement.places_semaine>1?'s':'') + ' cette semaine'
@@ -3132,10 +3217,10 @@ function ecranCompte(){
       <div class="legende-places"><span>${nombreFr(S.classement.places)} places</span><span>${nombreFr(S.classement.population)}ᵉ</span></div>
       <p class="sous" style="margin-top:9px">${
         S.classement.dans_les_admis
-          ? 'Vous êtes dans les places. Tenez la position : le seuil monte chaque année.'
+          ? 'Vous êtes dans la place, tenez la position. Le seuil monte chaque semaine.'
           : 'Il vous manque <b>' + nombreFr(S.classement.places_manquantes) + ' places</b> pour entrer dans les '
             + nombreFr(S.classement.places) + ' admis, soit <b>' + nombreFr(S.classement.points_manquants) + ' points</b>.'}</p>
-      <p class="sous" style="font-size:12px">Ce n'est pas un classement entre les candidats de Mon Concours : c'est une estimation de votre place parmi les candidats d'une session, calculée à partir de vos points. ${S.classement.points_par_place} points font gagner une place.</p>`
+      <p class="sous" style="font-size:12px">${S.classement.points_par_place} points font gagner une place.</p>`
       : (S.util.connecte
         ? `<div class="squelette large" style="margin-top:6px"></div>
            <div class="squelette"></div>
@@ -3282,10 +3367,10 @@ function ecranCompte(){
       <div class="carte" style="margin-top:14px;text-align:left">
         <div class="libelle" style="margin-bottom:10px">Aide et contact</div>
         <a class="lien-reseau wa"
-           href="https://wa.me/226${CONTACT.adminTel}?text=${encodeURIComponent("Bonjour, j'ai besoin d'aide concernant Mon Concours.")}"
+           href="https://wa.me/226${CONTACT.adminTel}?text=${encodeURIComponent("Bonjour, je vous écris au sujet de Mon Concours : ")}"
            target="_blank" rel="noopener">
           ${logoReseau('whatsapp')}
-          <span><b>Écrivez-nous sur WhatsApp en cas de difficulté</b><i>Réponse dans la journée</i></span></a>
+          <span><b>Écrivez-nous sur WhatsApp en cas de difficulté ou recommandation</b><i>Réponse dans la journée</i></span></a>
       </div>
 
       <div class="carte reglages">
@@ -3324,6 +3409,7 @@ async function chargerEpreuve(){
     const { data } = await base.rpc('epreuve_du_moment');
     S.epreuve = data || null;
     if(['aujourdhui','gagnants'].includes(S.ecran)) rendre();
+    setTimeout(proposerNationale, 900);
   }catch(e){}
 }
 async function chargerDirect(){
@@ -3392,49 +3478,111 @@ function blocMatieresCopie(grille, reponses, note, total){
   </div>`;
 }
 
-/* ---------- la prochaine action, avec sa raison ---------- */
-function prochaineAction(){
-  const j = S.journee || {};
-  const enCours = !S.corrige && Object.keys(S.reponses).length > 0;
-  if(enCours) return { t:'Reprendre ta composition', r:'Le chronomètre du serveur continue de tourner : termine ta copie.', a:'data-go="grille"', b:'Reprendre' };
-  /* une composition collective en cours a déjà sa propre carte, juste au-dessus */
-  if(!S.util.connecte) return { t:'Créer ton compte gratuit', r:'Pour garder tes erreurs, voir les corrections et suivre ta progression.', a:'data-modal="inscription"', b:'Créer mon compte' };
-  if(j.dues > 0) return { t:'Revoir tes erreurs du jour', r:`${j.dues} erreur${j.dues>1?'s sont prévues':' est prévue'} aujourd'hui. C'est le bon moment pour ${j.dues>1?'les':'la'} fixer.`, a:'data-pourtoi="10"', b:'Commencer' };
-  const pm = ((S.stats && S.stats.par_matiere) || []).filter(x => x.traitees >= 5).map(x => ({ ...x, taux:Number(x.taux) || 0 }))
-    .sort((a, b) => a.taux - b.taux)[0];
-  if(pm && pm.taux < 60) return { t:'Réviser ' + pm.matiere, r:`${pm.taux} % de bonnes réponses sur ${pm.traitees}. C'est ta matière la plus fragile.`, a:`data-cible="${E(pm.matiere)}"`, b:'Réviser ' + pm.matiere };
-  if(S.journee && !j.compos_semaine) return { t:'Faire une composition', r:'Aucune composition cette semaine. Entraîne-toi en conditions réelles : 50 questions, 25 minutes.', a:'data-go="grille"', b:'Composer' };
-  if(S.journee && j.faites_jour < j.objectif) return { t:'Continuer avec ton fil « Pour toi »', r:`Il te reste ${j.objectif - j.faites_jour} question${j.objectif - j.faites_jour > 1 ? 's' : ''} pour ton objectif du jour.`, a:'data-pourtoi="10"', b:'Continuer' };
-  if(S.journee) return { t:'Objectif du jour atteint', r:'Tu peux t\'arrêter là, lire l\'actualité ou tenter la question du jour.', a:'data-go="qdj"', b:'Question du jour' };
-  return { t:'Ton fil « Pour toi »', r:'Dix questions choisies selon tes erreurs et tes matières faibles.', a:'data-pourtoi="10"', b:'Commencer' };
+/* ---------- la composition nationale du samedi 17 h ---------- */
+const dateLongue = iso => new Date(iso).toLocaleDateString('fr-FR', { weekday:'long', day:'numeric', month:'long' });
+const heureH = iso => { const d = new Date(iso); return d.getHours() + ' h' + (d.getMinutes() ? ' ' + String(d.getMinutes()).padStart(2,'0') : ''); };
+function texteRebours(iso){
+  let s = Math.max(0, Math.floor((new Date(iso) - Date.now()) / 1000));
+  const j = Math.floor(s / 86400); s -= j * 86400;
+  const h = Math.floor(s / 3600); s -= h * 3600;
+  const m = Math.floor(s / 60); s -= m * 60;
+  const c = (v, l) => `<span><b class="num">${String(v).padStart(2,'0')}</b><small>${l}</small></span>`;
+  return (j ? c(j, 'j') : '') + c(h, 'h') + c(m, 'min') + c(s, 's');
 }
+const rebours = iso => `<div class="rebours" data-rebours="${E(iso)}" aria-live="off">${texteRebours(iso)}</div>`;
+setInterval(() => {
+  document.querySelectorAll('[data-rebours]').forEach(el => {
+    const iso = el.dataset.rebours;
+    if(new Date(iso) <= Date.now()){ el.removeAttribute('data-rebours'); setTimeout(chargerEpreuve, 1500); return; }
+    el.innerHTML = texteRebours(iso);
+  });
+}, 1000);
 
 function carteEpreuve(){
   const ep = S.epreuve;
   if(!ep) return '';
   const moi = ep.moi;
+  const faits = `${ep.nb_questions} questions · ${Math.round(ep.duree/60)} min · <b>${ep.places} places</b>${ep.inscrits ? ` · <span class="num">${ep.inscrits}</span> inscrit${ep.inscrits>1?'s':''}` : ''}`;
   let corps = '', bouton = '';
   if(ep.etat === 'a_venir'){
-    const ms = new Date(ep.debut_le) - Date.now();
-    const h = Math.floor(ms / 3600000), jours = Math.floor(h / 24);
-    const dans = jours >= 1 ? `dans ${jours} jour${jours>1?'s':''}` : (h >= 1 ? `dans ${h} h` : `dans ${Math.max(1, Math.round(ms/60000))} min`);
-    corps = `<b>${E(jourFr(ep.debut_le))} à ${heureFr(ep.debut_le)}</b> · ${dans}<br>${ep.nb_questions} questions, ${Math.round(ep.duree/60)} minutes. Tous les candidats composent le même sujet au même moment.`;
-    bouton = S.rappel ? `<span class="tampon t-ok" style="margin-top:10px">Rappel activé</span>` : `<button class="cta creux" style="margin-top:10px" data-rappel-activer="19">${ico('cloche',15)} Me prévenir avant le début</button>`;
+    corps = `<p class="cn-quand">${E(dateLongue(ep.debut_le))} à ${heureH(ep.debut_le)}</p>
+      ${rebours(ep.debut_le)}
+      <p class="sous cn-faits">${faits}</p>`;
+    bouton = ep.inscrit
+      ? `<div class="cn-inscrit">${ico('coche',15)} Inscrit · rappel 20 minutes avant le début</div>`
+      : `<button class="cta" style="margin-top:12px" data-inscrire-nat="${E(ep.id)}">M'inscrire à la composition</button>`;
   } else if(ep.etat === 'en_cours'){
-    corps = `<b>En cours</b> · fin à ${heureFr(ep.fin_le)}${ep.composent > 0 ? ` · <span class="num">${ep.composent}</span> candidat${ep.composent>1?'s':''} compose${ep.composent>1?'nt':''} en ce moment` : ''}`;
+    corps = `<p class="cn-quand"><span class="cn-direct"><i></i>En cours</span> fin à ${heureH(ep.fin_le)}</p>
+      ${rebours(ep.fin_le)}
+      <p class="sous cn-faits">${faits}${ep.composent > 0 ? ` · <span class="num">${ep.composent}</span> en salle` : ''}</p>`;
     bouton = moi && moi.terminee
-      ? `<p class="sous" style="margin-top:8px">Copie remise. Classement à ${heureFr(ep.fin_le)}.</p>`
-      : `<button class="cta" style="margin-top:10px" data-rejoindre="${E(ep.id)}">Rejoindre maintenant</button>`;
+      ? `<p class="sous" style="margin-top:8px">Copie remise. Les résultats sont publiés à ${heureH(ep.fin_le)}.</p>`
+      : `<button class="cta" style="margin-top:12px" data-rejoindre="${E(ep.id)}">Entrer en salle de composition</button>`;
   } else {
-    corps = `<b>Terminée</b> · ${ep.participants} participant${ep.participants>1?'s':''}${moi && moi.score !== null && moi.score !== undefined ? ` · ta note : <span class="num">${moi.score}/${moi.sur}</span>` : ''}`;
-    bouton = `<button class="cta" style="margin-top:10px" data-gagnants="${E(ep.id)}">Voir les gagnants et le classement</button>`;
+    corps = `<p class="cn-quand">Résultats publiés</p>
+      <p class="sous cn-faits">${ep.participants} candidat${ep.participants>1?'s':''} · ${ep.places} places${moi && moi.score !== null && moi.score !== undefined ? ` · votre note : <span class="num">${moi.score}/${moi.sur}</span>` : ''}</p>`;
+    bouton = `<button class="cta" style="margin-top:12px" data-gagnants="${E(ep.id)}">Voir les résultats et les admis</button>`;
   }
-  return `<div class="carte collective">
-    <div class="libelle" style="margin-bottom:6px"><span>${ico('groupe',14)} Composition collective</span>${ep.recompense ? `<span class="tampon t-att">${E(ep.recompense)}</span>` : ''}</div>
-    <h2 class="col-titre">${E(ep.titre)}</h2>
-    <p class="sous" style="margin-top:6px">${corps}</p>
+  return `<div class="carte nationale">
+    <div class="cn-tete"><span>${ico('groupe',14)} Composition nationale</span><span class="cn-samedi">Samedis · 17 h</span></div>
+    <h2 class="col-titre">${E(ep.concours || ep.titre.replace(/^Composition nationale · /, ''))}</h2>
+    ${corps}
+    ${ep.recompense ? `<p class="sous" style="margin-top:6px">Récompense : <b>${E(ep.recompense)}</b></p>` : ''}
     ${bouton}
   </div>`;
+}
+
+/* À l'ouverture : « Voulez-vous participer ? » une fois par composition */
+function proposerNationale(){
+  const ep = S.epreuve;
+  if(!ep || ep.etat === 'terminee' || ep.inscrit || ep.moi || S.popNatVu || !S.sessionPrete) return;
+  if(S.ecran !== 'aujourdhui' || S.modal || enComposition()) return;
+  const v = document.getElementById('voile');
+  if(!v || !v.hidden) return;
+  if(lireReglages()['nonNat-' + ep.id]) return;
+  S.popNatVu = true;
+  S.modal = 'nationale';
+  v.hidden = false;
+  v.innerHTML = `
+  <div class="panneau pop-nat" role="dialog" aria-modal="true" aria-labelledby="pn-titre">
+    <div class="poignee"></div>
+    <div class="eyebrow" style="color:var(--or)">Composition nationale</div>
+    <h3 id="pn-titre">${E(dateLongue(ep.debut_le).replace(/^./, x => x.toUpperCase()))} à ${heureH(ep.debut_le)}</h3>
+    <p class="intro">Concours : <b>${E(ep.concours || ep.titre)}</b>. ${ep.nb_questions} questions en ${Math.round(ep.duree/60)} minutes, le même sujet pour tous les candidats, à la même heure.
+      ${ep.places} places : les ${ep.places} premiers sont admis, les ${ep.places} suivants passent sur liste d'attente.</p>
+    ${ep.etat === 'a_venir' ? rebours(ep.debut_le) : ''}
+    <p class="pn-q">Voulez-vous participer ?</p>
+    ${S.util.connecte ? `<label class="pn-nom"><input type="checkbox" id="pn-nom" checked> <span>Afficher mon nom dans la liste des admis (sinon, mon pseudo)</span></label>` : ''}
+    <div class="duo">
+      <button class="cta creux" data-nat-non="${E(ep.id)}">Non, merci</button>
+      <button class="cta" data-nat-oui="${E(ep.id)}">Oui, je participe</button>
+    </div>
+  </div>`;
+}
+async function inscrireNationale(id, depuisPopup){
+  if(!S.util.connecte){
+    document.getElementById('voile').hidden = true; S.modal = null;
+    toast('Créez votre compte gratuit pour vous inscrire à la composition.');
+    S.modal = 'inscription'; S.erreur = ''; return surcouche();
+  }
+  const caseNom = document.getElementById('pn-nom');
+  const afficher = caseNom ? caseNom.checked : true;
+  try{
+    const { data } = await base.rpc('inscrire_epreuve', { p_epreuve: id, p_afficher_nom: afficher });
+    if(!data || !data.ok){ toast((data && data.message) || 'Inscription impossible.'); return; }
+    if(S.epreuve && S.epreuve.id === id){ S.epreuve.inscrit = true; S.epreuve.inscrits = data.inscrits; }
+    pister('NATIONAL_REGISTERED', { nom: afficher });
+    const v = document.getElementById('voile');
+    if(depuisPopup && v && !v.hidden){
+      v.innerHTML = `<div class="panneau pop-nat" role="dialog" aria-modal="true">
+        <div class="pn-ok">${ico('coche',28)}</div>
+        <h3 style="text-align:center">Inscrit</h3>
+        <p class="intro" style="text-align:center">Rendez-vous ${E(dateLongue(S.epreuve.debut_le))} à ${heureH(S.epreuve.debut_le)}. Vous recevrez un rappel avant le début.</p>
+        <button class="cta" data-fermer-partage="1">D'accord</button>
+      </div>`;
+    } else toast('Inscrit. Rendez-vous ' + dateLongue(S.epreuve.debut_le) + ' à ' + heureH(S.epreuve.debut_le) + '.');
+    if(S.ecran === 'aujourdhui') rendre();
+  }catch(e){ toast('Inscription impossible. Vérifiez votre connexion.'); }
 }
 
 const DEFIS = [
@@ -3447,42 +3595,12 @@ function blocDefi(){
   if(!S.journee) return '';
   const d = DEFIS[(S.journee.defi || 0) % DEFIS.length](S.journee);
   const fait = d.v >= d.c;
-  return `<div class="carte" style="margin-top:12px">
+  return `<div class="carte">
     <div class="libelle" style="margin-bottom:6px"><span>${ico('trophee',14)} Défi de la semaine</span>${fait ? '<span class="tampon t-ok">Réussi</span>' : ''}</div>
     <div style="font-weight:600;font-size:14.5px">${d.t}</div>
     <div class="jauge-defi"><i style="width:${Math.min(100, Math.round(d.v / d.c * 100))}%"></i></div>
     <div class="sous" style="font-size:12.5px">${Math.min(d.v, d.c)}${d.u === '%' ? ' %' : ''} sur ${d.c}${d.u === '%' ? ' %' : ' ' + d.u} · nouveau défi chaque lundi</div>
   </div>`;
-}
-
-function blocPreparation(){
-  const j = S.journee;
-  const p = prochaineAction();
-  const obj = j ? j.objectif : null, faites = j ? Math.min(j.faites_jour, 9999) : 0;
-  const pct = obj ? Math.min(100, Math.round(faites / obj * 100)) : 0;
-  return `
-    <div class="prochaine">
-      <div class="eyebrow" style="color:var(--laterite-txt)">Prochaine étape</div>
-      <div class="pr-titre">${E(p.t)}</div>
-      <p class="pr-raison">${E(p.r)}</p>
-      <button class="cta" ${p.a}>${E(p.b)}</button>
-    </div>
-    ${j ? `<div class="duo" style="margin-top:12px">
-      <button class="stat lien-stat" data-pourtoi="10">
-        <div class="v num">${j.dues}</div><div class="l">À revoir aujourd'hui</div></button>
-      <div class="stat">
-        <div class="v num">${faites}<small>/${obj}</small></div><div class="l">Objectif du jour</div>
-        <div class="jauge-obj"><i style="width:${pct}%"></i></div>
-        <div class="objectifs" role="group" aria-label="Choisir l'objectif du jour">${OBJECTIFS.map(o => `<button class="${o === obj ? 'on' : ''}" data-objectif="${o}" aria-pressed="${o === obj}">${o}</button>`).join('')}</div>
-      </div>
-    </div>` : ''}
-    <div class="raccourcis">
-      <button data-pourtoi="10">${ico('etoile',18)}<b>Pour toi</b><span>10 questions choisies</span></button>
-      <button data-pourtoi="5">${ico('eclair',18)}<b>Express</b><span>5 questions</span></button>
-      <button data-cahierfreq="1">${ico('erreurs',18)}<b>Erreurs fréquentes</b><span>Les plus ratées d'abord</span></button>
-      <button data-go="qdj">${ico('question',18)}<b>Question du jour</b><span>La même pour tous</span></button>
-    </div>
-    ${S.direct && S.direct.en_ligne >= 3 ? `<p class="direct-ligne"><i></i><span class="num">${S.direct.en_ligne}</span> candidats révisent en ce moment${S.direct.composent >= 2 ? ` · <span class="num">${S.direct.composent}</span> composent` : ''}</p>` : ''}`;
 }
 
 /* ---------- le fil « Pour toi » ---------- */
@@ -3512,7 +3630,7 @@ function ecranPourToi(){
   }
   if(!f.liste.length){
     vue().innerHTML = tete('POUR TOI') + `<div class="qzone" style="padding-top:12px"><p class="sous">${f.erreur ? 'Le fil n\'a pas pu être chargé. Vérifie ta connexion.' : 'Aucune question disponible pour ce niveau pour le moment.'}</p>
-      <button class="cta" style="margin-top:12px" data-go="aujourdhui">Revenir à l'accueil</button></div>`;
+      <button class="cta" style="margin-top:12px" data-go="aujourdhui">Revenir à l'actualité</button></div>`;
     return;
   }
   if(f.idx >= f.liste.length){
@@ -3526,7 +3644,7 @@ function ecranPourToi(){
         ${f.fautes.slice(0, 3).map(x => `<div class="err" style="margin-bottom:8px"><div class="q" style="font-size:13.5px">${E(x.q)}</div><div class="ligne">Bonne réponse : <b>${E(x.bon)}</b></div></div>`).join('')}</div>` : ''}
       <div class="verdict solide" style="margin-top:12px"><b>Pour ta prochaine visite</b>${E(conseilProchaineVisite(f))}</div>
       <button class="cta" style="margin-top:14px" data-pourtoi="10">Encore 10 questions</button>
-      <button class="cta creux" style="margin-top:9px" data-go="aujourdhui">Revenir à l'accueil</button>
+      <button class="cta creux" style="margin-top:9px" data-go="aujourdhui">Revenir à l'actualité</button>
     </div>`;
     return;
   }
@@ -3598,12 +3716,12 @@ async function chargerQdj(){
 }
 function ecranQdj(){
   const q = S.qdj;
-  if(!q){ chargerQdj(); vue().innerHTML = `<div class="pad"><button class="retourhaut" data-go="aujourdhui">Accueil</button><div class="squelette large" style="margin-top:16px"></div></div>`; return; }
-  if(q.vide || q.erreur){ vue().innerHTML = `<div class="pad"><button class="retourhaut" data-go="aujourdhui">Accueil</button><h1 class="titre">Question du jour</h1><p class="sous">${q.erreur ? 'Elle n\'a pas pu être chargée. Vérifie ta connexion.' : 'Pas de question du jour pour le moment.'}</p></div>`; return; }
+  if(!q){ chargerQdj(); vue().innerHTML = `<div class="pad"><button class="retourhaut" data-go="aujourdhui">Actualité</button><div class="squelette large" style="margin-top:16px"></div></div>`; return; }
+  if(q.vide || q.erreur){ vue().innerHTML = `<div class="pad"><button class="retourhaut" data-go="aujourdhui">Actualité</button><h1 class="titre">Question du jour</h1><p class="sous">${q.erreur ? 'Elle n\'a pas pu être chargée. Vérifie ta connexion.' : 'Pas de question du jour pour le moment.'}</p></div>`; return; }
   const c = S.qdjCorrection, rep = S.qdjRep;
   vue().innerHTML = `
   <div class="pad">
-    <button class="retourhaut" data-go="aujourdhui">Accueil</button>
+    <button class="retourhaut" data-go="aujourdhui">Actualité</button>
     <div class="eyebrow">${E(dateDuJour())} · ${E(q.matiere || '')}</div>
     <h1 class="titre">La question du jour</h1>
     <p class="sous" style="margin:6px 0 14px">La même pour tous les candidats aujourd'hui${q.repondants ? ` · <span class="num">${q.repondants}</span> ont déjà répondu` : ''}.</p>
@@ -3656,11 +3774,11 @@ async function chargerQuestionPartagee(id){
 function ecranQuestionPartagee(){
   const q = S.qp;
   if(!q || !q.charge){ vue().innerHTML = `<div class="pad"><div class="squelette large" style="margin-top:16px"></div></div>`; return; }
-  if(q.vide || q.erreur){ vue().innerHTML = `<div class="pad"><button class="retourhaut" data-go="aujourdhui">Accueil</button><h1 class="titre">Question indisponible</h1><p class="sous">Cette question n'existe plus ou n'est pas accessible pour le moment.</p><button class="cta" style="margin-top:14px" data-go="qdj">Voir la question du jour</button></div>`; return; }
+  if(q.vide || q.erreur){ vue().innerHTML = `<div class="pad"><button class="retourhaut" data-go="aujourdhui">Actualité</button><h1 class="titre">Question indisponible</h1><p class="sous">Cette question n'existe plus ou n'est pas accessible pour le moment.</p><button class="cta" style="margin-top:14px" data-go="qdj">Voir la question du jour</button></div>`; return; }
   const c = q.c, rep = q.rep;
   vue().innerHTML = `
   <div class="pad">
-    <button class="retourhaut" data-go="aujourdhui">Accueil</button>
+    <button class="retourhaut" data-go="aujourdhui">Actualité</button>
     <div class="eyebrow">Question partagée · ${E(q.matiere || '')}</div>
     <h1 class="titre" style="font-size:24px">Un camarade te défie</h1>
     <div class="qtexte" style="margin-top:12px">${E(q.enonce)}</div>
@@ -3697,7 +3815,7 @@ function partagerQuestion(id, texteQ){
   window.open('https://wa.me/?text=' + encodeURIComponent(t + ' ' + lien), '_blank', 'noopener');
 }
 
-/* ---------- les gagnants d'une composition collective ---------- */
+/* ---------- les résultats d'une composition nationale ---------- */
 async function chargerClassement(id){
   S.classementEp = { id, charge:false };
   if(!base){ S.lienEpreuve = id; return; }
@@ -3720,60 +3838,135 @@ function boutonsReactions(l){
     return `<button class="reac ${mien ? 'on' : ''}" data-reagir="${E(l.composition)}|${k}" aria-pressed="${mien}">${t}${n ? ' · ' + n : ''}</button>`;
   }).join('')}</div>`;
 }
+const STATUTS = { admis:'Admis', attente:'Liste d\'attente', echoue:'Non admis' };
 function ecranGagnants(){
   const c = S.classementEp;
-  const tete = `<button class="retourhaut" data-go="aujourdhui">Accueil</button>`;
+  const tete = `<button class="retourhaut" data-go="aujourdhui">Actualité</button>`;
   if(!c || !c.charge){ vue().innerHTML = `<div class="pad">${tete}<div class="squelette large" style="margin-top:16px"></div><div class="squelette"></div></div>`; return; }
-  if(!c.ok){ vue().innerHTML = `<div class="pad">${tete}<h1 class="titre">Classement indisponible</h1><p class="sous">${E(c.message || 'Vérifie ta connexion.')}</p></div>`; return; }
+  if(!c.ok){ vue().innerHTML = `<div class="pad">${tete}<h1 class="titre">Résultats indisponibles</h1><p class="sous">${E(c.message || 'Vérifiez votre connexion.')}</p></div>`; return; }
   if(!c.termine){
     vue().innerHTML = `<div class="pad">${tete}
-      <div class="eyebrow">Composition collective</div>
-      <h1 class="titre">Le classement arrive à ${heureFr(c.fin_le)}</h1>
-      <p class="sous" style="margin-top:8px"><span class="num">${c.participants}</span> participant${c.participants>1?'s':''} pour l'instant. Le classement national et le corrigé sont publiés à la fin de l'épreuve, pour que personne ne puisse souffler les réponses.</p>
+      <div class="eyebrow">Composition nationale</div>
+      <h1 class="titre">Résultats à ${heureH(c.fin_le)}</h1>
+      ${rebours(c.fin_le)}
+      <p class="sous" style="margin-top:8px"><span class="num">${c.participants}</span> candidat${c.participants>1?'s':''} en salle. Le classement, la liste des admis et le corrigé sont publiés à la fin de l'épreuve, pour que personne ne puisse souffler les réponses.</p>
       <button class="cta creux" style="margin-top:14px" data-gagnants="${E(c.id)}">Actualiser</button></div>`;
     return;
   }
   const liste = c.classement || [];
+  const admis = liste.filter(l => l.statut === 'admis'), attente = liste.filter(l => l.statut === 'attente');
   const podium = liste.filter(l => l.rang <= 3).slice(0, 3);
-  const reste = liste.filter(l => !podium.includes(l));
-  const major = podium[0];
+  const dernierAdmis = admis.length ? admis[admis.length - 1] : null;
+  const m = c.moi;
+  const r = n => n + '<sup>' + (n === 1 ? 'er' : 'e') + '</sup>';
+  let statut = '';
+  if(m){
+    const manque = dernierAdmis && m.statut !== 'admis' ? dernierAdmis.score - m.score : 0;
+    statut = `<div class="statut-nat sn-${m.statut}">
+      <div class="sn-tampon">${STATUTS[m.statut]}</div>
+      <p class="sn-titre">${m.statut === 'admis' ? (m.rang <= 3 ? 'Félicitations, vous êtes sur le podium !' : 'Félicitations, vous êtes admis !')
+        : m.statut === 'attente' ? 'Vous êtes sur la liste d\'attente.' : 'Vous n\'êtes pas admis cette fois.'}</p>
+      <p>Votre rang : <b class="num">${r(m.rang)}</b> sur ${c.participants} · note <b class="num">${m.score}/${m.sur}</b></p>
+      ${m.statut !== 'admis' && dernierAdmis ? `<p style="margin-top:4px">Le dernier admis avait <b class="num">${dernierAdmis.score}/${dernierAdmis.sur}</b>${manque > 0 ? ` : il vous a manqué ${manque} point${manque>1?'s':''}` : ''}. Rendez-vous samedi prochain à 17 h.</p>` : ''}
+    </div>`;
+  }
+  const ligne = l => `<div class="ligne-rang${l.moi ? ' moi' : ''}">
+      <span class="p num">${l.rang}</span>
+      <span class="n">${E(l.nom)}${l.moi ? ' (vous)' : ''}<em>${mmssLong(l.duree)}</em></span>
+      <span class="s num">${l.score}/${l.sur}</span>
+    </div>`;
   vue().innerHTML = `
   <div class="pad">
     ${tete}
-    <div class="eyebrow">Composition collective · ${E(jourFr(c.debut_le))}</div>
-    <h1 class="titre">${E(c.titre)}</h1>
-    <p class="sous" style="margin-top:6px"><span class="num">${c.participants}</span> participant${c.participants>1?'s':''} · moyenne <span class="num">${c.moyenne ?? '—'}/${c.sur}</span>${c.recompense ? ` · récompense : <b>${E(c.recompense)}</b>` : ''}</p>
-
-    ${major ? `<div class="felicitations">
+    <div class="eyebrow">Composition nationale · ${E(jourFr(c.debut_le))}</div>
+    <h1 class="titre">Résultats · ${E(c.concours || c.titre)}</h1>
+    <p class="sous" style="margin-top:6px"><span class="num">${c.participants}</span> candidat${c.participants>1?'s':''} · ${c.places} places · moyenne <span class="num">${c.moyenne ?? '—'}/${c.sur}</span></p>
+    <div class="trio" style="margin-top:12px">
+      <div><b class="num">${c.admis}</b><span>admis</span></div>
+      <div><b class="num">${c.attente}</b><span>liste d'attente</span></div>
+      <div><b class="num">${c.echoues}</b><span>non admis</span></div>
+    </div>
+    ${statut}
+    ${podium.length ? `<div class="felicitations">
       <div class="eyebrow" style="color:var(--or)">Félicitations</div>
-      <p>Bravo à <b>${E(major.pseudo)}</b>, major de cette composition avec <b class="num">${major.score}/${major.sur}</b>${c.recompense ? `. ${E(c.recompense)} lui revient` : ''}. ${podium.length > 1 ? 'Bravo aussi à ' + podium.slice(1).map(l => '<b>' + E(l.pseudo) + '</b>').join(' et ') + ' sur le podium.' : ''}</p>
+      <p>Bravo à <b>${E(podium[0].nom)}</b>, major de la composition avec <b class="num">${podium[0].score}/${podium[0].sur}</b>${c.recompense ? `. ${E(c.recompense)} lui revient` : ''}.${podium.length > 1 ? ' Bravo aussi à ' + podium.slice(1).map(l => '<b>' + E(l.nom) + '</b> (' + l.rang + 'e)').join(' et ') + '.' : ''}</p>
       ${c.message ? `<p style="margin-top:8px">${E(c.message)}</p>` : ''}
-    </div>` : '<div class="carte" style="margin-top:14px"><p class="sous">Aucune copie remise pour cette composition.</p></div>'}
-
+    </div>
     <div class="podium">
       ${podium.map(l => `<div class="marche r${l.rang}${l.moi ? ' moi' : ''}">
         <div class="medaille">${l.rang}</div>
-        <div class="av">${E(initialesPseudo(l.pseudo))}</div>
-        <b>${E(l.pseudo)}${l.moi ? ' (toi)' : ''}</b>
+        <div class="av">${E(initialesPseudo(l.nom))}</div>
+        <b>${E(l.nom)}${l.moi ? ' (vous)' : ''}</b>
         <div class="note num">${l.score}<small>/${l.sur}</small></div>
         <div class="duree">${mmssLong(l.duree)}</div>
         ${boutonsReactions(l)}
       </div>`).join('')}
-    </div>
+    </div>` : '<div class="carte" style="margin-top:14px"><p class="sous">Aucune copie remise pour cette composition.</p></div>'}
 
-    ${c.moi ? `<div class="ma-place"><span>Ta place</span><b class="num">${c.moi.rang}<sup>${c.moi.rang === 1 ? 'er' : 'e'}</sup> sur ${c.participants}</b><span class="num">${c.moi.score}/${c.moi.sur}</span></div>
-      <button class="cta creux" style="margin-top:9px" data-partage-rang="1">${ico('partage',16)} Partager mon résultat</button>` : ''}
+    <button class="cta" style="margin-top:14px" data-resultats-pdf="1">${ico('telecharger',16)} Télécharger les résultats en PDF</button>
+    ${m ? `<button class="cta creux" style="margin-top:9px" data-partage-rang="1">${ico('partage',16)} Partager mon résultat</button>` : ''}
 
-    ${reste.length ? `<div class="bloc"><div class="libelle">Classement</div><div class="carte">
-      ${reste.map(l => `<div class="ligne-rang${l.moi ? ' moi' : ''}">
-        <span class="p num">${l.rang}</span>
-        <span class="n">${E(l.pseudo)}${l.moi ? ' (toi)' : ''}<em>${mmssLong(l.duree)}</em></span>
-        <span class="s num">${l.score}/${l.sur}</span>
-        ${boutonsReactions(l)}
-      </div>`).join('')}
-    </div></div>` : ''}
-    <p class="sous" style="margin-top:14px;font-size:12px">Les candidats apparaissent sous leur pseudo, jamais sous leur nom ni leur numéro. À égalité de note, le plus rapide passe devant.${S.journee && S.journee.pseudo ? ` Ton pseudo : <b>${E(S.journee.pseudo)}</b>.` : ''}</p>
+    ${admis.length ? `<div class="bloc"><div class="libelle">Liste des admis<span class="num">${admis.length}</span></div><div class="carte">${admis.map(ligne).join('')}</div></div>` : ''}
+    ${attente.length ? `<div class="bloc"><div class="libelle">Liste d'attente<span class="num">${attente.length}</span></div><div class="carte">${attente.map(ligne).join('')}</div></div>` : ''}
+    ${c.echoues ? `<p class="sous" style="margin-top:12px">${c.echoues} candidat${c.echoues>1?'s ne sont pas admis':' n\'est pas admis'} cette semaine. Leurs noms ne sont pas publiés.</p>` : ''}
+    <p class="sous" style="margin-top:14px;font-size:12px">Classement par ordre de mérite. À note égale, le candidat le plus rapide passe devant. Un candidat qui a refusé l'affichage de son nom apparaît sous son pseudo.</p>
   </div>`;
+}
+function resultatsPdf(){
+  const c = S.classementEp;
+  if(!c || !c.termine){ toast('Les résultats ne sont pas encore publiés.'); return; }
+  const liste = c.classement || [];
+  const admis = liste.filter(l => l.statut === 'admis'), attente = liste.filter(l => l.statut === 'attente');
+  const podium = liste.filter(l => l.rang <= 3).slice(0, 3);
+  const quand = new Date(c.debut_le).toLocaleDateString('fr-FR', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+  const emis = new Date().toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' });
+  const tableau = l => '<table class="res"><thead><tr><th>Rang</th><th>Nom</th><th>Note</th><th>Temps</th></tr></thead><tbody>' +
+    l.map(x => '<tr><td class="c">' + x.rang + (x.rang === 1 ? 'er' : 'e') + '</td><td>' + E(x.nom) + '</td><td class="c">' + x.score + ' / ' + x.sur + '</td><td class="c">' + mmssLong(x.duree) + '</td></tr>').join('') +
+    '</tbody></table>';
+  const html = '<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Résultats — ' + E(c.titre) + '</title><style>' +
+    '@page{size:A4;margin:14mm}*{box-sizing:border-box}body{font-family:Georgia,"Times New Roman",serif;color:#111;max-width:190mm;margin:0 auto;padding:0 10px;line-height:1.45}@media print{body{padding:0}}' +
+    '.tete{display:flex;align-items:center;gap:14px;border-bottom:3px double #111;padding-bottom:12px;flex-wrap:wrap}' +
+    '.marque .n{font-size:19px;font-weight:bold;letter-spacing:.04em}.marque .d{font-size:11px;color:#555;font-style:italic}' +
+    '.sceau{width:52px;height:52px;border-radius:13px;background:#EDE4D3;border:1px solid #C9BEA9;display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:7px}' +
+    '.sceau i{border-radius:50%;background:#FBFAF7;border:1px solid #C9BEA9}.sceau i:nth-child(2),.sceau i:nth-child(3){background:#1C1C1C;border-color:#1C1C1C}' +
+    '.site{margin-left:auto;display:flex;align-items:center;gap:10px;text-align:right}.site .adr{font-family:Helvetica,Arial,sans-serif;font-weight:bold;font-size:15px}.site .sc{font-size:10.5px;color:#333;font-family:Helvetica,Arial,sans-serif}.site svg{display:block;border:1px solid #ccc}' +
+    '.titre{text-align:center;margin:18px 0 4px;font-size:20px;letter-spacing:.12em;text-transform:uppercase}.st{text-align:center;font-size:13.5px;color:#333;margin:0}' +
+    'h2{font-size:14px;letter-spacing:.18em;text-transform:uppercase;margin:18px 0 8px;border-bottom:1px solid #111;padding-bottom:4px;break-after:avoid}' +
+    '.chiffres{display:flex;gap:8px;margin-top:14px}.chiffres div{flex:1;border:1px solid #bbb;padding:7px;text-align:center}.chiffres b{display:block;font-size:20px}.chiffres span{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#555}' +
+    '.felic{border:2px solid #B08A2E;background:#FBF6EA;padding:12px 16px;margin-top:16px;font-size:14px}.felic b.t{display:block;letter-spacing:.16em;text-transform:uppercase;font-size:12px;color:#8A6A1E;margin-bottom:4px}' +
+    '.felic ol{margin:6px 0 0 18px;padding:0}' +
+    'table.res{width:100%;border-collapse:collapse;font-size:12.5px}table.res th{font-family:Helvetica,Arial,sans-serif;font-size:10px;letter-spacing:.12em;text-transform:uppercase;text-align:left;border-bottom:2px solid #111;padding:4px 8px}' +
+    'table.res td{border-bottom:1px solid #ddd;padding:4px 8px}table.res td.c{text-align:center;white-space:nowrap}table.res tr{break-inside:avoid}' +
+    '.note{font-size:12px;color:#444;margin-top:14px}' +
+    '.filigrane{position:fixed;top:50%;left:50%;width:120mm;height:120mm;transform:translate(-50%,-50%) rotate(-12deg);opacity:.045;z-index:-1;pointer-events:none;display:grid;grid-template-columns:1fr 1fr;gap:9mm;padding:12mm;border-radius:28mm;background:#1C1C1C}' +
+    '.filigrane i{border-radius:50%;background:#fff}' +
+    '.pied{margin-top:20px;border-top:2px solid #111;padding-top:8px;font-size:12px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-family:Helvetica,Arial,sans-serif}' +
+    '@media print{.noimp{display:none}}.noimp{text-align:center;margin:20px 0}.noimp button{font:inherit;padding:11px 22px;border:1px solid #111;background:#111;color:#fff;cursor:pointer}' +
+    '</style></head><body>' +
+    '<div class="filigrane" aria-hidden="true"><i></i><i></i><i></i><i></i></div>' +
+    '<div class="tete"><div class="sceau"><i></i><i></i><i></i><i></i></div>' +
+      '<div class="marque"><div class="n">MON CONCOURS</div><div class="d">Préparation aux concours directs du Burkina Faso</div></div>' +
+      '<div class="site"><div><div class="adr">monconcours.vercel.app</div><div class="sc">Scannez pour composer samedi prochain</div></div>' + QR_FEUILLE + '</div></div>' +
+    '<p class="titre">Composition nationale</p>' +
+    '<p class="st"><b>Résultats · ' + E(c.concours || c.titre) + '</b></p>' +
+    '<p class="st">Épreuve du ' + quand + ' à ' + heureH(c.debut_le) + '</p>' +
+    '<div class="chiffres"><div><b>' + c.participants + '</b><span>candidats</span></div><div><b>' + c.places + '</b><span>places</span></div>' +
+      '<div><b>' + c.admis + '</b><span>admis</span></div><div><b>' + c.attente + '</b><span>liste d\'attente</span></div><div><b>' + (c.moyenne ?? '—') + '</b><span>moyenne / ' + c.sur + '</span></div></div>' +
+    (podium.length ? '<div class="felic"><b class="t">Félicitations</b>Mon Concours félicite chaleureusement les trois premiers de cette composition :<ol>' +
+      podium.map(l => '<li><b>' + E(l.nom) + '</b>, ' + (l.rang === 1 ? 'major' : l.rang + 'e') + ' avec ' + l.score + ' / ' + l.sur + '</li>').join('') + '</ol>' +
+      (c.recompense ? '<p style="margin:6px 0 0">Récompense du major : ' + E(c.recompense) + '.</p>' : '') +
+      '<p style="margin:6px 0 0">Bravo à tous les admis. Pour les autres, la prochaine composition a lieu samedi à 17 h.</p></div>' : '') +
+    (admis.length ? '<h2>Liste des admis par ordre de mérite</h2>' + tableau(admis) : '') +
+    (attente.length ? '<h2>Liste d\'attente</h2>' + tableau(attente) : '') +
+    (c.echoues ? '<p class="note">Non admis : ' + c.echoues + ' candidat' + (c.echoues > 1 ? 's' : '') + '. Leurs noms ne sont pas publiés.</p>' : '') +
+    '<p class="note">À note égale, le candidat le plus rapide est classé devant. Composition d\'entraînement organisée par Mon Concours ; elle ne remplace pas les résultats officiels des concours de la fonction publique.</p>' +
+    '<div class="pied"><span><b>monconcours.vercel.app</b> · WhatsApp <b>+226 ' + CONTACT.adminTel.replace(/(\d{2})(?=\d)/g, '$1 ') + '</b></span><span>Document établi le ' + emis + '</span></div>' +
+    '<div class="noimp"><button onclick="window.print()">Enregistrer en PDF ou imprimer</button></div>' +
+    '<scr' + 'ipt>setTimeout(function(){window.print();},600);<\/scr' + 'ipt></body></html>';
+  const f = window.open('', '_blank');
+  if(!f){ toast('Autorisez les fenêtres pour télécharger les résultats.'); return; }
+  f.document.write(html); f.document.close();
+  pister('NATIONAL_RESULTS_PDF');
 }
 async function reagir(val){
   if(!S.util.connecte){ S.modal = 'connexion'; S.erreur = ''; return surcouche(); }
@@ -3853,7 +4046,9 @@ async function chargerRappel(){
   if(!base || !S.util.connecte) return;
   try{ const { data } = await base.rpc('mon_rappel'); S.rappel = data || null; rafraichirSiVisible(); }catch(e){}
 }
-async function activerRappel(heure){
+const FREQ_RAPPEL = [['heure','Chaque heure'],['4h','Toutes les 4 h'],['6h','Toutes les 6 h'],['12h','Toutes les 12 h']];
+async function activerRappel(heure, frequence){
+  frequence = frequence || 'quotidien';
   if(!S.util.connecte){ S.modal = 'inscription'; S.erreur = ''; return surcouche(); }
   if(!pushPossible()){ toast('Ce téléphone ne permet pas les rappels. Installe l\'application depuis Chrome pour les recevoir.', 6000); return; }
   try{
@@ -3863,11 +4058,13 @@ async function activerRappel(heure){
     let sub = await reg.pushManager.getSubscription();
     if(!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: cleVapid(VAPID_PUBLIC) });
     const j = sub.toJSON();
-    const { data } = await base.rpc('enregistrer_rappel', { p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth, p_heure: +heure, p_minute: 0 });
+    const { data } = await base.rpc('enregistrer_rappel_freq', { p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth,
+      p_heure: +heure, p_minute: 0, p_frequence: frequence });
     if(!data || !data.ok) throw new Error('refus');
-    S.rappel = { heure:+heure, minute:0, actif:true };
-    toast('Rappel activé chaque jour à ' + heure + ' h. Tu seras aussi prévenu des compositions collectives.');
-    pister('REMINDER_ENABLED', { heure:+heure });
+    S.rappel = { heure:+heure, minute:0, actif:true, frequence }; S.rappelChoix = false;
+    const lib = (FREQ_RAPPEL.find(x => x[0] === frequence) || [])[1];
+    toast(lib ? 'Rappel activé : ' + lib.toLowerCase() + ', de 6 h à 21 h.' : 'Rappel activé chaque jour à ' + heure + ' h.');
+    pister('REMINDER_ENABLED', { heure:+heure, frequence });
     rendre();
   }catch(e){ toast('Le rappel n\'a pas pu être activé. Réessaie avec une meilleure connexion.'); }
 }
@@ -3881,16 +4078,18 @@ async function retirerRappel(){
 }
 function blocRappels(){
   if(!S.util.connecte) return '';
-  const h = S.rappel ? S.rappel.heure : null;
-  return `<div class="carte" style="margin-top:14px;text-align:left">
-    <div class="libelle" style="margin-bottom:8px">${ico('cloche',14)} Rappel quotidien</div>
-    <p class="sous" style="margin:0 0 10px">${h !== null
-      ? `Activé : un rappel à <b>${h} h</b> si ton objectif du jour n'est pas encore atteint. Tu es aussi prévenu avant chaque composition collective.`
-      : 'Choisis une heure : un seul rappel par jour, et seulement si tu n\'as pas encore atteint ton objectif. Tu peux l\'arrêter quand tu veux.'}</p>
-    <div class="objectifs grands" role="group" aria-label="Heure du rappel">
-      ${[6, 12, 17, 19, 20, 21].map(x => `<button class="${x === h ? 'on' : ''}" data-rappel-activer="${x}" aria-pressed="${x === h}">${x} h</button>`).join('')}
+  const r = S.rappel, f = r ? (r.frequence || 'quotidien') : null;
+  const choisir = S.rappelChoix || f === 'quotidien';
+  return `<div class="carte rappel-c" style="margin-top:14px">
+    <div class="libelle" style="margin-bottom:8px"><span>${ico('cloche',14)} Rappels</span>${r ? '<span class="tampon t-ok">Activé</span>' : ''}</div>
+    <div class="puces-rappel" role="group" aria-label="Fréquence des rappels">
+      ${FREQ_RAPPEL.map(([k, l]) => `<button class="${f === k ? 'on' : ''}" data-rappel-freq="${k}" aria-pressed="${f === k}">${l}</button>`).join('')}
+      <button class="${choisir ? 'on' : ''}" data-rappel-choisir="1" aria-pressed="${choisir}">${f === 'quotidien' ? 'Chaque jour à ' + r.heure + ' h' : 'Choisir votre heure'}</button>
     </div>
-    ${h !== null ? `<button class="lien" data-rappel-retirer="1">Arrêter les rappels</button>` : ''}
+    ${choisir ? `<div class="rappel-heure">
+      <select id="rappel-h" aria-label="Heure du rappel">${Array.from({ length:17 }, (_, i) => i + 5).map(h => `<option value="${h}" ${(r && f === 'quotidien' ? r.heure : 19) === h ? 'selected' : ''}>${h} h</option>`).join('')}</select>
+      <button class="mini" data-rappel-heure="1">Valider</button></div>` : ''}
+    <p class="sous" style="margin:8px 0 0;font-size:12px">${r ? 'Pas de rappel la nuit. ' : 'De 6 h à 21 h, jamais la nuit. '}${r ? '<button class="lien" style="display:inline;padding:0" data-rappel-retirer="1">Arrêter les rappels</button>' : ''}</p>
   </div>`;
 }
 
@@ -3898,8 +4097,8 @@ function blocRappels(){
 function blocMesCompositions(){
   const j = S.journee; if(!j) return '';
   const cs = (j.compositions || []).filter(c => c.sur > 0);
-  const jours = (j.jours14 || []).slice(-(S.graph || 7));
-  const maxJ = Math.max(1, ...jours.map(x => x.n));
+  const st = S.stats || {}, dt = S.details || {};
+  const qSemaine = (j.jours14 || []).slice(-7).reduce((a, x) => a + (x.n || 0), 0);
   let compo = '';
   if(cs.length){
     const pcts = cs.map(c => Math.round(c.score / c.sur * 100));
@@ -3909,25 +4108,33 @@ function blocMesCompositions(){
     const evol = (r3.length && p3.length) ? Math.round(r3.reduce((a,b)=>a+b,0)/r3.length - p3.reduce((a,b)=>a+b,0)/p3.length) : null;
     compo = `
       <div class="trio">
-        <div><b class="num">${cs.length}${cs.length >= 12 ? '+' : ''}</b><span>composition${cs.length>1?'s':''}</span></div>
-        <div><b class="num">${moy} %</b><span>moyenne</span></div>
-        <div><b class="num">${best} %</b><span>meilleure</span></div>
+        <div><b class="num">${st.compositions || cs.length}</b><span>composition${(st.compositions || cs.length)>1?'s':''}</span></div>
+        <div><b class="num">${moy} %</b><span>moyenne récente</span></div>
+        <div><b class="num">${best} %</b><span>meilleure note</span></div>
       </div>
-      ${evol !== null ? `<p class="sous" style="margin-top:8px">Tes 3 dernières compositions : ${evol === 0 ? 'même niveau que les 3 d\'avant' : (evol > 0 ? '<span style="color:var(--vert-texte)">+' + evol + ' points</span>' : '<span style="color:var(--rouge-texte)">' + evol + ' points</span>') + ' par rapport aux 3 d\'avant'}.</p>` : ''}
-      <div class="barres" aria-label="Notes des dernières compositions">${cs.slice().reverse().map(c => {
+      ${evol !== null ? `<p class="sous" style="margin-top:10px">Vos 3 dernières compositions : ${evol === 0 ? 'même niveau que les 3 d\'avant' : (evol > 0 ? '<b style="color:var(--vert-texte)">+' + evol + ' points</b>' : '<b style="color:var(--rouge-texte)">' + evol + ' points</b>') + ' par rapport aux 3 d\'avant'}.</p>` : ''}
+      <div class="libelle" style="margin-top:14px">Dernières copies</div>
+      ${cs.slice(0, 6).map(c => {
         const p = Math.round(c.score / c.sur * 100);
-        return `<i style="height:${Math.max(4, p)}%" title="${p} %${c.collective ? ' (collective)' : ''}" class="${c.collective ? 'col' : ''}"></i>`;
-      }).join('')}</div>
-      <div class="sous" style="font-size:11.5px;margin-top:4px">De la plus ancienne à la plus récente</div>`;
+        return `<div class="copie-l">
+          <div class="cl-g"><b>${c.collective ? 'Composition nationale' : 'Entraînement'}</b><span>${E(new Date(c.date).toLocaleDateString('fr-FR', { day:'numeric', month:'short' }))}</span></div>
+          <div class="cl-barre"><i class="${p >= 60 ? 'haut' : (p < 40 ? 'bas' : '')}" style="width:${p}%"></i></div>
+          <b class="num cl-n">${c.score}/${c.sur}</b>
+          <button class="mini" data-archive="${E(c.id)}" aria-label="Télécharger la feuille corrigée">${ico('telecharger',14)}</button>
+        </div>`;
+      }).join('')}`;
   }
   return `<div class="bloc">
     <div class="libelle">Mes compositions et mon activité</div>
     <div class="carte">
-      ${compo || '<p class="sous">Aucune composition terminée pour l\'instant.</p>'}
-      <div class="libelle" style="margin-top:16px"><span>Questions par jour</span>
-        <span class="bascule-graph"><button class="${(S.graph || 7) === 7 ? 'on' : ''}" data-graph="7">7 j</button><button class="${S.graph === 30 ? 'on' : ''}" data-graph="30">30 j</button></span></div>
-      <div class="barres fines">${jours.map(x => `<i style="height:${Math.max(3, Math.round(x.n / maxJ * 100))}%" title="${x.n} question${x.n>1?'s':''}"></i>`).join('')}</div>
-      ${j.pseudo ? `<p class="sous" style="margin-top:12px;font-size:12.5px">Ton pseudo dans les classements : <b>${E(j.pseudo)}</b>. Ton nom et ton numéro n'y apparaissent jamais.</p>` : ''}
+      ${compo || `<p class="sous">Aucune composition terminée pour l'instant.</p><button class="cta creux" style="margin-top:10px" data-go="grille">Faire ma première composition</button>`}
+      <div class="libelle" style="margin-top:16px">Cette semaine</div>
+      <div class="trio">
+        <div><b class="num">${j.compos_semaine || 0}</b><span>composition${(j.compos_semaine||0)>1?'s':''}</span></div>
+        <div><b class="num">${nombreFr(qSemaine)}</b><span>questions</span></div>
+        <div><b class="num">${typeof dt.minutes_semaine === 'number' ? dt.minutes_semaine : '—'}</b><span>minutes</span></div>
+      </div>
+      ${j.pseudo ? `<p class="sous" style="margin-top:12px;font-size:12.5px">Votre pseudo dans les classements : <b>${E(j.pseudo)}</b>.</p>` : ''}
     </div>
   </div>`;
 }
@@ -3978,7 +4185,7 @@ window.addEventListener('popstate', ev => {
 /* Les nouveaux boutons ont leur propre écouteur : le grand aiguillage
    plus bas reste tel quel. */
 document.addEventListener('click', ev => {
-  const t = ev.target.closest('[data-quitter],[data-quitter-oui],[data-quitter-non],[data-son],[data-correction-differee],[data-gagnants],[data-pourtoi],[data-fil-rep],[data-fil-suiv],[data-qdj-rep],[data-qp-rep],[data-signaler],[data-signal-envoi],[data-objectif],[data-rejoindre],[data-rappel-activer],[data-rappel-retirer],[data-reagir],[data-partage-question],[data-partage-qdj],[data-partage-rang],[data-sortir-reprise]');
+  const t = ev.target.closest('[data-quitter],[data-quitter-oui],[data-quitter-non],[data-son],[data-correction-differee],[data-gagnants],[data-pourtoi],[data-fil-rep],[data-fil-suiv],[data-qdj-rep],[data-qp-rep],[data-signaler],[data-signal-envoi],[data-objectif],[data-rejoindre],[data-rappel-activer],[data-rappel-retirer],[data-reagir],[data-partage-question],[data-partage-qdj],[data-partage-rang],[data-sortir-reprise],[data-inscrire-nat],[data-nat-oui],[data-nat-non],[data-resultats-pdf],[data-telecharger-mat],[data-rappel-freq],[data-rappel-choisir],[data-rappel-heure]');
   if(!t) return;
   const d = t.dataset;
   try{ const cle = Object.keys(d)[0]; pister('BUTTON_CLICKED', { valeur: String(d[cle]).slice(0,40) }, cle); }catch(e){}
@@ -4029,10 +4236,10 @@ document.addEventListener('click', ev => {
     S.compoTab = 'feuille'; S.sujetVu = false; S.apercu = null; S.compositionId = null; S.remiseEtat = null;
     S.grille.length = 0; S.compoEtat = null; S.correctionLe = null;
     S.rejoindre = d.rejoindre;
-    pister('COLLECTIVE_JOINED');
+    pister('NATIONAL_JOINED');
     return aller('grille');
   }
-  if(d.rappelActiver) return activerRappel(d.rappelActiver);
+  if(d.rappelActiver) return activerRappel(d.rappelActiver, 'quotidien');
   if(d.rappelRetirer) return retirerRappel();
   if(d.reagir) return reagir(d.reagir);
   if(d.partageQuestion){
@@ -4050,11 +4257,19 @@ document.addEventListener('click', ev => {
   if(d.partageRang){
     const c = S.classementEp;
     if(!c || !c.moi) return;
-    const t3 = `J'ai fini ${c.moi.rang}${c.moi.rang === 1 ? 'er' : 'e'} sur ${c.participants} à la composition collective « ${c.titre} » sur Mon Concours (${c.moi.score}/${c.moi.sur}). La prochaine, c'est avec toi : ${CONTACT.site}`;
+    const t3 = `${c.moi.statut === 'admis' ? 'Admis ! ' : ''}J'ai fini ${c.moi.rang}${c.moi.rang === 1 ? 'er' : 'e'} sur ${c.participants} à la composition nationale ${c.concours ? '(' + c.concours + ') ' : ''}de Mon Concours, avec ${c.moi.score}/${c.moi.sur}. La prochaine, c'est samedi à 17 h. Viens composer : ${CONTACT.site}`;
     window.open('https://wa.me/?text=' + encodeURIComponent(t3), '_blank', 'noopener');
     return;
   }
   if(d.sortirReprise){ repriseIdx = null; repriseRep = undefined; return rendre(); }
+  if(d.inscrireNat) return inscrireNationale(d.inscrireNat, false);
+  if(d.natOui) return inscrireNationale(d.natOui, true);
+  if(d.natNon){ ecrireReglage('nonNat-' + d.natNon, true); document.getElementById('voile').hidden = true; S.modal = null; pister('NATIONAL_DECLINED'); return; }
+  if(d.resultatsPdf) return resultatsPdf();
+  if(d.telechargerMat) return telechargerCoursMatiere(decodeURIComponent(d.telechargerMat));
+  if(d.rappelFreq) return activerRappel(8, d.rappelFreq);
+  if(d.rappelChoisir){ S.rappelChoix = !S.rappelChoix; return rendre(); }
+  if(d.rappelHeure){ const h = document.getElementById('rappel-h'); return activerRappel(h ? +h.value : 19, 'quotidien'); }
 });
 
 /* =====================================================================
@@ -4070,18 +4285,22 @@ async function chargerDetails(){
 
 /* ---------- les niveaux : Débutant, Confirmé, Prêt pour le concours ---------- */
 const NIVEAUX_C = [
-  { nom:'Débutant', crit:[] },
-  { nom:'Confirmé', crit:[['questions', 150, 'questions résolues'], ['taux', 50, '% de bonnes réponses']] },
-  { nom:'Prêt pour le concours', crit:[['questions', 500, 'questions résolues'], ['taux', 65, '% de bonnes réponses'], ['compos', 5, 'compositions'], ['moyenne', 50, '% de moyenne aux compositions (30 jours)']] }
+  { nom:'Débutant', crit:() => [] },
+  { nom:'Confirmé', crit:() => [['questions', 300, 'questions résolues', 'questions'], ['compos', 50, 'compositions', 'compositions']] },
+  { nom:'Prêt pour le concours', crit:v => [['qcm', 500, 'questions de QCM (hors compositions)', 'questions de QCM'], ['cours', v.coursTotal, 'cours de votre niveau lus', 'cours lus']] }
 ];
 function valeursNiveau(){
   const st = S.stats || {}, dt = S.details || {};
-  return { questions: st.questions_resolues || 0, taux: Number(st.taux_reussite) || 0, compos: st.compositions || 0, moyenne: dt.moyenne_30j || 0 };
+  return { questions: st.questions_resolues || 0, compos: st.compositions || 0,
+    qcm: dt.qcm_revision || 0, cours: dt.cours_lus || 0, coursTotal: dt.cours_total || 0 };
 }
+/* on monte marche par marche : « Prêt » suppose d'être déjà « Confirmé » */
 function niveauCandidat(){
   const v = valeursNiveau();
   let n = 0;
-  NIVEAUX_C.forEach((x, i) => { if(x.crit.every(([k, c]) => v[k] >= c)) n = i; });
+  for(let i = 1; i < NIVEAUX_C.length; i++){
+    if(NIVEAUX_C[i].crit(v).every(([k, c]) => v[k] >= c)) n = i; else break;
+  }
   return { i:n, nom:NIVEAUX_C[n].nom, suivant:NIVEAUX_C[n + 1] || null, v };
 }
 function verifierNiveau(){
@@ -4097,12 +4316,36 @@ function blocNiveau(court){
   if(!S.stats) return '';
   const n = niveauCandidat();
   const etapes = NIVEAUX_C.map((x, i) => `<span class="niv-etape ${i <= n.i ? 'on' : ''}">${x.nom}</span>`).join('<i class="niv-trait"></i>');
-  const reste = n.suivant ? n.suivant.crit.filter(([k, c]) => n.v[k] < c).map(([k, c, l]) => `${k === 'taux' || k === 'moyenne' ? c + ' ' + l : c + ' ' + l} (toi : ${n.v[k]}${k === 'taux' || k === 'moyenne' ? ' %' : ''})`) : [];
+  const reste = n.suivant ? n.suivant.crit(n.v).filter(([k, c]) => n.v[k] < c).map(([k, c, l]) => `${nombreFr(c - n.v[k])} ${l}`) : [];
   return `<div class="carte niveau-carte" ${court ? 'style="margin-top:12px"' : ''}>
-    <div class="libelle" style="margin-bottom:8px"><span>Ton niveau</span><b style="color:var(--or)">${n.nom}</b></div>
+    <div class="libelle" style="margin-bottom:8px"><span>Votre niveau</span><b style="color:var(--or)">${n.nom}</b></div>
     <div class="niv-chemin">${etapes}</div>
-    ${n.suivant ? `<p class="sous" style="margin-top:10px;font-size:12.5px">Pour passer « ${n.suivant.nom} » : ${reste.join(' · ')}.</p>`
-      : '<p class="sous" style="margin-top:10px;font-size:12.5px">Tu as atteint le dernier niveau. Garde le rythme jusqu\'au jour du concours.</p>'}
+    ${n.suivant ? `<p class="sous" style="margin-top:10px;font-size:12.5px">Il vous reste, pour passer « ${n.suivant.nom} » : ${reste.join(' · ')}.</p>`
+      : '<p class="sous" style="margin-top:10px;font-size:12.5px">Vous avez atteint le dernier niveau. Gardez le rythme jusqu\'au jour du concours.</p>'}
+  </div>`;
+}
+/* la page Parcours : ce qui est fait, ce qui reste, en barres */
+function blocNiveauDetail(){
+  if(!S.stats) return '';
+  const n = niveauCandidat();
+  const etapes = NIVEAUX_C.map((x, i) => `<span class="niv-etape ${i <= n.i ? 'on' : ''}">${x.nom}</span>`).join('<i class="niv-trait"></i>');
+  const paliers = NIVEAUX_C.slice(n.i + 1).map(niv => `
+    <div class="nd-palier">
+      <div class="nd-nom">Pour devenir « ${niv.nom} »</div>
+      ${niv.crit(n.v).map(([k, c, l, court]) => {
+        const fait = Math.min(n.v[k], c), pct = c ? Math.round(fait / c * 100) : 100;
+        return `<div class="nd-crit">
+          <div class="nd-l"><span>${l.charAt(0).toUpperCase() + l.slice(1)}</span><b class="num">${nombreFr(n.v[k])} / ${nombreFr(c)}</b></div>
+          <div class="nd-barre ${pct >= 100 ? 'ok' : ''}"><i style="width:${pct}%"></i></div>
+          <div class="nd-s">${pct >= 100 ? 'Fait.' : 'Vous avez réalisé ' + nombreFr(n.v[k]) + ' ' + court + '. Il vous reste ' + nombreFr(c - n.v[k]) + '.'}</div>
+        </div>`;
+      }).join('')}
+    </div>`).join('');
+  return `<div class="carte niveau-carte niveau-detail" style="margin-top:14px">
+    <p class="nd-titre">Vous êtes au niveau <b>${n.nom.toLowerCase()}</b>.</p>
+    <div class="niv-chemin">${etapes}</div>
+    ${paliers || '<p class="sous" style="margin-top:10px">Vous avez atteint le dernier niveau. Gardez le rythme jusqu\'au jour du concours.</p>'}
+    ${n.v.coursTotal ? '' : '<p class="sous" style="margin-top:8px;font-size:12px">Les cours lus sont comptés dès que vous lisez un chapitre jusqu\'au bout dans Révisions.</p>'}
   </div>`;
 }
 
@@ -4120,14 +4363,14 @@ function blocCitation(){
   return `<figure class="citation"><blockquote>« ${E(t)} »</blockquote><figcaption>${E(a)}</figcaption></figure>`;
 }
 
-/* ---------- mission du jour : elle change chaque jour ---------- */
+/* ---------- défi du jour : il change chaque jour ---------- */
 function missionDuJour(){
   const pm = ((S.stats && S.stats.par_matiere) || []).filter(x => x.traitees >= 5).map(x => ({ ...x, taux:Number(x.taux) || 0 })).sort((a, b) => a.taux - b.taux)[0];
   const m = [
     { t:'Revoir tes erreurs prévues aujourd\'hui', a:'data-pourtoi="10"' },
     pm ? { t:`Série de 10 questions en ${pm.matiere}, ta matière la plus fragile`, a:`data-cible="${E(pm.matiere)}"` } : { t:'Série de 10 questions dans une matière de ton choix', a:'data-go="revisions"' },
     { t:'Mini-test express : 5 questions sans t\'arrêter', a:'data-pourtoi="5"' },
-    { t:'Lire la notion du jour et répondre à ses 3 questions', a:'data-go="notion"' },
+    { t:'Lire un chapitre de cours, puis faire ses QCM', a:'data-go="revisions"' },
     { t:'Composer en conditions réelles : 50 questions, 25 minutes', a:'data-go="grille"' },
     { t:'Relever un défi : 10 questions en 5 minutes', a:'data-go="defi"' }
   ];
@@ -4146,31 +4389,37 @@ function bandeauAccueil(){
   </div>`;
 }
 
-/* ---------- le prolongement de l'accueil ---------- */
+/* ---------- le bas de l'accueil : progression, défis, entraînement ---------- */
 function blocPlus(){
   const debutant = !S.stats || (S.stats.questions_resolues || 0) < 50;
   const mission = missionDuJour();
   const dernier = lireReglages().dernierQcm;
   const pos = dernier && S.qcmPos ? (S.qcmPos[dernier] || 0) : 0;
   return `
-    ${S.util.connecte ? `<div class="carte mission" style="margin-top:12px">
-      <div class="libelle" style="margin-bottom:6px"><span>${ico('cible',14)} Mission du jour</span></div>
-      <div style="font-weight:600;font-size:14.5px;margin-bottom:10px">${E(mission.t)}</div>
-      <button class="cta creux" ${mission.a}>Lancer la mission</button>
-    </div>` : ''}
+    ${S.util.connecte && S.stats ? `<h2 class="titre-section">Ma progression</h2>${bandeauAccueil()}` : ''}
+    ${S.direct && S.direct.en_ligne >= 3 ? `<p class="direct-ligne"><i></i><span class="num">${S.direct.en_ligne}</span> candidats révisent en ce moment${S.direct.composent >= 2 ? ` · <span class="num">${S.direct.composent}</span> composent` : ''}</p>` : ''}
     ${dernier && pos > 0 ? `<button class="grande" style="margin-top:12px" data-mat="${E(dernier)}">
       <span class="ic">${ico('revisions',19)}</span><span><b>Reprendre ${E(dernier)}</b><span>Question ${pos + 1}, là où tu t'es arrêté</span></span><span class="fl">→</span></button>` : ''}
-    ${debutant ? `<div class="carte" style="margin-top:12px"><div class="libelle" style="margin-bottom:6px">Pour bien commencer</div>
+    ${debutant && S.util.connecte ? `<div class="carte" style="margin-top:12px"><div class="libelle" style="margin-bottom:6px">Pour bien commencer</div>
       <p class="sous" style="margin-bottom:10px">Commence par les bases : quelques questions chaque jour, puis ta première composition. Ton cahier d'erreurs se remplit tout seul et te guide.</p>
       <button class="cta creux" data-retest="1">Refaire le test de niveau</button></div>` : ''}
-    <div class="libelle" style="margin-top:22px">Pour aller plus loin</div>
+
+    <h2 class="titre-section">Défis</h2>
+    <div class="defis-duo">
+      ${S.util.connecte ? `<div class="carte mission">
+        <div class="libelle" style="margin-bottom:6px"><span>${ico('cible',14)} Défi du jour</span></div>
+        <div style="font-weight:600;font-size:14.5px;margin-bottom:10px">${E(mission.t)}</div>
+        <button class="cta creux" ${mission.a}>Relever le défi</button>
+      </div>` : ''}
+      ${blocDefi()}
+    </div>
+
+    <h2 class="titre-section">S'entraîner autrement</h2>
     <div class="raccourcis">
-      <button data-go="notion">${ico('lire',18)}<b>Notion du jour</b><span>Une fiche, puis 3 questions</span></button>
+      <button data-go="qdj">${ico('question',18)}<b>Question du jour</b><span>La même pour tous</span></button>
       ${!debutant ? `<button data-pieges="1">${ico('drapeau',18)}<b>Les plus ratées</b><span>Les 10 pièges de tous</span></button>` : ''}
       <button data-go="defi">${ico('duel',18)}<b>Défier un ami</b><span>10 questions en 5 min</span></button>
       <button data-go="top">${ico('trophee',18)}<b>Top 10 de la semaine</b><span>Classement par pseudo</span></button>
-      <button data-go="recherche">${ico('question',18)}<b>Chercher une question</b><span>Dans toute la banque</span></button>
-      <button data-go="proposer">${ico('etoile',18)}<b>Proposer une question</b><span>Elle sera vérifiée</span></button>
     </div>
     ${blocCitation()}
     ${S.installer ? `<button class="cta creux" style="margin-top:12px" data-installer="1">${ico('telecharger',16)} Installer l'application<small>Elle s'ouvre comme une appli, même avec peu de réseau</small></button>` : ''}`;
@@ -4203,7 +4452,7 @@ async function chargerNotion(){
 }
 function ecranNotion(){
   const n = S.notion;
-  const tete = `<button class="retourhaut" data-go="aujourdhui">Accueil</button>`;
+  const tete = `<button class="retourhaut" data-go="aujourdhui">Actualité</button>`;
   if(!n){ chargerNotion(); vue().innerHTML = `<div class="pad">${tete}<div class="squelette large" style="margin-top:16px"></div><div class="squelette"></div></div>`; return; }
   if(n.vide || n.erreur){ vue().innerHTML = `<div class="pad">${tete}<h1 class="titre">Notion du jour</h1><p class="sous">${n.erreur ? 'Elle n\'a pas pu être chargée.' : 'Pas de notion disponible pour ce niveau.'}</p></div>`; return; }
   vue().innerHTML = `
@@ -4226,7 +4475,7 @@ function ecranRecherche(){
   const res = q.length >= 3 ? toutes.filter(x => (x.q + ' ' + x.o.join(' ')).toLowerCase().includes(q)).slice(0, 30) : [];
   vue().innerHTML = `
   <div class="pad">
-    <button class="retourhaut" data-go="aujourdhui">Accueil</button>
+    <button class="retourhaut" data-go="aujourdhui">Actualité</button>
     <h1 class="titre">Chercher une question</h1>
     <p class="sous" style="margin:6px 0 12px">Dans les ${nombreFr(toutes.length)} questions du niveau ${E(S.niveau.toLowerCase())}. Tape au moins 3 lettres : un mot, un nom, une date.</p>
     <div class="champ"><input id="rech-q" type="search" value="${E(S.rechQ || '')}" placeholder="Ex. : constitution, Sankara, glycémie…" oninput="filtrerQuestions(this.value)" autocomplete="off"></div>
@@ -4294,7 +4543,7 @@ async function remettreDefi(){
 function lienDefi(id){ return CONTACT.site + '/?defi=' + encodeURIComponent(id); }
 function ecranDefi(){
   const d = S.defi;
-  const tete = `<button class="retourhaut" data-go="aujourdhui">Accueil</button>`;
+  const tete = `<button class="retourhaut" data-go="aujourdhui">Actualité</button>`;
   if(!d){
     const mats = (S.banque || []).map(m => m.nom);
     if(!S.banque && S.banqueEtat !== 'chargement') chargerQuestions();
@@ -4358,7 +4607,7 @@ async function chargerTop(){
 }
 function ecranTop(){
   const t = S.top;
-  const tete = `<button class="retourhaut" data-go="aujourdhui">Accueil</button>`;
+  const tete = `<button class="retourhaut" data-go="aujourdhui">Actualité</button>`;
   if(!t){ chargerTop(); vue().innerHTML = `<div class="pad">${tete}<div class="squelette large" style="margin-top:16px"></div></div>`; return; }
   vue().innerHTML = `<div class="pad">${tete}
     <div class="eyebrow">Depuis lundi</div>
@@ -4378,7 +4627,7 @@ function ecranProposer(){
   const mats = (S.banque || []).map(m => m.nom);
   const f = S.prop || (S.prop = { enonce:'', o:['','','',''], bonne:null, expl:'', source:'', matiere:mats[0] || '' });
   vue().innerHTML = `<div class="pad">
-    <button class="retourhaut" data-go="aujourdhui">Accueil</button>
+    <button class="retourhaut" data-go="aujourdhui">Actualité</button>
     <h1 class="titre">Proposer une question</h1>
     <p class="sous" style="margin:6px 0 14px">Tu connais une question tombée au concours, ou une notion qui piège souvent ? Propose-la. L'équipe la vérifie avant de la publier, et tu es prévenu quand elle entre dans la banque.</p>
     ${S.erreur ? `<div class="alerte" role="alert">${E(S.erreur)}</div>` : ''}
@@ -4407,6 +4656,7 @@ function ecranParcours(){
     <div class="eyebrow">Mon parcours</div>
     <h1 class="titre">${debut ? 'Depuis le ' + E(new Date(debut).toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' })) : 'Ton chemin'}</h1>
     ${jours ? `<p class="sous" style="margin-top:6px">${jours} jour${jours > 1 ? 's' : ''} depuis ta première séance.</p>` : ''}
+    ${blocNiveauDetail()}
     <div class="trio" style="margin-top:14px">
       <div><b class="num">${nombreFr(st.questions_resolues || 0)}</b><span>questions</span></div>
       <div><b class="num">${st.record || 0}</b><span>jours travaillés</span></div>
@@ -4417,7 +4667,6 @@ function ecranParcours(){
       <div><b class="num">${dt.defis || 0}</b><span>défis relevés</span></div>
       <div><b class="num">${dt.propositions || 0}</b><span>questions publiées</span></div>
     </div>
-    ${blocNiveau(true)}
     ${typeof dt.percentile === 'number' ? `<div class="carte" style="margin-top:12px"><div class="libelle" style="margin-bottom:6px">Par rapport aux autres</div>
       <p class="sous">Sur les 30 derniers jours, ta moyenne aux compositions (<b>${dt.moyenne_30j} %</b>) dépasse celle de <b>${dt.percentile} %</b> des candidats de Mon Concours.</p></div>` : ''}
     ${mats.length ? `<div class="bloc"><div class="libelle">Matière par matière</div><div class="carte">
@@ -4644,11 +4893,11 @@ function apptete(){
       : `<button class="bouton-tete" data-modal="inscription" aria-label="Se connecter">${ico('compte',17)}<span>Se connecter</span></button>`}`;
 }
 function annoncer(){
-  const n = {aujourdhui:"Aujourd'hui", actualite:'Actualité du matin', revisions:'Mes révisions',
+  const n = {aujourdhui:'Actualité', actualite:'Actualité du matin', revisions:'Mes révisions',
     qcm:'Question', grille:'Composition', copie:'Copie corrigée', cahier:'Mon cahier', compte:'Mon compte',
     inscription:'Création de compte', connexion:'Connexion', abonnement:'Formules', paiement:'Paiement',
     test:'Test de niveau', resultat:'Résultat', pourtoi:'Fil pour toi', qdj:'Question du jour',
-    question:'Question partagée', gagnants:'Classement de la composition collective', notion:'Notion du jour', recherche:'Recherche de questions',
+    question:'Question partagée', gagnants:'Résultats de la composition nationale', notion:'Notion du jour', recherche:'Recherche de questions',
     defi:'Défi entre amis', top:'Top 10 de la semaine', proposer:'Proposer une question', parcours:'Mon parcours'}[S.ecran] || '';
   const a = document.getElementById('annonce');
   if(a && n) a.textContent = 'Écran : ' + n;
@@ -5069,6 +5318,7 @@ document.addEventListener('click', ev=>{
     if(base) base.auth.signOut();
     S.util = {nom:'', tel:'', pin:'', connecte:false};
     S.form = {nom:'', tel:'', pin:''};
+    S.lus = null; S.lusCharges = false; S.popNatVu = false;
     oublierIdentite();
     const connu = !!(lireMemoire() || {}).dejaVenu;
     S.modalDejaVu = connu;                    // on ne relance pas l'inscription d'un habitué

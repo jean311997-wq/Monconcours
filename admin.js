@@ -2243,31 +2243,38 @@ async function vueJournal(pageJ){
 }
 
 /* ============================================================
-   COMPOSITIONS COLLECTIVES
-   Même sujet, même heure pour tous. Heure de Ouagadougou = UTC.
-   Prenez un sujet que personne n'a encore composé : pendant
-   l'épreuve, ses questions sont retirées des révisions.
+   COMPOSITIONS NATIONALES
+   Chaque samedi à 17 h (heure de Ouagadougou = UTC), même sujet
+   pour tous. La base programme seule la composition du samedi
+   suivant ; ici on peut l'annuler, en ajouter une, voir les admis.
    ============================================================ */
 async function vueCollectives(){
-  const [{ data: sujets }, { data: compos }, { data: eps }] = await Promise.all([
+  const [{ data: sujets }, { data: compos }, { data: eps }, { data: concours }, { data: inscr }] = await Promise.all([
     db.from('sujets').select('id, reference, niveau, nb_questions, duree_secondes').eq('statut','publie').order('reference'),
     db.from('compositions').select('sujet_id'),
-    db.from('epreuves_collectives').select('id, titre, sujet_id, debut_le, fin_le, recompense, message, statut, cree_le').order('debut_le', { ascending:false }).limit(30)
+    db.from('epreuves_collectives').select('id, titre, sujet_id, debut_le, fin_le, recompense, message, statut, cree_le, concours_id, places').order('debut_le', { ascending:false }).limit(30),
+    db.from('concours').select('id, nom, niveau_requis, nb_places, actif').order('nom'),
+    db.from('inscriptions_epreuve').select('epreuve_id')
   ]);
-  const usage = {};
+  const usage = {}, nbInscr = {};
   (compos || []).forEach(c => { usage[c.sujet_id] = (usage[c.sujet_id] || 0) + 1; });
-  const demain = new Date(Date.now() + 86400000);
-  const defaut = demain.toISOString().slice(0, 10) + 'T15:00';
+  (inscr || []).forEach(i => { nbInscr[i.epreuve_id] = (nbInscr[i.epreuve_id] || 0) + 1; });
+  const nomConc = id => ((concours || []).find(c => c.id === id) || {}).nom || '';
+  const samedi = new Date(); samedi.setUTCDate(samedi.getUTCDate() + ((6 - samedi.getUTCDay() + 7) % 7 || 7));
+  const defaut = samedi.toISOString().slice(0, 10) + 'T17:00';
 
   $('#vue').innerHTML = `
-    <h2 class="titre">Compositions collectives</h2>
-    <p class="sous">Tous les candidats composent le même sujet au même moment. Le corrigé et le classement (par pseudo) sont publiés à la fin. Chaque candidat reçoit une notification dans l'application, et un rappel sur son téléphone s'il les a activés.</p>
+    <h2 class="titre">Compositions nationales</h2>
+    <p class="sous">Chaque samedi à 17 h, une composition est programmée automatiquement : le concours change à tour de rôle et le sujet choisi n'a jamais servi en composition nationale. Les candidats s'inscrivent depuis l'application ; à la fin, ils voient leur statut (admis, liste d'attente, non admis), la liste des admis et peuvent télécharger les résultats en PDF.</p>
 
     <div class="bloc">
       <div class="libelle">Programmer une composition</div>
       <div class="carte">
         <div class="deux">
-          <div><label for="ec-titre">Titre</label><input id="ec-titre" maxlength="80" placeholder="Composition du samedi · Culture générale"></div>
+          <div><label for="ec-concours">Concours</label><select id="ec-concours">
+            ${(concours || []).filter(c => c.actif).map(c => `<option value="${E(c.id)}" data-places="${c.nb_places || 30}">${E(c.nom)} · ${E(c.niveau_requis || '')}</option>`).join('')}
+          </select></div>
+          <div><label for="ec-places">Nombre de places</label><input id="ec-places" type="number" min="1" max="100000" value="30"></div>
           <div><label for="ec-sujet">Sujet</label><select id="ec-sujet">
             ${(sujets || []).map(s => `<option value="${E(s.id)}">${E(s.reference)} · ${E(s.niveau || 'tous niveaux')} · ${s.nb_questions} q. · ${Math.round((s.duree_secondes||1500)/60)} min · déjà composé ${usage[s.id] || 0} fois</option>`).join('')}
           </select></div>
@@ -2275,39 +2282,46 @@ async function vueCollectives(){
           <div><label for="ec-recompense">Récompense (facultatif)</label><input id="ec-recompense" maxlength="120" placeholder="1 mois d'abonnement offert au major"></div>
         </div>
         <label for="ec-message">Message aux participants (facultatif)</label>
-        <textarea id="ec-message" rows="2" maxlength="400" placeholder="Bravo à tous, rendez-vous samedi prochain."></textarea>
+        <textarea id="ec-message" rows="2" maxlength="400" placeholder="Félicitations à tous les admis. Rendez-vous samedi prochain à 17 h."></textarea>
         <button class="cta vert petit" id="ec-creer" style="margin-top:10px">Programmer et prévenir les candidats</button>
       </div>
     </div>
 
     <div class="bloc">
       <div class="libelle">Compositions programmées</div>
-      <div class="carte">${!(eps || []).length ? '<div class="vide">Aucune composition collective pour l\'instant.</div>' : `
-        <table><thead><tr><th>Titre</th><th>Début</th><th>État</th><th></th></tr></thead><tbody>
+      <div class="carte">${!(eps || []).length ? '<div class="vide">Aucune composition nationale pour l\'instant.</div>' : `
+        <table><thead><tr><th>Composition</th><th>Début</th><th>Places</th><th>Inscrits</th><th>État</th><th></th></tr></thead><tbody>
         ${eps.map(ep => {
           const maintenant = Date.now(), d = new Date(ep.debut_le).getTime(), f = new Date(ep.fin_le).getTime();
           const etat = ep.statut === 'annulee' ? 'annulée' : (maintenant < d ? 'à venir' : (maintenant < f ? 'en cours' : 'terminée'));
-          return `<tr><td><b>${E(ep.titre)}</b>${ep.recompense ? '<br><small>' + E(ep.recompense) + '</small>' : ''}</td>
-            <td>${E(new Date(ep.debut_le).toLocaleString('fr-FR', { timeZone:'Africa/Ouagadougou', weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }))} <small>(Ouaga)</small></td><td>${etat}</td>
+          return `<tr><td><b>${E(nomConc(ep.concours_id) || ep.titre)}</b>${ep.recompense ? '<br><small>' + E(ep.recompense) + '</small>' : ''}</td>
+            <td>${E(new Date(ep.debut_le).toLocaleString('fr-FR', { timeZone:'Africa/Ouagadougou', weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }))}</td>
+            <td>${ep.places}</td><td>${nbInscr[ep.id] || 0}</td><td>${etat}</td>
             <td style="text-align:right;white-space:nowrap">
-              ${etat === 'terminée' ? `<button class="lien" data-ec-classement="${E(ep.id)}">classement</button>` : ''}
-              ${etat === 'à venir' ? `<button class="lien" style="margin-left:10px" data-ec-annuler="${E(ep.id)}">annuler</button>` : ''}
+              ${etat === 'terminée' ? `<button class="lien" data-ec-classement="${E(ep.id)}">résultats</button>` : ''}
+              ${etat === 'à venir' ? `<button class="lien" data-ec-places="${E(ep.id)}" data-actuel="${ep.places}">places</button>
+                <button class="lien" style="margin-left:10px" data-ec-annuler="${E(ep.id)}">annuler</button>` : ''}
             </td></tr>`;
         }).join('')}</tbody></table>`}
       </div>
       <div id="ec-detail"></div>
     </div>`;
 
+  const selC = document.getElementById('ec-concours');
+  const majPlaces = () => { const o = selC.selectedOptions[0]; if(o) document.getElementById('ec-places').value = o.dataset.places; };
+  if(selC){ selC.onchange = majPlaces; majPlaces(); }
   document.getElementById('ec-creer').onclick = async () => {
-    const titre = document.getElementById('ec-titre').value.trim();
     const debut = document.getElementById('ec-debut').value;
-    if(!titre) return signal('Donnez un titre.', 'mal');
     if(!debut) return signal('Choisissez la date et l\'heure.', 'mal');
-    const { data, error } = await db.rpc('programmer_epreuve', {
-      p_titre: titre, p_sujet: document.getElementById('ec-sujet').value,
+    const o = selC && selC.selectedOptions[0];
+    const { data, error } = await db.rpc('programmer_nationale', {
+      p_titre: 'Composition nationale · ' + (o ? o.textContent.split(' · ')[0] : ''),
+      p_sujet: document.getElementById('ec-sujet').value,
       p_debut: new Date(debut + ':00Z').toISOString(),
       p_recompense: document.getElementById('ec-recompense').value,
-      p_message: document.getElementById('ec-message').value
+      p_message: document.getElementById('ec-message').value,
+      p_concours: selC ? selC.value : null,
+      p_places: +document.getElementById('ec-places').value || 30
     });
     if(error) return erreur(error, 'Programmation impossible');
     if(!data || !data.ok) return signal((data && data.message) || 'Programmation impossible.', 'mal');
@@ -2315,18 +2329,27 @@ async function vueCollectives(){
     vueCollectives();
   };
   $$('[data-ec-annuler]').forEach(b => b.onclick = async () => {
-    if(!confirm('Annuler cette composition collective ?')) return;
+    if(!confirm('Annuler cette composition nationale ?')) return;
     const { error } = await db.from('epreuves_collectives').update({ statut:'annulee' }).eq('id', b.dataset.ecAnnuler);
     if(error) return erreur(error, 'Annulation impossible');
     signal('Composition annulée.', 'info'); vueCollectives();
   });
+  $$('[data-ec-places]').forEach(b => b.onclick = async () => {
+    const v = prompt('Nombre de places (admis) :', b.dataset.actuel);
+    const n = parseInt(v, 10);
+    if(!n || n < 1) return;
+    const { error } = await db.from('epreuves_collectives').update({ places:n }).eq('id', b.dataset.ecPlaces);
+    if(error) return erreur(error, 'Modification impossible');
+    signal('Nombre de places enregistré.', 'bien'); vueCollectives();
+  });
   $$('[data-ec-classement]').forEach(b => b.onclick = async () => {
     const { data } = await db.rpc('classement_epreuve', { p_epreuve: b.dataset.ecClassement });
     const z = document.getElementById('ec-detail');
-    if(!data || !data.ok){ z.innerHTML = '<div class="carte">Classement indisponible.</div>'; return; }
-    z.innerHTML = `<div class="carte" style="margin-top:12px"><b>${E(data.titre)}</b> · ${data.participants} participants · moyenne ${data.moyenne ?? '—'}/${data.sur}
-      <table style="margin-top:8px"><thead><tr><th>Rang</th><th>Pseudo</th><th>Note</th><th>Durée</th></tr></thead><tbody>
-      ${(data.classement || []).map(l => `<tr><td>${l.rang}</td><td>${E(l.pseudo)}</td><td>${l.score}/${l.sur}</td><td>${Math.round((l.duree||0)/60)} min</td></tr>`).join('')}
+    if(!data || !data.ok){ z.innerHTML = '<div class="carte">Résultats indisponibles.</div>'; return; }
+    const st = { admis:'Admis', attente:'Liste d\'attente', echoue:'Non admis' };
+    z.innerHTML = `<div class="carte" style="margin-top:12px"><b>${E(data.concours || data.titre)}</b> · ${data.participants} candidats · ${data.admis} admis · ${data.attente} en liste d'attente · moyenne ${data.moyenne ?? '—'}/${data.sur}
+      <table style="margin-top:8px"><thead><tr><th>Rang</th><th>Nom</th><th>Note</th><th>Durée</th><th>Statut</th></tr></thead><tbody>
+      ${(data.classement || []).map(l => `<tr><td>${l.rang}</td><td>${E(l.nom || l.pseudo)}</td><td>${l.score}/${l.sur}</td><td>${Math.round((l.duree||0)/60)} min</td><td>${st[l.statut] || ''}</td></tr>`).join('')}
       </tbody></table></div>`;
   });
 }
