@@ -319,6 +319,41 @@ window.addEventListener('beforeunload', e => {
   if(r.concentration) S.concentration = true;
 })();
 
+/* =====================================================================
+   MÉMOIRE DU TÉLÉPHONE
+   Ce que l'application a déjà reçu s'affiche tout de suite à la
+   prochaine ouverture ; le réseau met ensuite les chiffres à jour.
+   Les données personnelles sont liées au numéro du candidat.
+   ===================================================================== */
+const MEMO = 'monconcours.memo.';
+/* une réponse identique à ce qui est déjà affiché ne redessine pas l'écran */
+const pareil = (a, b) => { try{ return JSON.stringify(a) === JSON.stringify(b); }catch(e){ return false; } };
+const memoQui = () => (S.util && S.util.connecte && S.util.tel) || '';
+function memoLire(k, perso){
+  try{
+    const c = JSON.parse(localStorage.getItem(MEMO + k));
+    if(!c || (perso && (!memoQui() || c.u !== memoQui()))) return null;
+    return c.d;
+  }catch(e){ return null; }
+}
+function memoEcrire(k, d, perso){
+  if(perso && !memoQui()) return;
+  try{ localStorage.setItem(MEMO + k, JSON.stringify({ u: perso ? memoQui() : '', d })); }catch(e){}
+}
+function memoVider(){
+  try{ Object.keys(localStorage).filter(k => k.startsWith(MEMO)).forEach(k => { if(JSON.parse(localStorage.getItem(k)).u) localStorage.removeItem(k); }); }catch(e){}
+}
+function memoReprendre(){
+  const perso = ['journee', 'stats', 'details', 'classement', 'notifications', 'rappel', 'top', 'lus'];
+  perso.forEach(k => { const v = memoLire(k, true); if(v !== null && (S[k] === undefined || S[k] === null || (Array.isArray(S[k]) && !S[k].length))) S[k] = v; });
+  const ep = memoLire('epreuve', true); if(ep) S.epreuve = ep;
+  const cahier = memoLire('cahier', true); if(cahier && (!S.cahier || !S.cahier.length)) S.cahier = cahier;
+  if(S.notifications) S.notifCharge = true;
+  if(S.lus) S.lusCharges = false;
+  const actu = memoLire('actu');
+  if(actu && actu.liste && actu.liste.length && !S.actuChargee){ ACTU.length = 0; actu.liste.forEach(a => ACTU.push(a)); S.actuDerniere = actu.der; S.actuChargee = true; }
+}
+
 /* Avant le premier dessin : si ce téléphone connaît déjà le candidat,
    on ouvre l'application sur l'actualité et non sur l'engagement. */
 (function accueilDirect(){
@@ -328,14 +363,31 @@ window.addEventListener('beforeunload', e => {
   S.modalDejaVu = true;                       // pas de relance d'inscription
   if(m.niveauProfil) S.niveauProfil = m.niveauProfil;
   if(m.nom) S.util = { nom:m.nom, tel:m.tel || '', pin:'', connecte:true };
+  try{ memoReprendre(); }catch(e){}
 })();
 
 /* Écrans de première visite : on n'y renvoie plus personne par accident. */
 const ECRANS_DECOUVERTE = ['engagement','testIntro','test','resultat'];
 
+const derniersAppels = {};
+function pasTropSouvent(cle, ms){
+  const t = Date.now();
+  if(derniersAppels[cle] && t - derniersAppels[cle] < ms) return false;
+  derniersAppels[cle] = t; return true;
+}
+/* les outils PDF ne se chargent que sur les écrans qui ont un bouton « Télécharger » */
+function prechargerOutilsPdf(){
+  if(prechargerOutilsPdf.fait) return;
+  const c = navigator.connection;
+  if(c && (c.saveData || /(^|-)2g$/.test(c.effectiveType || ''))) return;
+  prechargerOutilsPdf.fait = true;
+  ['/lib/html2canvas-1.4.1.min.js', '/lib/jspdf-2.5.2.umd.min.js'].forEach(h => {
+    const l = document.createElement('link'); l.rel = 'prefetch'; l.as = 'script'; l.href = h; document.head.appendChild(l);
+  });
+}
 function aller(e){
   if(S.gratuit && (e === 'abonnement' || e === 'paiement')) e = 'compte';   // pas de formules pendant la phase gratuite
-  if(['revisions','qcm'].includes(e)) chargerQuestions();
+  if(['revisions','qcm'].includes(e)){ progressionMemo(); chargerQuestions(); }
   if(e !== 'lecture') S.matiereOuverte = null;
   if(S.timer && e!=='grille'){clearInterval(S.timer);S.timer=null;}
   if(S.testTimer && e!=='test'){clearInterval(S.testTimer);S.testTimer=null;}
@@ -344,13 +396,15 @@ function aller(e){
   if(typeof retourEnCours !== 'undefined' && !retourEnCours && e !== S.ecran){
     try{ history.pushState({ ecran:e }, ''); }catch(err){}
   }
-  if(e === 'aujourdhui'){ chargerJournee(); chargerEpreuve(); chargerDetails(); }
-  if(e === 'compte' || e === 'parcours'){ chargerJournee(); chargerRappel(); chargerDetails(); chargerMonConcours(); }
-  if(e === 'cahier') chargerDetails();
-  if(e === 'notion') S.notion = null;
-  if(e === 'top') S.top = null;
+  /* on rafraîchit en arrière-plan, au plus toutes les 20 secondes : l'écran s'affiche d'abord avec ce qu'on a */
+  if(e === 'aujourdhui' && pasTropSouvent('accueil', 20000)){ chargerJournee(); chargerEpreuve(); chargerDetails(); }
+  if((e === 'compte' || e === 'parcours') && pasTropSouvent('compte', 20000)){ chargerJournee(); chargerRappel(); chargerDetails(); chargerProgression(); }
+  if(e === 'cahier' && pasTropSouvent('cahier', 20000)){ chargerDetails(); chargerCahier(); }
+  if(['copie','gagnants','cahier','revisions','defi'].includes(e)) prechargerOutilsPdf();
+  if(e === 'notion' && S.notion && S.notion.jour !== new Date().toDateString()) S.notion = null;
+  if(e === 'top') chargerTop();
   if(['recherche','defi','proposer'].includes(e) && !S.banque) chargerQuestions();
-  if(e === 'qdj' && !S.qdjRep && S.qdjRep !== 0) S.qdj = null;
+  if(e === 'qdj' && S.qdj && S.qdj.jourLocal !== new Date().toDateString()){ S.qdj = null; S.qdjRep = undefined; S.qdjCorrection = null; }
   S.ecran = e; rendre(); vue().scrollTop = 0;
   try{ vue().focus({preventScroll:true}); }catch(err){}
 }
@@ -634,9 +688,11 @@ let banqueNiveau = null;
 async function chargerQuestions(force){
   if(!base) return;
   const niv = niveauBase();
-  if(!force && banqueNiveau === niv && S.banque) return;
+  if(!force && banqueNiveau === niv && S.banque && S.banqueEtat === 'pret') return;
   banqueNiveau = niv;
-  S.banqueEtat = 'chargement';
+  const memo = memoLire('banque-' + niv);
+  if(memo && memo.length){ S.banque = memo; S.banqueEtat = 'pret'; if(['revisions','qcm'].includes(S.ecran)) rendre(); }
+  else S.banqueEtat = 'chargement';
   try{
     const { data, error } = await base.from('questions')
       .select('id, enonce, niveau, matiere_id, matieres(nom, ordre, niveaux), question_options(position, texte)')
@@ -657,12 +713,14 @@ async function chargerQuestions(force){
     });
     S.banque = Object.values(parMatiere).sort((x,y) => x.ordre - y.ordre);
     S.banqueEtat = 'pret';
+    memoEcrire('banque-' + niv, S.banque);
   }catch(e){
-    S.banqueEtat = 'erreur';
+    if(S.banqueEtat !== 'pret') S.banqueEtat = 'erreur';
   }
   chargerProgressionMatieres();
   if(['revisions','qcm'].includes(S.ecran)) rendre();
 }
+function progressionMemo(){ if(!S.progression){ const p = memoLire('progression-' + niveauBase(), true); if(p) S.progression = p; } }
 
 /* Ce que le candidat a réellement fait, matière par matière. */
 async function chargerProgressionMatieres(){
@@ -671,11 +729,29 @@ async function chargerProgressionMatieres(){
     const { data } = await base.rpc('ma_progression', { p_niveau: niveauBase() });
     S.progression = {};
     (data || []).forEach(m => { S.progression[m.matiere] = m; });
+    memoEcrire('progression-' + niveauBase(), S.progression, true);
     if(S.ecran === 'revisions') rendre();
   }catch(e){}
 }
 
 const banqueDe = nom => (S.banque || []).find(m => m.nom === nom);
+
+/* Pendant que le candidat lit l'accueil : question du jour, top 10 et
+   un premier fil « Pour toi » arrivent en silence. Toucher le bouton
+   ne fait alors plus attendre. Rien de lourd en 2G : la banque de
+   questions n'est préchargée que si le réseau est correct. */
+function prechargerSuite(){
+  if(!base) return;
+  const lent = navigator.connection && (navigator.connection.saveData || /(^|-)2g$/.test(navigator.connection.effectiveType || ''));
+  if(!S.qdj) chargerQdj();
+  if(S.epreuve && S.epreuve.etat === 'terminee') chargerClassement(S.epreuve.id);
+  if(S.util.connecte){
+    chargerTop();
+    if(!S.filPret) base.rpc('fil_pour_toi', { p_niveau: niveauCand(), p_nombre: 10 }).then(({ data }) => { if(Array.isArray(data) && data.length) S.filPret = { liste:data, t:Date.now() }; }, () => {});
+    if(!S.rappel) chargerRappel();
+  }
+  if(!lent && !memoLire('banque-' + niveauBase())) chargerQuestions();
+}
 
 /* =====================================================================
    RELIRE SA PROGRESSION
@@ -687,12 +763,14 @@ async function chargerNotifications(){
     if(!uid) return;
     const { data } = await base.rpc('mes_notifications');
     const avant = new Set((S.notifications || []).map(n => n.id));
+    const memes = pareil(data || [], S.notifications);
     S.notifications = data || [];
+    memoEcrire('notifications', S.notifications, true);
     /* une nouvelle notification : un son léger et un bandeau qu'on peut toucher */
     const vues = lireReglages().notifVues || [];
     const neuves = S.notifications.filter(n => !n.lue && !vues.includes(n.id) && (S.notifCharge ? !avant.has(n.id) : true));
     S.notifCharge = true;
-    rendre();
+    if(!memes) rendre();
     if(neuves.length && !enComposition()){
       ecrireReglage('notifVues', S.notifications.slice(0, 60).map(n => n.id));
       bandeauNotif(neuves[0], neuves.length);
@@ -857,17 +935,17 @@ async function chargerProgression(){
 
   base.rpc('mon_classement').then(({data}) => {
     S.classementCharge = true;
-    if(data) S.classement = data;
-    rafraichirSiVisible();
+    if(data && !pareil(data, S.classement)){ S.classement = data; memoEcrire('classement', data, true); rafraichirSiVisible(); }
   }).catch(() => { S.classementCharge = true; });
 
   base.rpc('mes_stats').then(({data}) => {
-    if(data){ S.stats = data; setTimeout(notificationsDuJour, 2500); }
-    rafraichirSiVisible();
+    if(data && !pareil(data, S.stats)){ S.stats = data; memoEcrire('stats', data, true); rafraichirSiVisible(); }
+    if(data) setTimeout(notificationsDuJour, 2500);
   }).catch(() => {});
 
   chargerCahier();
   chargerJournee();
+  chargerDetails();
 }
 
 /* Le cahier d'erreurs vient de la base. Les fautes du test d'entrée,
@@ -888,8 +966,11 @@ async function chargerCahier(){
         revoirLe: new Date(e.revoir_le + 'T00:00:00').getTime(), session: 0
       };
     });
-    S.cahier = serveur.concat(locales.filter(l => !serveur.some(x => x.q === l.q)));
-    rafraichirSiVisible();
+    const neuf = serveur.concat(locales.filter(l => !serveur.some(x => x.q === l.q)));
+    const ch = !pareil(neuf, S.cahier);
+    S.cahier = neuf;
+    memoEcrire('cahier', serveur, true);
+    if(ch) rafraichirSiVisible();
   }catch(e){}
 }
 
@@ -946,6 +1027,8 @@ async function reprendreSession0(){
     return;
   }
   const uid = data.session.user.id;
+  /* la session est connue : les chiffres partent tout de suite, sans attendre le profil */
+  if(S.util.connecte){ S.progLancee = Date.now(); chargerProgression(); }
   const { data: profil } = await base.from('profils')
     .select('nom, telephone, niveau').eq('id', uid).maybeSingle();
   if(profil){
@@ -954,9 +1037,10 @@ async function reprendreSession0(){
     /* « Mes cours » s'ouvre sur Troisième ; le niveau déclaré sert aux compositions et au fil */
     S.niveauProfil = profil.niveau || null;
     ecrireMemoire({ nom: profil.nom, tel: profil.telephone || '', niveauProfil: S.niveauProfil });
-    if(ECRANS_DECOUVERTE.includes(S.ecran)) return aller('aujourdhui'), chargerProgression();
+    const dejaLance = S.progLancee && Date.now() - S.progLancee < 8000;
+    if(ECRANS_DECOUVERTE.includes(S.ecran)){ aller('aujourdhui'); if(!dejaLance) chargerProgression(); return; }
     rendre();
-    chargerProgression();
+    if(!dejaLance) chargerProgression();
   }
 }
 
@@ -985,12 +1069,11 @@ function brancherBase(){
   reprendreSession();
   /* U7 — on ne rapatrie plus la banque entière au démarrage : elle arrive
      quand le candidat ouvre réellement les révisions ou la composition. */
-  setTimeout(chargerRessources, 1200);
-  setTimeout(chargerConcours, 300);
-  setTimeout(chargerAbonnement, 600);
-  setTimeout(chargerNotifications, 900);
-  setTimeout(chargerEpreuve, 400);
-  setTimeout(chargerDirect, 1500);
+  chargerEpreuve(); chargerConcours(); chargerAbonnement(); chargerNotifications();
+  setTimeout(chargerDirect, 600);
+  setTimeout(chargerRessources, 900);
+  /* ce que le candidat ouvrira probablement ensuite, chargé pendant qu'il lit */
+  setTimeout(prechargerSuite, 1500);
   /* un lien direct ouvert avant l'arrivée de la base charge maintenant son contenu */
   if(S.ecran === 'qdj') chargerQdj();
   if(S.lienQuestion) chargerQuestionPartagee(S.lienQuestion);
@@ -1003,7 +1086,7 @@ function brancherBase(){
    OBSERVATION — collecte des événements
    Rien de personnel : ni saisie, ni mot de passe, ni position.
    ===================================================================== */
-const VERSION_APP = 'v19';
+const VERSION_APP = 'v20';
 
 const O = {
   session: null, precedent: null, dernierTemps: Date.now(), entreeEcran: Date.now(),
@@ -1277,6 +1360,7 @@ async function chargerActualites(){
     fraiches.forEach(a => ACTU.push(a));
     S.actuDerniere = data[0].publie_le || null;
     S.actuChargee = true;
+    memoEcrire('actu', { liste: fraiches, der: S.actuDerniere });
 
     if(['aujourdhui','actualite'].includes(S.ecran)) rendre();
   }catch(e){ S.actuErreur = true; if(['aujourdhui','actualite'].includes(S.ecran)) rendre(); }
@@ -2589,7 +2673,7 @@ async function marquerLus(ids){
 }
 async function chargerLectures(){
   if(!base || !S.util.connecte || S.lusCharges) return;
-  try{ const { data } = await base.rpc('mes_lectures'); S.lus = data || []; S.lusCharges = true; if(S.ecran === 'revisions') rendre(); }catch(e){}
+  try{ const { data } = await base.rpc('mes_lectures'); S.lus = data || []; memoEcrire('lus', S.lus, true); S.lusCharges = true; if(S.ecran === 'revisions') rendre(); }catch(e){}
 }
 function suivreLecture(ids){
   const zone = vue(), barre = document.getElementById('jauge-lecture-barre');
@@ -2664,6 +2748,8 @@ function ecranLecture(){
 async function chargerRessources(){
   if(!base) return;
   S.ressourcesEnCours = true;
+  { const n0 = S.niveau.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''), m0 = memoLire('ressources-' + n0);
+    if(m0 && !S.ressources){ S.ressources = m0; if(['cours','lecture','revisions'].includes(S.ecran)) rendre(); } }
   try{
     const niveau = S.niveau.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
     /* Un cours sans niveau est commun aux trois classes : il doit apparaitre partout. */
@@ -2684,7 +2770,8 @@ async function chargerRessources(){
         x.rang - y.rang
         || (x.theme || '').localeCompare(y.theme || '', 'fr')
         || x.titre.localeCompare(y.titre, 'fr'));
-  }catch(e){ S.ressources = []; }
+    memoEcrire('ressources-' + niveau, S.ressources);
+  }catch(e){ if(!S.ressources) S.ressources = []; }
   S.ressourcesEnCours = false;
   if(['cours','lecture','revisions'].includes(S.ecran)) rendre();
 }
@@ -2744,14 +2831,14 @@ function ecranQcm(){
     ${q.o.map((o,i)=>{
       let cl = '';
       if(c && c.ok){ if((c.bonnes || []).includes(i)) cl = 'juste'; else if(i === rep) cl = 'faux'; }
-      else if(i === rep) cl = 'choisi';
+      else if(i === rep) cl = S.qcmAttente ? 'choisi attente' : 'choisi';
       const fige = rep !== undefined;
       return `<button class="opt ${cl}" ${fige?'disabled':''} data-qcm="${i}">
         <span class="lettre">${'ABCD'[i] || '•'}</span>${E(o)}</button>`;
     }).join('')}
     ${rep === undefined ? `<p class="sous" style="margin-top:12px;font-family:var(--m);font-size:10.5px;letter-spacing:.05em">
         ${S.util.connecte ? 'La correction s\'affiche dès que tu réponds.' : 'Crée ton compte gratuit pour voir la correction.'}</p>` : ''}
-    ${rep !== undefined && S.qcmAttente ? `<p class="sous" style="margin-top:12px">Correction en cours…</p>` : ''}
+
     ${c && !c.ok ? `
       <div class="retour mal">
         <b>${c.quota ? 'Corrections du jour épuisées' : c.connexion ? 'Compte nécessaire' : 'Correction indisponible'}</b>${E(c.message || '')}
@@ -3725,7 +3812,7 @@ async function chargerJournee(){
   if(!base || !S.util.connecte) return;
   try{
     const { data } = await base.rpc('ma_journee');
-    if(data){ S.journee = data; rafraichirSiVisible(); }
+    if(data && !pareil(data, S.journee)){ S.journee = data; memoEcrire('journee', data, true); rafraichirSiVisible(); }
     if(!S.details) chargerDetails();
   }catch(e){}
 }
@@ -3733,8 +3820,10 @@ async function chargerEpreuve(){
   if(!base) return;
   try{
     const { data } = await base.rpc('epreuve_du_moment');
+    const change = !pareil(data || null, S.epreuve);
     S.epreuve = data || null;
-    if(['aujourdhui','gagnants'].includes(S.ecran)) rendre();
+    memoEcrire('epreuve', S.epreuve, true);
+    if(change && ['aujourdhui','gagnants'].includes(S.ecran)) rendre();
     setTimeout(proposerNationale, 900);
   }catch(e){}
 }
@@ -3933,6 +4022,12 @@ function blocDefi(){
 async function lancerFil(n){
   if(!S.util.connecte){ S.modal = 'inscription'; S.erreur = ''; return surcouche(); }
   S.fil = { liste:null, idx:0, rep:undefined, c:null, justes:0, revues:0, n:+n || 10, attente:false };
+  if(S.filPret && Date.now() - S.filPret.t < 15 * 60000 && (+n || 10) === 10){
+    S.fil.liste = S.filPret.liste; S.fil.debut = Date.now(); S.filPret = null;
+    aller('pourtoi');
+    setTimeout(prechargerFil, 4000);
+    return;
+  }
   aller('pourtoi');
   try{
     const { data, error } = await base.rpc('fil_pour_toi', { p_niveau: niveauCand(), p_nombre: S.fil.n });
@@ -3942,6 +4037,10 @@ async function lancerFil(n){
   }catch(e){ S.fil.liste = []; S.fil.erreur = true; }
   pister('FEED_OPENED', { n: S.fil.n });
   if(S.ecran === 'pourtoi') rendre();
+}
+function prechargerFil(){
+  if(!base || !S.util.connecte || S.filPret) return;
+  base.rpc('fil_pour_toi', { p_niveau: niveauCand(), p_nombre: 10 }).then(({ data }) => { if(Array.isArray(data) && data.length) S.filPret = { liste:data, t:Date.now() }; }, () => {});
 }
 function ecranPourToi(){
   const f = S.fil;
@@ -3985,10 +4084,10 @@ function ecranPourToi(){
     ${(q.options || []).map((o, i) => {
       let k = '';
       if(c && c.ok){ if((c.bonnes || []).includes(i)) k = 'juste'; else if(i === rep) k = 'faux'; }
-      else if(i === rep) k = 'choisi';
+      else if(i === rep) k = 'choisi attente';
       return `<button class="opt ${k}" ${rep !== undefined ? 'disabled' : ''} data-fil-rep="${i}"><span class="lettre">${'ABCD'[i] || '•'}</span>${E(o)}</button>`;
     }).join('')}
-    ${rep !== undefined && f.attente ? `<p class="sous" style="margin-top:12px">Correction en cours…</p>` : ''}
+
     ${c && !c.ok ? `<div class="retour mal"><b>Correction indisponible</b>${E(c.message || '')}</div>
       <button class="cta" style="margin-top:12px" data-fil-suiv="1">Question suivante →</button>` : ''}
     ${c && c.ok ? `
@@ -4036,7 +4135,7 @@ async function chargerQdj(){
   if(!base) return;
   try{
     const { data } = await base.rpc('question_du_jour');
-    S.qdj = (data && data.ok) ? data : { vide:true };
+    S.qdj = (data && data.ok) ? { ...data, jourLocal: new Date().toDateString() } : { vide:true };
   }catch(e){ S.qdj = { erreur:true }; }
   if(S.ecran === 'qdj') rendre();
 }
@@ -4055,7 +4154,7 @@ function ecranQdj(){
     ${(q.options || []).map((o, i) => {
       let k = '';
       if(c && c.ok){ if((c.bonnes || []).includes(i)) k = 'juste'; else if(i === rep) k = 'faux'; }
-      else if(i === rep) k = 'choisi';
+      else if(i === rep) k = 'choisi attente';
       return `<button class="opt ${k}" ${rep !== undefined ? 'disabled' : ''} data-qdj-rep="${i}"><span class="lettre">${'ABCD'[i] || '•'}</span>${E(o)}</button>`;
     }).join('')}
     ${c && c.ok ? `
@@ -4069,7 +4168,7 @@ function ecranQdj(){
       ${S.util.connecte ? `<button class="cta creux" style="margin-top:9px" data-pourtoi="10">Continuer avec 10 questions pour toi</button>`
         : `<button class="cta creux" style="margin-top:9px" data-modal="inscription">Créer mon compte gratuit<small>Pour garder tes erreurs et ta progression</small></button>`}
       ${S.util.connecte ? `<div class="actions-q"><button class="lien-mini" data-signaler="${E(q.id)}">${ico('drapeau',13)} Signaler une erreur</button></div>` : ''}` : ''}
-    ${rep !== undefined && !c ? `<p class="sous" style="margin-top:12px">Correction en cours…</p>` : ''}
+
     ${c && !c.ok ? `<div class="retour mal"><b>Correction indisponible</b>${E(c.message || 'Réessaie dans un instant.')}</div>` : ''}
   </div>`;
 }
@@ -4143,14 +4242,17 @@ function partagerQuestion(id, texteQ){
 
 /* ---------- les résultats d'une composition nationale ---------- */
 async function chargerClassement(id){
-  S.classementEp = { id, charge:false };
+  /* déjà là (préchargé ou vu) : on l'affiche et on le met à jour en silence */
+  if(!(S.classementEp && S.classementEp.id === id && S.classementEp.charge && S.classementEp.ok)) S.classementEp = { id, charge:false };
   if(!base){ S.lienEpreuve = id; return; }
   S.lienEpreuve = null;
   if(S.ecran === 'gagnants') rendre();
   try{
     const { data } = await base.rpc('classement_epreuve', { p_epreuve: id });
-    S.classementEp = { ...(data || { ok:false }), id, charge:true };
-  }catch(e){ S.classementEp = { id, charge:true, ok:false, erreur:true }; }
+    const neuf = { ...(data || { ok:false }), id, charge:true };
+    if(pareil(neuf, S.classementEp)) return;
+    S.classementEp = neuf;
+  }catch(e){ if(!(S.classementEp && S.classementEp.ok)) S.classementEp = { id, charge:true, ok:false, erreur:true }; }
   if(S.ecran === 'gagnants') rendre();
 }
 const initialesPseudo = p => (p || '?').replace(/[^A-Za-zÀ-ÿ]/g, '').slice(0, 2).toUpperCase();
@@ -4348,7 +4450,7 @@ function cleVapid(b64){
 }
 async function chargerRappel(){
   if(!base || !S.util.connecte) return;
-  try{ const { data } = await base.rpc('mon_rappel'); S.rappel = data || null; rafraichirSiVisible(); }catch(e){}
+  try{ const { data } = await base.rpc('mon_rappel'); S.rappel = data || null; memoEcrire('rappel', S.rappel, true); rafraichirSiVisible(); }catch(e){}
 }
 /* dans combien de temps sonne le prochain rappel ? */
 function delaiRappel(h, m){
@@ -4597,7 +4699,7 @@ document.addEventListener('click', ev => {
    ===================================================================== */
 async function chargerDetails(){
   if(!base || !S.util.connecte) return;
-  try{ const { data } = await base.rpc('mes_details'); if(data){ S.details = data; rafraichirSiVisible(); verifierNiveau(); setTimeout(notificationsDuJour, 2500); } }catch(e){}
+  try{ const { data } = await base.rpc('mes_details'); if(data){ const ch = !pareil(data, S.details); S.details = data; memoEcrire('details', data, true); if(ch) rafraichirSiVisible(); verifierNiveau(); setTimeout(notificationsDuJour, 2500); } }catch(e){}
 }
 
 /* ---------- les niveaux : Débutant, Confirmé, Prêt pour le concours ---------- */
@@ -4759,7 +4861,7 @@ function lancerFilListe(liste, titre){
 /* ---------- notion du jour ---------- */
 async function chargerNotion(){
   if(!base) return;
-  try{ const { data } = await base.rpc('notion_du_jour', { p_niveau: niveauCand() }); S.notion = data || { vide:true }; }
+  try{ const { data } = await base.rpc('notion_du_jour', { p_niveau: niveauCand() }); S.notion = data ? { ...data, jour: new Date().toDateString() } : { vide:true }; }
   catch(e){ S.notion = { erreur:true }; }
   if(S.ecran === 'notion') rendre();
 }
@@ -5020,7 +5122,7 @@ function ecranDefi(){
 /* ---------- top 10 de la semaine ---------- */
 async function chargerTop(){
   if(!base) return;
-  try{ const { data } = await base.rpc('top_semaine'); S.top = data || { top:[] }; }catch(e){ S.top = { erreur:true }; }
+  try{ const { data } = await base.rpc('top_semaine'); S.top = data || { top:[] }; memoEcrire('top', S.top, true); }catch(e){ if(!S.top) S.top = { erreur:true }; }
   if(S.ecran === 'top') rendre();
 }
 function ecranTop(){
@@ -5750,6 +5852,7 @@ document.addEventListener('click', ev=>{
     S.util = {nom:'', tel:'', pin:'', connecte:false};
     S.form = {nom:'', tel:'', pin:''};
     S.lus = null; S.lusCharges = false; S.popNatVu = false;
+    memoVider(); S.journee = null; S.stats = null; S.details = null; S.classement = null; S.notifications = []; S.cahier = []; S.top = null; S.rappel = null;
     oublierIdentite();
     const connu = !!(lireMemoire() || {}).dejaVenu;
     S.modalDejaVu = connu;                    // on ne relance pas l'inscription d'un habitué

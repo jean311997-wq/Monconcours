@@ -3,12 +3,12 @@
    Un candidat en 2G ne doit pas repayer le chargement à chaque visite,
    et un candidat sans réseau doit pouvoir relire ses cours.
    ===================================================================== */
-const VERSION = 'mc-v21';
+const VERSION = 'mc-v22';
 const COQUE   = VERSION + '-coque';   // les fichiers de l'application
 const DONNEES = VERSION + '-donnees'; // les réponses de la base
 
 const FICHIERS = [
-  '/', '/index.html', '/app.js?v=21', '/styles.css?v=21',
+  '/', '/index.html', '/app.js?v=22', '/styles.css?v=22',
   '/supabase-js.min.js?v=13', '/manifest.webmanifest', '/favicon.png', '/icone-192.png'
 ];
 
@@ -53,23 +53,33 @@ self.addEventListener('fetch', e => {
 
   const url = new URL(req.url);
 
-  /* 1. Les fichiers du site : on sert le cache tout de suite — c'est ce qui
-        rend l'ouverture instantanée en 2G — et on va chercher la version
-        fraîche en arrière-plan. Quand elle arrive, le service worker neuf
-        prend la main et la page se recharge une fois, toute seule. */
-  /* index.html et app.js doivent toujours voyager ensemble : on va les
-     chercher sur le réseau en priorité, le cache ne sert qu'en secours.
-     Sans cela, un ancien app.js peut se retrouver avec un index.html neuf. */
-  if(url.origin === self.location.origin && /\/(index\.html)?$|admin\.html|app\.js|admin\.js|styles\.css|admin\.css|sw\.js/.test(url.pathname)){
+  /* 1. Les fichiers versionnés (app.js?v=…, styles.css?v=…, lib/…) ne
+        changent jamais sous le même nom : on les sert depuis le cache,
+        sans attendre le réseau. C'est ce qui rend l'ouverture immédiate. */
+  if(url.origin === self.location.origin && (/[?&]v=\d+/.test(url.search) || url.pathname.startsWith('/lib/'))){
     e.respondWith(
-      fetch(req).then(rep => {
-        if(rep && rep.status === 200){
-          const copie = rep.clone();
-          caches.open(COQUE).then(c => c.put(req, copie));
-        }
+      caches.match(req).then(enCache => enCache || fetch(req).then(rep => {
+        if(rep && rep.status === 200){ const copie = rep.clone(); caches.open(COQUE).then(c => c.put(req, copie)); }
         return rep;
-      }).catch(() => caches.match(req).then(r => r || reponseVide(req)))
+      }).catch(() => reponseVide(req)))
     );
+    return;
+  }
+
+  /* 2. La page elle-même (index.html, admin) et le service worker : le
+        réseau d'abord pour rester à jour, mais pas plus de 3 secondes ;
+        au-delà, la dernière version connue s'affiche tout de suite. */
+  if(url.origin === self.location.origin && (req.mode === 'navigate' || /\/(index\.html)?$|admin\.html|admin\.js|admin\.css|sw\.js/.test(url.pathname))){
+    e.respondWith(new Promise(resoudre => {
+      let fini = false;
+      const secours = () => caches.match(req, { ignoreSearch: req.mode === 'navigate' })
+        .then(r => r || caches.match('/index.html')).then(r => r || reponseVide(req));
+      const minuteur = setTimeout(() => { secours().then(r => { if(!fini && r && r.status !== 504){ fini = true; resoudre(r); } }); }, 3000);
+      fetch(req).then(rep => {
+        if(rep && rep.status === 200){ const copie = rep.clone(); caches.open(COQUE).then(c => c.put(req, copie)); }
+        if(!fini){ fini = true; clearTimeout(minuteur); resoudre(rep); }
+      }).catch(() => { clearTimeout(minuteur); if(!fini){ fini = true; secours().then(resoudre); } });
+    }));
     return;
   }
 

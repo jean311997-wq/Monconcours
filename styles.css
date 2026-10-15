@@ -1620,3 +1620,9 @@ body.sans-anim .nd-barre i{transition:none}
 @media (prefers-reduced-motion: reduce){
   .etape.vient .puce,.pastille-op.encre,.opt.juste,.opt.faux,.cachet-note.pose,.statut-nat.pose .sn-tampon,.podium.monte .marche{animation:none!important}
 }
+
+/* réponse envoyée, correction en route : un petit cercle tourne sur la réponse choisie */
+.opt.attente{position:relative}
+.opt.attente::after{content:"";position:absolute;right:14px;top:50%;width:16px;height:16px;margin-top:-8px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;opacity:.55;animation:tourne .7s linear infinite}
+@keyframes tourne{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion: reduce){.opt.attente::after{animation-duration:2s}}
