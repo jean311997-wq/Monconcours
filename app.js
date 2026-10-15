@@ -1107,7 +1107,7 @@ function brancherBase(){
    OBSERVATION — collecte des événements
    Rien de personnel : ni saisie, ni mot de passe, ni position.
    ===================================================================== */
-const VERSION_APP = 'v21';
+const VERSION_APP = 'v22';
 
 const O = {
   session: null, precedent: null, dernierTemps: Date.now(), entreeEcran: Date.now(),
@@ -1640,7 +1640,7 @@ function ecranInscription(){
     <button class="cta" style="margin-top:6px" data-inscrire="1">Créer mon compte<small>Gratuit · aucune carte bancaire</small></button>
     <button class="lien" data-go="connexion">J'ai déjà un compte</button>
 
-    <p class="sous" style="margin-top:18px;font-size:11.5px">En créant ton compte, tu acceptes les conditions d'utilisation. Ton numéro ne sert qu'à ton compte et à ton abonnement.</p>
+    <p class="sous" style="margin-top:18px;font-size:11.5px">En créant ton compte, tu acceptes les <a href="/confidentialite.html#conditions" target="_blank" rel="noopener">conditions d'utilisation</a> et la <a href="/confidentialite.html" target="_blank" rel="noopener">politique de confidentialité</a>. Ton numéro ne sert qu'à ton compte et à ton abonnement.</p>
   </div>`;
 }
 
@@ -3812,13 +3812,71 @@ function ecranCompte(){
 
       <div class="carte reglages">
         <button data-go="apparence">Apparence<span>→</span></button>
+        <a href="/confidentialite.html" target="_blank" rel="noopener">Confidentialité et conditions<span>→</span></a>
         ${S.util.connecte
           ? `<button class="sortie" data-deconnecter="1">Se déconnecter<span>→</span></button>`
           : `<button data-go="connexion">Se connecter<span>→</span></button>`}
       </div>
+      ${S.util.connecte ? `<button class="lien-suppr" data-go="suppression">Supprimer mon compte</button>` : ''}
     </div>
   </div>`;
 }
+
+/* ---------- suppression du compte (exigée par le Play Store) ---------- */
+function ecranSuppression(){
+  if(!S.util.connecte) return ecranCompte();
+  vue().innerHTML = `<div class="pad">
+    <button class="retourhaut" data-go="compte">Mon compte</button>
+    <div class="eyebrow">Supprimer mon compte</div>
+    <h1 class="titre">Tout effacer ?</h1>
+    <div class="carte suppr-carte" style="margin-top:14px">
+      <p class="sous" style="margin:0 0 8px">La suppression est <b>définitive</b>. Elle efface :</p>
+      <ul class="suppr-liste">
+        <li>votre compte : numéro, nom, pseudo, code secret ;</li>
+        <li>vos réponses, compositions, notes, erreurs et badges ;</li>
+        <li>vos défis, classements, notifications et rappels.</li>
+      </ul>
+      <p class="sous" style="margin:8px 0 0">Si vous voulez seulement faire une pause, il suffit de vous déconnecter : vos progrès vous attendront.</p>
+    </div>
+    <div class="champ" style="margin-top:16px">
+      <label for="suppr-code">Tapez votre code secret pour confirmer</label>
+      <input id="suppr-code" type="password" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="current-password">
+    </div>
+    ${S.supprErreur ? `<p class="erreur-champ" style="color:var(--rouge-texte);margin:8px 0 0">${E(S.supprErreur)}</p>` : ''}
+    <button class="cta danger" style="margin-top:14px" data-suppr-confirmer="1" ${S.supprEnCours ? 'disabled' : ''}>${S.supprEnCours ? 'Suppression…' : 'Supprimer définitivement mon compte'}</button>
+    <button class="cta creux" style="margin-top:9px" data-go="compte">Annuler</button>
+    <p class="sous" style="margin-top:14px;font-size:12.5px"><a href="/suppression-compte.html" target="_blank" rel="noopener">Ce qui est effacé, et comment faire sans accès au compte</a></p>
+  </div>`;
+}
+async function supprimerCompte(){
+  const champ = document.getElementById('suppr-code');
+  const code = (champ && champ.value || '').replace(/\D/g, '');
+  if(code.length !== 4){ S.supprErreur = 'Le code secret comporte 4 chiffres.'; return rendre(); }
+  if(!base){ S.supprErreur = 'Pas de connexion au serveur. Réessayez avec du réseau.'; return rendre(); }
+  S.supprEnCours = true; S.supprErreur = ''; rendre();
+  try{
+    const { data, error } = await base.rpc('supprimer_mon_compte', { p_code: code });
+    if(error) throw error;
+    if(!data || !data.ok){ S.supprEnCours = false; S.supprErreur = (data && data.message) || 'Suppression impossible.'; return rendre(); }
+    pister('ACCOUNT_DELETED');
+    try{ await base.auth.signOut({ scope:'local' }); }catch(e){}
+    try{ localStorage.removeItem(CLE_PACK); }catch(e){}
+    S.supprEnCours = false;
+    S.util = {nom:'', tel:'', pin:'', connecte:false};
+    S.form = {nom:'', tel:'', pin:''};
+    memoVider(); S.journee = null; S.stats = null; S.details = null; S.classement = null; S.notifications = []; S.cahier = []; S.top = null; S.rappel = null; S.elan = null;
+    oublierIdentite();
+    toast('Votre compte a été supprimé. Merci d\'avoir révisé avec Mon Concours.', 6000);
+    S.modalDejaVu = true;
+    return aller('aujourdhui');
+  }catch(e){
+    S.supprEnCours = false; S.supprErreur = enFrancais(e, 'Suppression impossible. Réessayez avec du réseau.'); rendre();
+  }
+}
+document.addEventListener('click', ev => {
+  const t = ev.target.closest('[data-suppr-confirmer]');
+  if(t) supprimerCompte();
+});
 
 /* =====================================================================
    PROGRESSION DU JOUR, FIL « POUR TOI », COMPOSITIONS COLLECTIVES,
@@ -5981,7 +6039,7 @@ function rendre(){
     grille:ecranGrille, copie:ecranCopie,
     cahier:ecranCahier, compte:ecranCompte,
     pourtoi:ecranPourToi, qdj:ecranQdj, question:ecranQuestionPartagee, gagnants:ecranGagnants,
-    notion:ecranNotion, recherche:ecranRecherche, defi:ecranDefi, top:ecranTop, proposer:ecranProposer, parcours:ecranParcours, horsligne:ecranHorsLigne}[S.ecran] || ecranAujourdhui);
+    notion:ecranNotion, recherche:ecranRecherche, defi:ecranDefi, top:ecranTop, proposer:ecranProposer, parcours:ecranParcours, horsligne:ecranHorsLigne, suppression:ecranSuppression}[S.ecran] || ecranAujourdhui);
 
   /* FILET — une erreur dans un seul écran ne doit plus jamais laisser
      le candidat devant une page noire. On affiche ce qui s'est passé
