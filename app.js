@@ -3870,7 +3870,11 @@ async function supprimerCompte(){
     S.modalDejaVu = true;
     return aller('aujourdhui');
   }catch(e){
-    S.supprEnCours = false; S.supprErreur = enFrancais(e, 'Suppression impossible. Réessayez avec du réseau.'); rendre();
+    S.supprEnCours = false;
+    S.supprErreur = (!navigator.onLine || /fetch|network/i.test(String(e && e.message)))
+      ? 'Pas de réseau. Réessayez quand vous serez connecté.'
+      : 'La suppression n\'a pas pu se faire. Demandez-la sur WhatsApp (lien ci-dessous) : nous la faisons sous 7 jours.';
+    rendre();
   }
 }
 document.addEventListener('click', ev => {
