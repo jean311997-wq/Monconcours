@@ -217,8 +217,8 @@ function toast(message, duree){
 }
 
 window.addEventListener('offline', () =>
-  toast('Réseau perdu. Vous pouvez continuer à lire et à composer : tout sera envoyé au retour.', 6000));
-window.addEventListener('online', () => toast('Réseau retrouvé.'));
+  { toast('Réseau perdu. Vos réponses partiront au retour. Pour réviser sans réseau : Mes cours, « Réviser sans réseau ».', 6500); if(S.ecran === 'aujourdhui') rendre(); });
+window.addEventListener('online', () => { toast('Réseau retrouvé.'); if(['aujourdhui','horsligne'].includes(S.ecran)) rendre(); });
 const mmss = s => String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');
 const PALIERS = [3, 7, 21];               // jours entre deux reprises
 const JOUR = 86400000;
@@ -344,7 +344,7 @@ function memoVider(){
   try{ Object.keys(localStorage).filter(k => k.startsWith(MEMO)).forEach(k => { if(JSON.parse(localStorage.getItem(k)).u) localStorage.removeItem(k); }); }catch(e){}
 }
 function memoReprendre(){
-  const perso = ['journee', 'stats', 'details', 'classement', 'notifications', 'rappel', 'top', 'lus'];
+  const perso = ['journee', 'stats', 'details', 'classement', 'notifications', 'rappel', 'top', 'lus', 'elan'];
   perso.forEach(k => { const v = memoLire(k, true); if(v !== null && (S[k] === undefined || S[k] === null || (Array.isArray(S[k]) && !S[k].length))) S[k] = v; });
   const ep = memoLire('epreuve', true); if(ep) S.epreuve = ep;
   const cahier = memoLire('cahier', true); if(cahier && (!S.cahier || !S.cahier.length)) S.cahier = cahier;
@@ -946,6 +946,7 @@ async function chargerProgression(){
   chargerCahier();
   chargerJournee();
   chargerDetails();
+  setTimeout(envoyerPack, 3000);
 }
 
 /* Le cahier d'erreurs vient de la base. Les fautes du test d'entrée,
@@ -977,6 +978,30 @@ async function chargerCahier(){
 /* =====================================================================
    LES COMPTES CANDIDATS
    ===================================================================== */
+/* Les messages du serveur arrivent en anglais : on les dit en français.
+   Un message inconnu n'est jamais montré tel quel. */
+const MESSAGES_FR = [
+  [/rate limit|too many requests|429/i, "Trop d'essais en peu de temps. Attendez quelques minutes, puis réessayez."],
+  [/already registered|already been registered|already exists|duplicate key/i, "Ce numéro a déjà un compte. Choisissez « J'ai déjà un compte »."],
+  [/invalid login|invalid credentials|invalid grant/i, "Numéro ou code secret incorrect."],
+  [/password should be|password is too short|weak password/i, "Le code secret doit comporter 4 chiffres."],
+  [/email not confirmed/i, "Votre compte n'est pas encore activé. Écrivez à l'administrateur sur WhatsApp."],
+  [/signups? not allowed|signup is disabled/i, "Les inscriptions sont fermées pour le moment."],
+  [/user not found/i, "Aucun compte avec ce numéro."],
+  [/captcha/i, "La vérification anti-robot a échoué. Rechargez la page et réessayez."],
+  [/jwt expired|session.*(expired|missing)|refresh token/i, "Votre session a expiré. Reconnectez-vous."],
+  [/failed to fetch|networkerror|network request failed|load failed|timeout|timed out|fetch/i, "Pas de connexion. Vérifiez votre réseau et réessayez."],
+  [/payload too large|file size|too large/i, "Fichier trop lourd."],
+  [/permission denied|not authorized|unauthorized|forbidden|row-level security/i, "Action non autorisée. Reconnectez-vous puis réessayez."],
+  [/internal server error|500|502|503|504|bad gateway|service unavailable/i, "Le serveur ne répond pas pour l'instant. Réessayez dans un moment."]
+];
+function enFrancais(msg, defaut){
+  const m = String((msg && msg.message) || msg || '');
+  for(const [re, fr] of MESSAGES_FR) if(re.test(m)) return fr;
+  /* déjà en français (message de nos fonctions) : on le garde */
+  if(/[éèàùâêîôûç]|\b(le|la|les|des|votre|vous|une?)\b/i.test(m) && !/\b(the|is|not|and|with|for)\b/i.test(m)) return m;
+  return defaut || "Une erreur est survenue. Réessayez dans un moment.";
+}
 const adresseTechnique = tel => tel + '@candidat.monconcours.bf';
 const motDePasse = (tel, pin) => tel + '#' + pin;
 
@@ -989,14 +1014,12 @@ async function creerCompte(nom, tel, pin){
       niveau: S.niveau.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'') } }
   });
   if(error){
-    if(/already registered|already been/i.test(error.message))
-      return { erreur: "Ce numéro a déjà un compte. Choisissez « J'ai déjà un compte »." };
-    return { erreur: error.message };
+    return { erreur: enFrancais(error) };
   }
   if(!data.session){
     const r = await base.auth.signInWithPassword({
       email: adresseTechnique(tel), password: motDePasse(tel, pin) });
-    if(r.error) return { erreur: r.error.message };
+    if(r.error) return { erreur: enFrancais(r.error) };
     return { session: r.data.session };
   }
   return { session: data.session };
@@ -1007,9 +1030,7 @@ async function ouvrirSession(tel, pin){
   const { data, error } = await base.auth.signInWithPassword({
     email: adresseTechnique(tel), password: motDePasse(tel, pin) });
   if(error){
-    if(/Invalid login/i.test(error.message))
-      return { erreur: "Numéro ou code secret incorrect." };
-    return { erreur: error.message };
+    return { erreur: enFrancais(error) };
   }
   return { session: data.session };
 }
@@ -1086,7 +1107,7 @@ function brancherBase(){
    OBSERVATION — collecte des événements
    Rien de personnel : ni saisie, ni mot de passe, ni position.
    ===================================================================== */
-const VERSION_APP = 'v20';
+const VERSION_APP = 'v21';
 
 const O = {
   session: null, precedent: null, dernierTemps: Date.now(), entreeEcran: Date.now(),
@@ -1408,6 +1429,7 @@ function ecranAujourdhui(){
       <span class="eyebrow">${dateDuJour()}</span>
       ${compteARebours()}
     </div>
+    ${!navigator.onLine ? carteHorsLigne() : ''}
 
     ${enCours?`
     <button class="reprise-compo" data-go="grille">
@@ -1862,6 +1884,7 @@ function ecranRevisions(){
         <span>${S.banqueEtat === 'pret' ? `${mats.length} matière${mats.length>1?'s':''} · <span class="num">${total.toLocaleString('fr-FR')}</span> question${total>1?'s':''} à ce niveau` : 'Chargement…'}</span></div>
       <span class="tampon t-ok">${S.niveau}</span>
     </div>
+    ${carteHorsLigne()}
 
     ${S.banqueEtat === 'erreur' ? `<div class="carte"><p class="sous">La banque de questions n'a pas pu être chargée. Vérifiez votre connexion et revenez sur cet écran.</p></div>` : ''}
     ${S.banqueEtat === 'pret' && !mats.length ? `<div class="carte"><p class="sous">Rien n'est encore publié pour ce niveau. La banque se remplit au fur et à mesure des validations.</p></div>` : ''}
@@ -2641,7 +2664,7 @@ async function telechargerRecu(id){
     f.document.close();
     pister('RECEIPT_DOWNLOADED');
   }catch(e){
-    f.document.body.innerHTML = '<p style="font-family:sans-serif">' + E(e.message || 'Reçu indisponible.') + '</p>';
+    f.document.body.innerHTML = '<p style="font-family:sans-serif">' + E(enFrancais(e, 'Reçu indisponible.')) + '</p>';
   }
 }
 
@@ -3421,7 +3444,8 @@ function ecranCopie(){
 
     ${blocMatieresCopie(S.grille, S.reponses, n, total)}
 
-    <button class="cta discret" data-partage="performance" style="margin-top:14px">${ico("partage",15)} Partager<small>WhatsApp, Facebook, ou copier le lien</small></button>
+    <button class="cta creux" data-carte-resultat="copie" style="margin-top:14px">${ico("partage",15)} Partager ma carte de résultat<small>Une image avec votre note, le logo et le QR code</small></button>
+    <button class="cta discret" data-partage="performance" style="margin-top:9px">${ico("partage",15)} Partager<small>WhatsApp, Facebook, ou copier le lien</small></button>
   </div>`;
 }
 
@@ -4332,7 +4356,8 @@ function ecranGagnants(){
     </div>` : '<div class="carte" style="margin-top:14px"><p class="sous">Aucune copie remise pour cette composition.</p></div>'}
 
     <button class="cta" style="margin-top:14px" data-resultats-pdf="1">${ico('telecharger',16)} Télécharger les résultats en PDF</button>
-    ${m ? `<button class="cta creux" style="margin-top:9px" data-partage-rang="1">${ico('partage',16)} Partager mon résultat</button>` : ''}
+    ${m ? `<button class="cta wa-btn" style="margin-top:9px" data-carte-resultat="nationale">${ico('partage',16)} Partager ma carte de résultat<small>Une image avec votre note, votre rang et le QR code du site</small></button>
+    <button class="cta creux" style="margin-top:9px" data-partage-rang="1">${logoReseau('whatsapp')} Envoyer mon résultat sur WhatsApp</button>` : ''}
 
     ${admis.length ? `<div class="bloc"><div class="libelle">Liste des admis<span class="num">${admis.length}</span></div><div class="carte">${admis.map(ligne).join('')}</div></div>` : ''}
     ${attente.length ? `<div class="bloc"><div class="libelle">Liste d'attente<span class="num">${attente.length}</span></div><div class="carte">${attente.map(ligne).join('')}</div></div>` : ''}
@@ -4606,7 +4631,7 @@ window.addEventListener('popstate', ev => {
 /* Les nouveaux boutons ont leur propre écouteur : le grand aiguillage
    plus bas reste tel quel. */
 document.addEventListener('click', ev => {
-  const t = ev.target.closest('[data-quitter],[data-quitter-oui],[data-quitter-non],[data-son],[data-correction-differee],[data-gagnants],[data-pourtoi],[data-fil-rep],[data-fil-suiv],[data-qdj-rep],[data-qp-rep],[data-signaler],[data-signal-envoi],[data-objectif],[data-rejoindre],[data-rappel-activer],[data-rappel-retirer],[data-reagir],[data-partage-question],[data-partage-qdj],[data-partage-rang],[data-sortir-reprise],[data-inscrire-nat],[data-nat-oui],[data-nat-non],[data-resultats-pdf],[data-telecharger-mat],[data-rappel-heure]');
+  const t = ev.target.closest('[data-quitter],[data-quitter-oui],[data-quitter-non],[data-son],[data-correction-differee],[data-gagnants],[data-pourtoi],[data-fil-rep],[data-fil-suiv],[data-qdj-rep],[data-qp-rep],[data-signaler],[data-signal-envoi],[data-objectif],[data-rejoindre],[data-rappel-activer],[data-rappel-retirer],[data-reagir],[data-partage-question],[data-partage-qdj],[data-partage-rang],[data-carte-resultat],[data-sortir-reprise],[data-inscrire-nat],[data-nat-oui],[data-nat-non],[data-resultats-pdf],[data-telecharger-mat],[data-rappel-heure]');
   if(!t) return;
   const d = t.dataset;
   try{ const cle = Object.keys(d)[0]; pister('BUTTON_CLICKED', { valeur: String(d[cle]).slice(0,40) }, cle); }catch(e){}
@@ -4675,6 +4700,7 @@ document.addEventListener('click', ev => {
     window.open('https://wa.me/?text=' + encodeURIComponent(t2), '_blank', 'noopener');
     return;
   }
+  if(d.carteResultat) return carteResultat(d.carteResultat);
   if(d.partageRang){
     const c = S.classementEp;
     if(!c || !c.moi) return;
@@ -4700,6 +4726,7 @@ document.addEventListener('click', ev => {
 async function chargerDetails(){
   if(!base || !S.util.connecte) return;
   try{ const { data } = await base.rpc('mes_details'); if(data){ const ch = !pareil(data, S.details); S.details = data; memoEcrire('details', data, true); if(ch) rafraichirSiVisible(); verifierNiveau(); setTimeout(notificationsDuJour, 2500); } }catch(e){}
+  chargerElan();
 }
 
 /* ---------- les niveaux : Débutant, Confirmé, Prêt pour le concours ---------- */
@@ -4727,6 +4754,8 @@ function verifierNiveau(){
   const n = niveauCandidat().i, avant = lireReglages().niveauAtteint;
   if(typeof avant === 'number' && n > avant){
     setTimeout(() => { sonDepart(); signalCandidat('Nouveau niveau : ' + NIVEAUX_C[n].nom + '. Bravo, continue !'); }, 600);
+    if(base && n >= 1) base.rpc('ma_notification', { p_type:'progression', p_titre:'Niveau atteint : ' + NIVEAUX_C[n].nom,
+      p_message:'Bravo ! Votre attestation PDF « ' + NIVEAUX_C[n].nom + ' » est prête dans Mon parcours.', p_cle:'progression-niveau-' + n, p_lien:'parcours' }).catch(() => {});
     pister('LEVEL_REACHED', { niveau: NIVEAUX_C[n].nom });
   }
   ecrireReglage('niveauAtteint', n);
@@ -4768,6 +4797,7 @@ function blocNiveauDetail(){
     <p class="nd-titre">Vous êtes au niveau <b>${n.nom.toLowerCase()}</b>.</p>
     ${cheminNiveaux(n)}
     ${paliers || '<p class="sous" style="margin-top:10px">Vous avez atteint le dernier niveau. Gardez le rythme jusqu\'au jour du concours.</p>'}
+    ${blocAttestations()}
     <p class="sous" style="margin-top:10px;font-size:12px">Tout compte : questions de révision, erreurs reprises, défis et compositions. Un cours est compté comme lu quand vous l'avez lu jusqu'au bout.</p>
   </div>`;
 }
@@ -4915,25 +4945,48 @@ function nouveauDefi(cible){
   S.defi = null;
   S.defiPrep = { matieres:[], numeros:[''], pseudo: cible || null, etape:1 };
 }
-async function creerDefi(){
+async function creerDefi(parWhatsapp){
   if(!S.util.connecte){ S.modal = 'inscription'; S.erreur = ''; return surcouche(); }
   const p = S.defiPrep || { matieres:[], numeros:[] };
   const numeros = [...document.querySelectorAll('[data-defi-num]')].map(x => x.value.trim()).filter(Boolean);
   p.numeros = numeros.length ? numeros : [''];
   const valides = numeros.filter(n => n.replace(/\D/g, '').length >= 8);
-  if(!valides.length && !p.pseudo){ toast('Entrez au moins un numéro de téléphone (8 chiffres).'); return; }
+  /* sans numéro, le défi part par WhatsApp : l'ami ouvre le lien et crée son compte */
+  if(!valides.length && !p.pseudo && !parWhatsapp){ toast('Entrez au moins un numéro, ou envoyez le défi sur WhatsApp.'); return; }
   S.defi = { etat:'chargement' }; rendre();
   try{
     const { data } = await base.rpc('creer_defi_matieres', { p_matieres: p.matieres, p_niveau: niveauCand() });
     if(!data || !data.ok){ S.defi = { etat:'erreur', message:(data && data.message) || 'Défi impossible.' }; return rendre(); }
-    const inv = await base.rpc('inviter_defi', { p_defi: data.id, p_telephones: valides, p_pseudos: p.pseudo ? [p.pseudo] : [] });
-    const r = inv.data || {};
+    let r = { ok:true, invites:0, introuvables:[] };
+    if(valides.length || p.pseudo){
+      const inv = await base.rpc('inviter_defi', { p_defi: data.id, p_telephones: valides, p_pseudos: p.pseudo ? [p.pseudo] : [] });
+      r = inv.data || {};
+    }
     if(!r.ok){ S.defi = { etat:'erreur', message: r.message || 'Invitation impossible.' }; return rendre(); }
     pister('CHALLENGE_CREATED', { matieres: p.matieres.length, invites: r.invites || 0 });
-    S.defi = { etat:'envoye', id:data.id, invites:r.invites || 0, introuvables:r.introuvables || [], matieres:p.matieres };
+    S.defi = { etat:'envoye', id:data.id, invites:r.invites || 0, introuvables:r.introuvables || [], matieres:p.matieres, parWhatsapp: !!parWhatsapp };
     S.defiPrep = null;
     rendre();
-  }catch(e){ S.defi = { etat:'erreur', message:'Vérifiez votre connexion.' }; rendre(); }
+    if(parWhatsapp) partagerDefiWhatsapp(S.defi);
+  }catch(e){ S.defi = { etat:'erreur', message: enFrancais(e, 'Vérifiez votre connexion.') }; rendre(); }
+}
+/* Le texte envoyé sur WhatsApp : une invitation avant de jouer, une provocation après */
+function texteDefiWhatsapp(d){
+  const mat = d.matiere || (d.matieres && d.matieres.length ? d.matieres.join(', ') : '');
+  const enMat = mat ? ' en ' + mat : '';
+  const lien = lienDefi(d.id);
+  if(typeof d.score === 'number'){
+    const moi = (d.classement || []).find(l => l.moi);
+    const temps = d.duree ? ' en ' + mmssLong(d.duree) : '';
+    if(moi && moi.rang === 1 && (d.classement || []).length > 1)
+      return `Je t'ai battu${enMat} sur Mon Concours : ${d.score}/${d.sur}${temps}. À toi de me rattraper : ${lien}`;
+    return `J'ai eu ${d.score}/${d.sur}${enMat}${temps} sur Mon Concours. Tu fais mieux ? Relève le défi (c'est gratuit) : ${lien}`;
+  }
+  return `Je te défie sur Mon Concours : 10 questions${enMat} en 5 minutes. Inscris-toi gratuitement et relève le défi : ${lien}`;
+}
+function partagerDefiWhatsapp(d){
+  pister('CHALLENGE_SHARED', { apres: typeof d.score === 'number' });
+  window.open('https://wa.me/?text=' + encodeURIComponent(texteDefiWhatsapp(d)), '_blank', 'noopener');
 }
 async function repondreDefi(id, accepte){
   try{
@@ -5040,6 +5093,8 @@ function ecranDefi(){
         ${p.numeros.length < 10 ? `<button class="lien-mini" data-defi-ajout="1">+ Ajouter un numéro</button>` : ''}
       </div>`}
       <button class="cta" style="margin-top:16px" data-creer-defi="1">${ico('duel',16)} Envoyer le défi</button>
+      ${p.pseudo ? '' : `<div class="ou-wa"><span>Votre ami n'a pas encore de compte ?</span>
+        <button class="cta wa-btn" data-creer-defi="wa">${logoReseau('whatsapp')} Envoyer le défi sur WhatsApp<small>Il ouvre le lien, crée son compte en 30 secondes et joue</small></button></div>`}
     </div>`;
     return;
   }
@@ -5047,10 +5102,10 @@ function ecranDefi(){
   if(d.etat === 'envoye'){
     vue().innerHTML = `<div class="pad">${tete}
       <div class="eyebrow">Défi envoyé</div>
-      <h1 class="titre">${d.invites ? (d.invites > 1 ? d.invites + ' invitations envoyées' : 'Invitation envoyée') : 'Personne n\'a été invité'}</h1>
-      ${d.invites ? `<p class="sous" style="margin-top:6px">Vos amis reçoivent une notification. Vous verrez ici qui accepte, qui refuse, et le classement à la fin.</p>` : ''}
-      ${d.introuvables.length ? `<div class="carte" style="margin-top:12px"><p class="sous">${d.introuvables.length > 1 ? 'Ces numéros ne sont' : 'Ce numéro n\'est'} pas encore inscrit${d.introuvables.length > 1 ? 's' : ''} sur Mon Concours : <b>${d.introuvables.map(n => E(n.replace(/(\d{2})(?=\d)/g, '$1 '))).join(', ')}</b>. Envoyez-lui le lien du défi sur WhatsApp.</p>
-        <button class="cta creux" style="margin-top:10px" data-partage-defi="${E(d.id)}">${ico('partage',16)} Envoyer le lien sur WhatsApp</button></div>` : ''}
+      <h1 class="titre">${d.invites ? (d.invites > 1 ? d.invites + ' invitations envoyées' : 'Invitation envoyée') : 'Votre défi est prêt'}</h1>
+      ${d.invites ? `<p class="sous" style="margin-top:6px">Vos amis reçoivent une notification. Vous verrez ici qui accepte, qui refuse, et le classement à la fin.</p>` : `<p class="sous" style="margin-top:6px">Envoyez-le sur WhatsApp : votre ami ouvre le lien, crée son compte gratuit et joue les mêmes 10 questions.</p>`}
+      ${d.introuvables.length ? `<div class="carte" style="margin-top:12px"><p class="sous">${d.introuvables.length > 1 ? 'Ces numéros ne sont' : 'Ce numéro n\'est'} pas encore inscrit${d.introuvables.length > 1 ? 's' : ''} sur Mon Concours : <b>${d.introuvables.map(n => E(n.replace(/(\d{2})(?=\d)/g, '$1 '))).join(', ')}</b>. Envoyez-lui le défi sur WhatsApp.</p></div>` : ''}
+      <button class="cta wa-btn" style="margin-top:12px" data-partage-defi="${E(d.id)}">${logoReseau('whatsapp')} Envoyer le défi sur WhatsApp</button>
       <button class="cta" style="margin-top:14px" data-defi-ouvrir="${E(d.id)}">Commencer mon défi maintenant</button>
     </div>`;
     return;
@@ -5093,7 +5148,9 @@ function ecranDefi(){
   vue().innerHTML = `<div class="pad">${tete}
     <div class="eyebrow">Défi${d.matiere ? ' · ' + E(d.matiere) : ''}</div>
     ${typeof d.score === 'number' ? `<h1 class="titre">${d.score}/${d.sur} en ${mmssLong(d.duree)}</h1>` : '<h1 class="titre">Résultat du défi</h1>'}
-    ${d.questions && d.corrige ? `<button class="cta" style="margin-top:12px" data-defi-feuille="1">${ico('telecharger',16)} Télécharger ma feuille corrigée</button>` : ''}
+    ${typeof d.score === 'number' ? `<button class="cta wa-btn" style="margin-top:12px" data-partage-defi="${E(d.id)}">${logoReseau('whatsapp')} ${(cl.find(l => l.moi) || {}).rang === 1 && cl.length > 1 ? 'Dire à mes amis que je les ai battus' : 'Défier mes amis avec ce score'}</button>
+    <button class="cta creux" style="margin-top:9px" data-carte-resultat="defi">${ico('partage',16)} Ma carte de résultat (image)</button>` : ''}
+    ${d.questions && d.corrige ? `<button class="cta creux" style="margin-top:9px" data-defi-feuille="1">${ico('telecharger',16)} Télécharger ma feuille corrigée</button>` : ''}
     ${podium.length ? `<div class="podium" style="margin-top:16px">
       ${podium.map(l => `<div class="marche r${l.rang}${l.moi ? ' moi' : ''}">
         <div class="medaille">${l.rang}</div>
@@ -5177,6 +5234,8 @@ function ecranParcours(){
     <h1 class="titre">${debut ? 'Depuis le ' + E(new Date(debut).toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' })) : 'Ton chemin'}</h1>
     ${jours ? `<p class="sous" style="margin-top:6px">${jours} jour${jours > 1 ? 's' : ''} depuis ta première séance.</p>` : ''}
     ${blocNiveauDetail()}
+    ${blocChances()}
+    ${blocBadges()}
 
     ${typeof dt.percentile === 'number' ? `<div class="carte" style="margin-top:12px"><div class="libelle" style="margin-bottom:6px">Par rapport aux autres</div>
       <p class="sous">Sur les 30 derniers jours, ta moyenne aux compositions (<b>${dt.moyenne_30j} %</b>) dépasse celle de <b>${dt.percentile} %</b> des candidats de Mon Concours.</p></div>` : ''}
@@ -5190,6 +5249,248 @@ function ecranParcours(){
     <button class="cta" style="margin-top:14px" data-carte-progres="1">${ico('partage',16)} Partager ma carte de progression<small>Une image avec ton pseudo et tes chiffres, sans ton nom ni ton numéro</small></button>
   </div>`;
 }
+
+/* =====================================================================
+   CE QUI FAIT REVENIR : badges, attestations, chances d'admission,
+   révision hors ligne.
+   ===================================================================== */
+
+/* ---------- élan : jours de travail et chances (un seul appel) ---------- */
+async function chargerElan(){
+  if(!base || !S.util.connecte) return;
+  try{
+    const { data } = await base.rpc('mon_elan');
+    if(!data) return;
+    const ch = !pareil(data, S.elan);
+    S.elan = data; memoEcrire('elan', data, true);
+    if(ch) rafraichirSiVisible();
+    verifierBadges();
+  }catch(e){}
+}
+
+/* ---------- badges : un tous les 2 ou 3 jours de travail ---------- */
+const NOMS_BADGES = { 2:'Premier élan', 4:'Bien parti', 7:'Une semaine', 14:'Deux semaines', 21:'Trois semaines',
+  30:'Un mois', 50:'Cinquante jours', 60:'Deux mois', 90:'Trois mois', 100:'Cent jours', 150:'Cent cinquante jours', 200:'Deux cents jours' };
+const PALIERS_BADGES = (() => {
+  const l = []; let j = 2, pas = 2;
+  while(j <= 365){ l.push(j); j += pas; pas = pas === 2 ? 3 : 2; }
+  /* les caps ronds s'ajoutent à la suite */
+  [7, 14, 21, 30, 50, 60, 90, 100, 150, 200].forEach(x => { if(!l.includes(x)) l.push(x); });
+  return l.sort((a, b) => a - b);
+})();
+const nomBadge = j => NOMS_BADGES[j] || j + ' jours de travail';
+function badgesObtenus(){
+  const n = (S.elan && S.elan.jours_actifs) || 0;
+  return { jours:n, obtenus: PALIERS_BADGES.filter(j => j <= n), suivant: PALIERS_BADGES.find(j => j > n) || null };
+}
+function verifierBadges(){
+  const b = badgesObtenus(), avant = lireReglages().badgesVus;
+  ecrireReglage('badgesVus', b.obtenus.length);
+  if(typeof avant !== 'number' || b.obtenus.length <= avant) return;
+  const dernier = b.obtenus[b.obtenus.length - 1];
+  setTimeout(() => { sonDepart(); signalCandidat('Nouveau badge : ' + nomBadge(dernier) + '. ' + dernier + ' jours de travail, bravo !'); }, 900);
+  pister('BADGE_EARNED', { jours: dernier });
+  if(base) base.rpc('ma_notification', { p_type:'progression', p_titre:'Nouveau badge : ' + nomBadge(dernier),
+    p_message:'Vous avez travaillé ' + dernier + ' jours sur Mon Concours. ' + (b.suivant ? 'Prochain badge à ' + b.suivant + ' jours.' : 'Vous avez tous les badges.'),
+    p_cle:'progression-badge-' + dernier, p_lien:'parcours' }).then(() => chargerNotifications()).catch(() => {});
+}
+function blocBadges(){
+  if(!S.elan) return '';
+  const b = badgesObtenus();
+  const montres = b.obtenus.slice(-6);
+  const reste = b.suivant ? b.suivant - b.jours : 0;
+  return `<div class="carte badges-carte" style="margin-top:12px">
+    <div class="libelle" style="margin-bottom:8px">Mes badges<span class="num">${b.obtenus.length}</span></div>
+    ${montres.length ? `<div class="badges">${montres.map(j => `<div class="badge-m" title="${E(nomBadge(j))}"><span class="num">${j}</span><i>${E(nomBadge(j))}</i></div>`).join('')}</div>`
+      : '<p class="sous">Votre premier badge arrive après 2 jours de travail.</p>'}
+    ${b.suivant ? `<p class="sous" style="margin-top:10px">${b.jours} jour${b.jours > 1 ? 's' : ''} de travail. Prochain badge, « ${E(nomBadge(b.suivant))} », dans <b>${reste} jour${reste > 1 ? 's' : ''}</b> de travail.</p>` : ''}
+    <p class="sous" style="font-size:12px;margin-top:6px">Un jour compte dès que vous corrigez une question ou faites une composition.</p>
+  </div>`;
+}
+
+/* ---------- attestation PDF à chaque niveau atteint ---------- */
+function attestationNiveau(i){
+  const niv = NIVEAUX_C[i]; if(!niv || i < 1) return;
+  const n = niveauCandidat(); if(n.i < i) return;
+  const v = n.v, st = S.stats || {}, b = badgesObtenus();
+  const nom = S.util.nom || (S.journee && S.journee.pseudo) || 'Candidat';
+  const date = new Date().toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' });
+  const crit = niv.crit(v).map(([k, c, l]) => '<li>' + nombreFr(v[k]) + ' ' + E(l) + ' (seuil : ' + nombreFr(c) + ')</li>').join('');
+  pister('CERTIFICATE_DOWNLOADED', { niveau: niv.nom });
+  return sortirDocument('Attestation ' + niv.nom + ' ' + nom, () => docComplet('Attestation · Mon Concours',
+    '.att{border:3px double #111;padding:26px 30px;margin-top:22px;text-align:center}' +
+    '.att .q{font-size:14px;color:#333;margin:0}.att .nom{font-size:28px;font-weight:bold;margin:12px 0 6px;letter-spacing:.02em}' +
+    '.att .niv{display:inline-block;margin:14px 0 6px;padding:8px 22px;border:2px solid #0E7A54;color:#0E7A54;font:bold 18px Helvetica,Arial,sans-serif;letter-spacing:.14em;text-transform:uppercase}' +
+    '.att ul{list-style:none;padding:0;margin:16px 0 0;font-size:13.5px}.att li{margin:4px 0}' +
+    '.sign{display:flex;justify-content:space-between;margin-top:28px;font-size:12.5px;text-align:left}.sign b{display:block;font-size:14px}',
+    docEntete('Scannez pour préparer votre concours') +
+    '<p class="doc-titre">Attestation de niveau</p><p class="doc-st">Parcours de préparation aux concours directs</p>' +
+    '<div class="att"><p class="q">Mon Concours atteste que</p><p class="nom">' + E(nom) + '</p>' +
+    '<p class="q">a atteint, par son travail sur la plateforme, le niveau</p><div class="niv">' + E(niv.nom) + '</div>' +
+    '<ul>' + crit + '<li>' + b.jours + ' jours de travail · ' + (st.taux_reussite || 0) + ' % de réussite</li></ul>' +
+    '<div class="sign"><div>Fait le <b>' + date + '</b></div><div style="text-align:right">L\'équipe <b>Mon Concours</b></div></div></div>' +
+    '<p style="font-size:11px;color:#555;margin-top:14px;text-align:center">Attestation de travail personnel sur la plateforme. Elle ne remplace pas un diplôme ni une admission.</p>' +
+    docPied()));
+}
+function blocAttestations(){
+  if(!S.stats) return '';
+  const n = niveauCandidat();
+  const atteints = NIVEAUX_C.map((x, i) => i).filter(i => i >= 1 && i <= n.i);
+  if(!atteints.length) return `<p class="sous" style="margin-top:10px;font-size:12px">Une attestation PDF à votre nom est offerte à chaque niveau atteint, dès « ${E(NIVEAUX_C[1].nom)} ».</p>`;
+  return atteints.map(i => `<button class="cta creux" style="margin-top:10px" data-attestation="${i}">${ico('telecharger',16)} Mon attestation « ${E(NIVEAUX_C[i].nom)} »<small>Un PDF à votre nom, à garder ou à montrer</small></button>`).join('');
+}
+
+/* ---------- chances d'admission ---------- */
+function blocChances(){
+  const c = S.elan && S.elan.chances;
+  if(!S.elan) return '';
+  if(!c) return `<div class="carte chances" style="margin-top:12px"><div class="libelle" style="margin-bottom:6px">Mes chances d'admission</div>
+    <p class="sous">Faites une composition complète : vos chances s'afficheront ici, comparées aux résultats de la dernière composition nationale.</p>
+    <button class="cta creux" style="margin-top:10px" data-go="aujourdhui">Composer</button></div>`;
+  const nbc = c.compositions + ' dernière' + (c.compositions > 1 ? 's' : '') + ' composition' + (c.compositions > 1 ? 's' : '');
+  if(!c.statut) return `<div class="carte chances" style="margin-top:12px"><div class="libelle" style="margin-bottom:6px">Mes chances d'admission</div>
+    <p class="sous">Sur vos ${nbc}, vous avez en moyenne <b class="num">${c.note}/${c.sur}</b> (${c.pourcentage} %). Après la première composition nationale, vous verrez où cette moyenne vous classerait.</p></div>`;
+  const phrase = { admis:'vous seriez <b>admis</b>', attente:'vous seriez sur la <b>liste d\'attente</b>', echoue:'vous ne seriez <b>pas admis</b>' }[c.statut];
+  const conseil = c.statut === 'admis' ? 'Gardez ce niveau jusqu\'au jour J : refaites une composition chaque semaine.'
+    : 'Chaque erreur reprise vous rapproche des places : commencez par « Mes erreurs ».';
+  return `<div class="carte chances sn-${c.statut}" style="margin-top:12px"><div class="libelle" style="margin-bottom:6px">Mes chances d'admission</div>
+    <p class="chances-phrase">Avec <b class="num">${c.note}/${c.sur}</b> de moyenne sur vos ${nbc}, ${phrase}${c.concours ? ' à la composition nationale « ' + E(c.concours) + ' »' : ''} : ${c.rang}<sup>${c.rang === 1 ? 'er' : 'e'}</sup> sur ${c.participants} candidats, pour ${c.places} places.</p>
+    <p class="sous" style="margin-top:8px">${conseil}</p>
+    <p class="sous" style="font-size:12px;margin-top:6px">Une estimation, pas une promesse : elle compare votre moyenne aux notes de la dernière composition nationale.</p></div>`;
+}
+
+/* ---------- révision hors ligne ----------
+   Un pack de questions avec leurs corrigés, gardé sur le téléphone. On
+   révise sans réseau ; au retour du réseau, les réponses sont renvoyées et
+   recorrigées par le serveur (erreurs, points et série comptent). */
+const CLE_PACK = 'monconcours.pack';
+function lirePack(){ try{ return JSON.parse(localStorage.getItem(CLE_PACK) || 'null'); }catch(e){ return null; } }
+function ecrirePack(p){ try{ if(p) localStorage.setItem(CLE_PACK, JSON.stringify(p)); else localStorage.removeItem(CLE_PACK); }catch(e){ toast('Le téléphone manque de place pour garder le pack.'); } }
+const enAttentePack = p => p ? Object.keys(p.faites || {}).filter(id => !(p.envoyees || []).includes(id)) : [];
+async function telechargerPack(){
+  if(!S.util.connecte){ S.modal = 'inscription'; S.erreur = ''; return surcouche(); }
+  if(!navigator.onLine){ toast('Il faut du réseau (ou du Wi-Fi) pour télécharger le pack.'); return; }
+  const ancien = lirePack();
+  if(ancien && enAttentePack(ancien).length) await envoyerPack();
+  S.packEtat = 'chargement'; rendre();
+  try{
+    const { data, error } = await base.rpc('pack_hors_ligne', { p_niveau: niveauCand(), p_matieres: null, p_nombre: 50 });
+    if(error) throw error;
+    if(!data || !data.ok){ S.packEtat = null; toast((data && data.message) || 'Pack indisponible pour le moment.', 5000); return rendre(); }
+    ecrirePack({ cree_le: data.cree_le, niveau: niveauCand(), questions: data.questions, faites:{}, envoyees:[], i:0 });
+    S.packEtat = null; S.packRep = undefined;
+    pister('OFFLINE_PACK_DOWNLOADED', { n: data.questions.length });
+    toast(data.questions.length + ' questions gardées sur votre téléphone. Elles marchent sans réseau.', 5000);
+    rendre();
+  }catch(e){ S.packEtat = null; toast(enFrancais(e, 'Téléchargement impossible. Réessayez avec du réseau.')); rendre(); }
+}
+let envoiPackEnCours = false;
+async function envoyerPack(){
+  const p = lirePack(); const ids = enAttentePack(p);
+  if(!ids.length || !base || !S.util.connecte || !navigator.onLine || envoiPackEnCours) return;
+  envoiPackEnCours = true;
+  try{
+    const lot = ids.slice(0, 150).map(id => ({ q:id, choix:p.faites[id].choix, t:p.faites[id].t }));
+    const { data, error } = await base.rpc('remettre_hors_ligne', { p_reponses: lot });
+    if(error || !data || !data.ok) throw error || new Error('envoi');
+    const q = lirePack() || p; q.envoyees = Array.from(new Set([...(q.envoyees || []), ...lot.map(x => x.q)])); ecrirePack(q);
+    if(data.enregistrees) toast(data.enregistrees + ' réponse' + (data.enregistrees > 1 ? 's' : '') + ' faite' + (data.enregistrees > 1 ? 's' : '') + ' hors ligne envoyée' + (data.enregistrees > 1 ? 's' : '') + '.');
+    chargerProgressionDiscrete();
+  }catch(e){}
+  envoiPackEnCours = false;
+}
+function chargerProgressionDiscrete(){ try{ chargerProgression(); }catch(e){} }
+window.addEventListener('online', () => setTimeout(envoyerPack, 1500));
+function questionPack(p){
+  const i = (p.questions || []).findIndex(q => !p.faites[q.id]);
+  return i < 0 ? null : { q:p.questions[i], i };
+}
+function ecranHorsLigne(){
+  const p = lirePack();
+  const enLigne = navigator.onLine;
+  const attente = enAttentePack(p).length;
+  if(!p){
+    vue().innerHTML = `<div class="pad">
+      <button class="retourhaut" data-go="revisions">Mes cours</button>
+      <div class="eyebrow">Révision hors ligne</div>
+      <h1 class="titre">Réviser sans réseau</h1>
+      <p class="sous" style="margin-top:8px">Téléchargez un pack de 50 questions de votre niveau, avec leurs corrections, quand vous avez du réseau ou du Wi-Fi. Ensuite, révisez où vous voulez, même sans forfait. Vos réponses partent toutes seules au retour du réseau.</p>
+      <div class="carte" style="margin-top:14px">
+        <div class="mat"><div class="nom">Taille du pack<em>Environ 40 Ko, moins qu'une photo</em></div><div class="val num">50</div></div>
+        <div class="mat"><div class="nom">Packs par jour<em>Un nouveau pack remplace le précédent</em></div><div class="val num">3</div></div>
+      </div>
+      <button class="cta" style="margin-top:14px" data-pack-telecharger="1" ${S.packEtat === 'chargement' ? 'disabled' : ''}>${S.packEtat === 'chargement' ? '<span class="spin"></span> Téléchargement…' : ico('telecharger',16) + ' Télécharger mon pack'}</button>
+      ${!enLigne ? '<p class="sous" style="margin-top:10px">Vous êtes hors ligne : revenez ici quand vous aurez du réseau.</p>' : ''}
+    </div>`;
+    return;
+  }
+  const total = p.questions.length, faites = Object.keys(p.faites).length;
+  const justes = Object.values(p.faites).filter(x => x.ok).length;
+  const cid = S.packCourant && S.packCourant.id, ci = cid ? p.questions.findIndex(x => x.id === cid) : -1;
+  const cur = ci >= 0 && p.faites[cid] ? { q:p.questions[ci], i:ci } : questionPack(p);
+  const etat = `<div class="pack-etat"><span><b class="num">${faites}</b> / ${total} faites · <b class="num">${justes}</b> juste${justes > 1 ? 's' : ''}</span>
+    <span class="${enLigne ? 'en-ligne' : 'hors-ligne'}">${enLigne ? (attente ? attente + ' à envoyer' : 'Tout est envoyé') : 'Hors ligne' + (attente ? ' · ' + attente + ' en attente' : '')}</span></div>`;
+  if(!cur){
+    vue().innerHTML = `<div class="pad">
+      <button class="retourhaut" data-go="revisions">Mes cours</button>
+      <div class="eyebrow">Révision hors ligne</div>
+      <h1 class="titre">Pack terminé</h1>
+      ${etat}
+      <div class="cachet-note ${justes / total >= .5 ? 'admis' : ''}" style="margin-top:14px"><div class="n num">${justes} / ${total}</div><div class="l">bonnes réponses</div></div>
+      <p class="sous" style="margin-top:12px">${attente ? (enLigne ? 'Vos réponses partent maintenant.' : 'Vos réponses partiront au retour du réseau : vos erreurs rejoindront « Mes erreurs ».') : 'Vos réponses sont enregistrées : vos erreurs sont dans « Mes erreurs ».'}</p>
+      <button class="cta" style="margin-top:14px" data-pack-telecharger="1" ${!enLigne ? 'disabled' : ''}>${ico('telecharger',16)} Télécharger un nouveau pack</button>
+      ${attente && enLigne ? '<button class="cta creux" style="margin-top:9px" data-pack-envoyer="1">Envoyer mes réponses</button>' : ''}
+    </div>`;
+    if(attente && enLigne) envoyerPack();
+    return;
+  }
+  const q = cur.q, rep = p.faites[q.id];
+  const bonnes = q.bonnes || [];
+  vue().innerHTML = `<div class="qzone">
+    <button class="retourhaut" data-go="revisions" style="margin-bottom:12px">Mes cours</button>
+    ${etat}
+    <div class="qmeta"><span>HORS LIGNE · ${E((q.matiere || '').toUpperCase())}</span><span>${cur.i + 1} / ${total}</span></div>
+    <div class="qtexte">${E(q.enonce)}</div>
+    ${(q.options || []).map((o, i) => {
+      let c = '';
+      if(rep){ if(bonnes.includes(i)) c = 'juste'; else if(rep.choix.includes(i)) c = 'faux'; }
+      return `<button class="opt ${c}" ${rep ? 'disabled' : ''} data-pack-rep="${i}"><span class="lettre">${'ABCDEFGH'[i]}</span>${E(o)}</button>`;
+    }).join('')}
+    ${rep ? `<div class="retour ${rep.ok ? 'bien' : 'mal'}"><b>${rep.ok ? 'Juste' : 'Pas tout à fait'}</b>${q.explication ? E(q.explication) : ''}</div>
+      <button class="cta" style="margin-top:14px" data-pack-suivante="1">Question suivante</button>` : ''}
+  </div>`;
+  S.packCourant = q; S.packDebut = S.packDebut || Date.now();
+}
+function repondrePack(i){
+  const p = lirePack(); if(!p) return;
+  const q = S.packCourant; if(!q || p.faites[q.id]) return;
+  const ok = (q.bonnes || []).length === 1 && q.bonnes[0] === i;
+  p.faites[q.id] = { choix:[i], ok, t: Math.min(300000, Date.now() - (S.packDebut || Date.now())) };
+  ecrirePack(p);
+  try{ ok ? sonJuste() : sonFaux(); }catch(e){}
+  rendre();
+  if(navigator.onLine) envoyerPackBientot();
+}
+let minuteurPack = null;
+function envoyerPackBientot(){ clearTimeout(minuteurPack); minuteurPack = setTimeout(envoyerPack, 8000); }
+function carteHorsLigne(){
+  const p = lirePack();
+  const reste = p ? p.questions.length - Object.keys(p.faites).length : 0;
+  return `<button class="hl-carte" data-go="horsligne">
+    <span class="ic">${ico('telecharger',18)}</span>
+    <span class="co"><b>Réviser sans réseau</b><span>${p ? (reste ? reste + ' question' + (reste > 1 ? 's' : '') + ' de votre pack, utilisables hors ligne' : 'Pack terminé : téléchargez-en un nouveau') : 'Gardez 50 questions sur le téléphone, sans forfait'}</span></span>
+  </button>`;
+}
+document.addEventListener('click', ev => {
+  const t = ev.target.closest('[data-pack-telecharger],[data-pack-rep],[data-pack-suivante],[data-pack-envoyer],[data-attestation]');
+  if(!t) return;
+  const d = t.dataset;
+  if(d.packTelecharger) return telechargerPack();
+  if(d.packRep !== undefined) return repondrePack(Number(d.packRep));
+  if(d.packSuivante){ S.packCourant = null; S.packDebut = Date.now(); rendre(); window.scrollTo(0, 0); return; }
+  if(d.packEnvoyer) return envoyerPack();
+  if(d.attestation) return attestationNiveau(Number(d.attestation));
+});
 
 /* ---------- carte de progression à partager (image) ---------- */
 async function carteProgression(){
@@ -5222,6 +5523,112 @@ async function carteProgression(){
   }catch(e){ return; }
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fichier.name; a.click();
   toast('Image enregistrée : partage-la sur ton statut WhatsApp.');
+}
+
+/* ---------- carte de résultat à partager (image) ----------
+   Une image 1080 × 1350, prête pour WhatsApp et Facebook : la note,
+   le rang quand il existe, le logo et le QR code du site. */
+/* vieux téléphones : le dessin des coins arrondis n'existe pas toujours */
+if(window.CanvasRenderingContext2D && !CanvasRenderingContext2D.prototype.roundRect){
+  CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r){
+    r = Math.min(+r || 0, w / 2, h / 2);
+    this.moveTo(x + r, y); this.arcTo(x + w, y, x + w, y + h, r); this.arcTo(x + w, y + h, x, y + h, r);
+    this.arcTo(x, y + h, x, y, r); this.arcTo(x, y, x + w, y, r); this.closePath(); return this;
+  };
+}
+function chargerImage(src){
+  return new Promise((ok, ko) => { const i = new Image(); i.onload = () => ok(i); i.onerror = ko; i.src = src; });
+}
+function texteAjuste(x, t, px, poids, largeurMax){
+  let taille = px;
+  do { x.font = `${poids} ${taille}px Helvetica, Arial, sans-serif`; taille -= 2; } while(x.measureText(t).width > largeurMax && taille > 20);
+}
+function donneesCarte(type){
+  const pseudo = (S.journee && S.journee.pseudo) || (S.util.nom || 'Candidat').split(/\s+/)[0];
+  const date = new Date().toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' });
+  if(type === 'nationale'){
+    const c = S.classementEp; if(!c || !c.moi) return null;
+    const m = c.moi;
+    return { pseudo: m.nom || pseudo, tete: 'Composition nationale (simulation)', sous: c.concours || c.titre || '',
+      note: m.score, sur: m.sur, rang: m.rang, sur_rang: c.participants, statut: STATUTS[m.statut] || '', statutCle: m.statut,
+      date: jourFr(c.debut_le), lien: CONTACT.site, appel: 'Prochaine composition samedi à 17 h' };
+  }
+  if(type === 'defi'){
+    const d = S.defi; if(!d || typeof d.score !== 'number') return null;
+    const moi = (d.classement || []).find(l => l.moi);
+    return { pseudo, tete: 'Défi entre amis', sous: d.matiere || 'Toutes matières', note: d.score, sur: d.sur,
+      rang: moi && (d.classement || []).length > 1 ? moi.rang : null, sur_rang: (d.classement || []).length,
+      statut: moi && moi.rang === 1 && (d.classement || []).length > 1 ? 'EN TÊTE' : '', statutCle: 'admis',
+      date, lien: lienDefi(d.id), appel: 'Fais mieux que moi : relève le défi' };
+  }
+  if(type === 'copie'){
+    if(!S.grille || !S.grille.length) return null;
+    const n = S.grilleNote ?? 0, admis = S.seuil !== null && S.seuil !== undefined && n >= S.seuil;
+    return { pseudo, tete: 'Composition corrigée', sous: S.concours || 'Concours direct', note: n, sur: S.grille.length,
+      rang: null, statut: admis ? 'AU-DESSUS DU SEUIL' : '', statutCle: 'admis', date, lien: CONTACT.site, appel: 'Prépare ton concours gratuitement' };
+  }
+  return null;
+}
+async function carteResultat(type){
+  const k = donneesCarte(type); if(!k){ toast('Résultat indisponible pour le moment.'); return; }
+  const W = 1080, H = 1350, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  const g = x.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#0F2A1F'); g.addColorStop(1, '#0B1511');
+  x.fillStyle = g; x.fillRect(0, 0, W, H);
+  /* bande or en haut, comme l'en-tête des feuilles */
+  x.fillStyle = '#E3A82B'; x.fillRect(0, 0, W, 14);
+  try{ const logo = await chargerImage('/icone-192.png'); x.drawImage(logo, 80, 70, 104, 104); }catch(e){}
+  x.fillStyle = '#E3A82B'; x.font = '700 46px Helvetica, Arial, sans-serif'; x.fillText('MON CONCOURS', 210, 122);
+  x.fillStyle = '#A2B2AA'; x.font = '28px Helvetica, Arial, sans-serif'; x.fillText('Concours directs du Burkina Faso', 210, 162);
+  /* l'épreuve */
+  x.fillStyle = '#4FC28F'; texteAjuste(x, k.tete.toUpperCase(), 34, 700, W - 160); x.fillText(k.tete.toUpperCase(), 80, 280);
+  x.fillStyle = '#E9EEEA'; texteAjuste(x, k.sous, 52, 700, W - 160); x.fillText(k.sous, 80, 345);
+  /* la note, en grand */
+  x.fillStyle = '#14231D'; x.strokeStyle = '#2A3D34'; x.lineWidth = 3;
+  x.beginPath(); x.roundRect(80, 400, W - 160, 420, 36); x.fill(); x.stroke();
+  x.textAlign = 'center';
+  x.fillStyle = '#A2B2AA'; x.font = '30px Helvetica, Arial, sans-serif'; x.fillText('Note de ' + k.pseudo, W / 2, 470);
+  x.fillStyle = '#FFFFFF'; x.font = '800 200px Helvetica, Arial, sans-serif'; x.fillText(String(k.note), W / 2 - 40, 680);
+  const lNote = x.measureText(String(k.note)).width;
+  x.textAlign = 'left'; x.fillStyle = '#A2B2AA'; x.font = '700 80px Helvetica, Arial, sans-serif'; x.fillText('/' + k.sur, W / 2 - 40 + lNote / 2 + 8, 680);
+  x.textAlign = 'center';
+  if(k.rang){
+    x.fillStyle = '#E9EEEA'; x.font = '600 44px Helvetica, Arial, sans-serif';
+    x.fillText(`${k.rang}${k.rang === 1 ? 'er' : 'e'} sur ${k.sur_rang}`, W / 2, 770);
+  } else {
+    x.fillStyle = '#A2B2AA'; x.font = '36px Helvetica, Arial, sans-serif'; x.fillText(k.date, W / 2, 770);
+  }
+  /* le cachet (admis, attente…) */
+  if(k.statut){
+    const coul = k.statutCle === 'admis' ? '#4FC28F' : k.statutCle === 'attente' ? '#E3A82B' : '#C2392E';
+    x.save(); x.translate(W / 2, 900); x.rotate(-0.05);
+    x.font = '800 54px Helvetica, Arial, sans-serif'; const lw = x.measureText(k.statut).width + 80;
+    x.strokeStyle = coul; x.lineWidth = 7; x.beginPath(); x.roundRect(-lw / 2, -54, lw, 92, 16); x.stroke();
+    x.fillStyle = coul; x.fillText(k.statut, 0, 14); x.restore();
+  }
+  if(k.rang){ x.fillStyle = '#7F918A'; x.font = '30px Helvetica, Arial, sans-serif'; x.fillText(k.date, W / 2, 1005); }
+  x.textAlign = 'left';
+  /* le pied : QR code, adresse, appel à jouer */
+  try{
+    const qr = await chargerImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(QR_FEUILLE.replace('width="78" height="78"', 'width="220" height="220"')));
+    x.fillStyle = '#FFFFFF'; x.beginPath(); x.roundRect(W - 80 - 236, H - 80 - 236, 236, 236, 18); x.fill();
+    x.drawImage(qr, W - 80 - 228, H - 80 - 228, 220, 220);
+  }catch(e){}
+  x.fillStyle = '#E3A82B'; texteAjuste(x, k.appel, 40, 700, W - 160 - 270); x.fillText(k.appel, 80, H - 200);
+  x.fillStyle = '#E9EEEA'; x.font = '600 36px Helvetica, Arial, sans-serif'; x.fillText('monconcours.vercel.app', 80, H - 145);
+  x.fillStyle = '#7F918A'; x.font = '28px Helvetica, Arial, sans-serif'; x.fillText('Gratuit · scannez le code', 80, H - 98);
+  const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+  const fichier = new File([blob], 'mon-resultat-mon-concours.png', { type:'image/png' });
+  const texte = type === 'defi' ? texteDefiWhatsapp(S.defi) : `${k.tete} sur Mon Concours : ${k.note}/${k.sur}${k.rang ? `, ${k.rang}${k.rang === 1 ? 'er' : 'e'} sur ${k.sur_rang}` : ''}. ${k.appel} : ${k.lien}`;
+  pister('RESULT_CARD_SHARED', { type });
+  try{
+    if(navigator.canShare && navigator.canShare({ files:[fichier] })){
+      await navigator.share({ files:[fichier], title:'Mon résultat', text: texte });
+      return;
+    }
+  }catch(e){ if(e && e.name === 'AbortError') return; }
+  enregistrerBlob(blob, fichier.name);
+  toast('Image enregistrée : publiez-la sur votre statut WhatsApp ou sur Facebook.');
 }
 
 /* ---------- concours visé ---------- */
@@ -5310,7 +5717,7 @@ document.addEventListener('click', ev => {
     S.qp = { id:x.id, enonce:x.q, options:x.o, matiere:x.matiere, charge:true };
     return aller('question');
   }
-  if(d.creerDefi !== undefined) return creerDefi();
+  if(d.creerDefi !== undefined) return creerDefi(d.creerDefi === 'wa');
   if(d.defiMat !== undefined){
     const p = S.defiPrep; if(!p) return;
     if(!d.defiMat) p.matieres = [];
@@ -5345,13 +5752,7 @@ document.addEventListener('click', ev => {
   }
   if(d.defiRemettre) return remettreDefi();
   if(d.defiNouveau){ nouveauDefi(); return rendre(); }
-  if(d.partageDefi){
-    const m = S.defi && S.defi.matiere ? ' en ' + S.defi.matiere : (S.defi && S.defi.matieres && S.defi.matieres.length ? ' en ' + S.defi.matieres.join(', ') : '');
-    const sc = S.defi && typeof S.defi.score === 'number' ? ` J'ai eu ${S.defi.score}/${S.defi.sur}.` : '';
-    pister('CHALLENGE_SHARED');
-    window.open('https://wa.me/?text=' + encodeURIComponent(`Je te défie sur Mon Concours : 10 questions${m} en 5 minutes.${sc} Inscris-toi gratuitement et relève le défi : ${lienDefi(d.partageDefi)}`), '_blank', 'noopener');
-    return;
-  }
+  if(d.partageDefi){ return partagerDefiWhatsapp({ ...(S.defi || {}), id: d.partageDefi }); }
   if(d.propBonne !== undefined){ S.prop.bonne = +d.propBonne; return ecranProposer(); }
   if(d.propEnvoyer){
     const f = S.prop;
@@ -5580,7 +5981,7 @@ function rendre(){
     grille:ecranGrille, copie:ecranCopie,
     cahier:ecranCahier, compte:ecranCompte,
     pourtoi:ecranPourToi, qdj:ecranQdj, question:ecranQuestionPartagee, gagnants:ecranGagnants,
-    notion:ecranNotion, recherche:ecranRecherche, defi:ecranDefi, top:ecranTop, proposer:ecranProposer, parcours:ecranParcours}[S.ecran] || ecranAujourdhui);
+    notion:ecranNotion, recherche:ecranRecherche, defi:ecranDefi, top:ecranTop, proposer:ecranProposer, parcours:ecranParcours, horsligne:ecranHorsLigne}[S.ecran] || ecranAujourdhui);
 
   /* FILET — une erreur dans un seul écran ne doit plus jamais laisser
      le candidat devant une page noire. On affiche ce qui s'est passé
@@ -5732,7 +6133,7 @@ document.addEventListener('click', ev=>{
         S.paieEnvoi = false; S.paieEtape = 2;
         rendre();
       }catch(e){
-        S.erreur = (e && e.message) || "Envoi impossible. Vérifiez votre connexion.";
+        S.erreur = enFrancais(e, "Envoi impossible. Vérifiez votre connexion.");
         S.paieEnvoi = false; rendre();
       }
     })();

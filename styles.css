@@ -1626,3 +1626,27 @@ body.sans-anim .nd-barre i{transition:none}
 .opt.attente::after{content:"";position:absolute;right:14px;top:50%;width:16px;height:16px;margin-top:-8px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;opacity:.55;animation:tourne .7s linear infinite}
 @keyframes tourne{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion: reduce){.opt.attente::after{animation-duration:2s}}
+
+/* ---------- badges, chances, révision hors ligne ---------- */
+.badges{display:flex;flex-wrap:wrap;gap:10px}
+.badge-m{width:74px;display:flex;flex-direction:column;align-items:center;gap:5px;text-align:center}
+.badge-m .num{width:52px;height:52px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:17px;
+  color:var(--or-encre, #1b1406);background:radial-gradient(circle at 35% 30%, #F4CC6A, var(--or) 60%, #B98516);
+  box-shadow:0 0 0 3px var(--or-fond), 0 2px 6px rgba(0,0,0,.25)}
+.badge-m i{font-style:normal;font-size:10.5px;line-height:1.25;color:var(--craie2)}
+.chances.sn-admis{border-color:var(--vert-bord);background:var(--vert-fond)}
+.chances.sn-attente{border-color:var(--ambre-bord);background:var(--ambre-fond)}
+.chances.sn-echoue{border-color:var(--rouge-bord);background:var(--rouge-fond)}
+.chances-phrase{margin:0;font-size:14.5px;line-height:1.5}
+.chances.sn-admis .chances-phrase b:not(.num){color:var(--vert-texte)}
+.chances.sn-attente .chances-phrase b:not(.num){color:var(--ambre-texte)}
+.chances.sn-echoue .chances-phrase b:not(.num){color:var(--rouge-texte)}
+.hl-carte{display:flex;align-items:center;gap:12px;width:100%;text-align:left;margin-top:12px;padding:12px 14px;border-radius:14px;
+  border:1.5px dashed var(--or-bord);background:var(--or-fond);color:inherit;font:inherit;cursor:pointer}
+.hl-carte .ic{flex:0 0 36px;height:36px;border-radius:10px;display:grid;place-items:center;background:var(--or);color:#1b1406}
+.hl-carte .co{display:flex;flex-direction:column;gap:2px;min-width:0}
+.hl-carte .co b{font-size:14.5px}.hl-carte .co span{font-size:12.5px;color:var(--craie2)}
+.pack-etat{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:12.5px;color:var(--craie2);margin:4px 0 12px}
+.pack-etat .en-ligne{color:var(--vert-texte)}.pack-etat .hors-ligne{color:var(--ambre-texte)}
+.ou-wa{margin-top:18px;padding-top:14px;border-top:1px solid var(--trait)}
+.ou-wa > span{display:block;font-size:13.5px;color:var(--craie2);margin-bottom:8px}
