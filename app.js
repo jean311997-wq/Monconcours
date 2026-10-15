@@ -19,7 +19,8 @@ const CONTACT = {
   canal:    'https://whatsapp.com/channel/0029Vb9boQ990x32o1rJTm07',
   facebook: 'https://www.facebook.com/share/18zvk8fdA3/',
   adminTel: '77959848',
-  site:     'https://monconcours.vercel.app'
+  site:     'https://monconcours.vercel.app',
+  playStore: ''              /* le lien Play Store de Mon Concours, dès qu'il est publié */
 };
 
 const REGLAGES = 'monconcours.reglages';
@@ -61,7 +62,7 @@ const S = {
   ecran:'engagement', phase:0,
   testRep:{}, testChrono:120, testTimer:null, testCorrige:false, testNote:null,
   taches:[false,false,false], actuOnglet:'national', cahierFiltre:false,
-  niveau:'Terminale', matiere:null, qcmIdx:0, qcmRep:undefined, qcmJustes:0, qcmSerie:0,
+  niveau:'Troisième', matiere:null, qcmIdx:0, qcmRep:undefined, qcmJustes:0, qcmSerie:0,
   voirClassement:false, voirDiagnostic:false, voirDefi:false, voirBadges:false,
   util:{nom:'', tel:'', pin:'', connecte:false},
   form:{nom:'', tel:'', pin:'', pin2:'', couleur:''}, codeVisible:false, erreur:'',
@@ -324,7 +325,7 @@ window.addEventListener('beforeunload', e => {
   if(!m || !m.dejaVenu) return;
   S.ecran = 'aujourdhui';
   S.modalDejaVu = true;                       // pas de relance d'inscription
-  if(m.niveau) S.niveau = m.niveau;
+  if(m.niveauProfil) S.niveauProfil = m.niveauProfil;
   if(m.nom) S.util = { nom:m.nom, tel:m.tel || '', pin:'', connecte:true };
 })();
 
@@ -358,7 +359,7 @@ function aller(e){
    ===================================================================== */
 const ONGLETS = [
   {id:'aujourdhui', g:'actualite', l:'Actualité'},
-  {id:'revisions',  g:'revisions', l:'Révisions'},
+  {id:'revisions',  g:'revisions', l:'Mes cours'},
   {id:'grille',     g:'grille',    l:'Composition'},
   {id:'cahier',     g:'erreurs',   l:'Mes erreurs'},
   {id:'compte',     g:'compte',    l:'Mon compte'}
@@ -411,9 +412,9 @@ const TEST = [
   {q:'Date d\'effet du retrait de la CEDEAO',
    o:['28 janvier 2024','29 janvier 2025','1ᵉʳ juillet 2024','16 septembre 2023'],i:1,d:'Institutions et AES'},
   {q:'La glycogénolyse est',
-   o:['la synthèse du glycogène','la dégradation du glycogène','l\'absorption du glucose','la formation de lipides'],i:1,d:'Sciences de la vie'},
+   o:['la synthèse du glycogène','la dégradation du glycogène','l\'absorption du glucose','la formation de lipides'],i:1,d:'Sciences de la vie et de la Terre'},
   {q:'Hormone qui fait baisser la glycémie',
-   o:['Le glucagon','L\'insuline','L\'adrénaline','Le cortisol'],i:1,d:'Sciences de la vie'},
+   o:['Le glucagon','L\'insuline','L\'adrénaline','Le cortisol'],i:1,d:'Sciences de la vie et de la Terre'},
   {q:'Capitale économique du Burkina Faso',
    o:['Ouagadougou','Bobo-Dioulasso','Koudougou','Banfora'],i:1,d:'Culture générale'},
   {q:'Solution de l\'équation 2x + 6 = 0',
@@ -622,6 +623,8 @@ function ecranResultat(){
    LES QUESTIONS VIENNENT DE LA BASE
    ===================================================================== */
 const niveauBase = () => S.niveau.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+/* le niveau du candidat (inscription) pour composer et pour le fil ; à défaut, celui affiché */
+const niveauCand = () => S.niveauProfil || niveauBase();
 
 /* La banque de révision du niveau choisi. Les questions arrivent sans
    leurs corrigés : la correction est donnée par le serveur, question par
@@ -635,7 +638,7 @@ async function chargerQuestions(force){
   S.banqueEtat = 'chargement';
   try{
     const { data, error } = await base.from('questions')
-      .select('id, enonce, niveau, matiere_id, matieres(nom, ordre), question_options(position, texte)')
+      .select('id, enonce, niveau, matiere_id, matieres(nom, ordre, niveaux), question_options(position, texte)')
       .eq('statut', 'publie')
       .or('niveau.eq.' + niv + ',niveau.is.null')
       .order('cree_le')
@@ -644,6 +647,7 @@ async function chargerQuestions(force){
     const parMatiere = {};
     (data || []).forEach(q => {
       if(!q.matieres) return;
+      if(q.matieres.niveaux && !q.matieres.niveaux.includes(niv)) return;   /* Droit, Économie : licence seulement */
       const o = (q.question_options || []).slice().sort((a,b) => a.position - b.position);
       if(o.length < 2) return;
       const m = q.matieres.nom;
@@ -681,10 +685,95 @@ async function chargerNotifications(){
     const uid = await utilisateurCourant();
     if(!uid) return;
     const { data } = await base.rpc('mes_notifications');
+    const avant = new Set((S.notifications || []).map(n => n.id));
     S.notifications = data || [];
+    /* une nouvelle notification : un son léger et un bandeau qu'on peut toucher */
+    const vues = lireReglages().notifVues || [];
+    const neuves = S.notifications.filter(n => !n.lue && !vues.includes(n.id) && (S.notifCharge ? !avant.has(n.id) : true));
     S.notifCharge = true;
     rendre();
+    if(neuves.length && !enComposition()){
+      ecrireReglage('notifVues', S.notifications.slice(0, 60).map(n => n.id));
+      bandeauNotif(neuves[0], neuves.length);
+    }
   }catch(e){}
+}
+setInterval(() => { if(document.visibilityState === 'visible' && S.util.connecte && !enComposition()) chargerNotifications(); }, 60000);
+function sonNotif(){
+  const a = ctx(); if(!a) return;
+  const t = a.currentTime;
+  [[880, 0], [1320, 0.12]].forEach(([f, d]) => {
+    const o = a.createOscillator(), g = a.createGain();
+    o.type = 'sine'; o.frequency.value = f;
+    g.gain.setValueAtTime(0.0001, t + d);
+    g.gain.exponentialRampToValueAtTime(0.05, t + d + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + d + 0.35);
+    o.connect(g); g.connect(a.destination); o.start(t + d); o.stop(t + d + 0.4);
+  });
+}
+function bandeauNotif(n, combien){
+  sonNotif();
+  document.querySelectorAll('.bandeau-notif').forEach(x => x.remove());
+  const b = document.createElement('button');
+  b.className = 'bandeau-notif';
+  b.setAttribute('role', 'status');
+  b.innerHTML = `<span class="ic">${ico(ICONE_NOTIF[n.type] || 'cloche', 18)}</span><span class="co"><b>${E(n.titre)}</b><span>${E(n.message)}</span>${combien > 1 ? `<i>et ${combien - 1} autre${combien > 2 ? 's' : ''} notification${combien > 2 ? 's' : ''}</i>` : ''}</span>`;
+  b.onclick = () => { b.remove(); ouvrirNotif(n); };
+  document.body.appendChild(b);
+  setTimeout(() => b.classList.add('vu'), 30);
+  setTimeout(() => { b.classList.remove('vu'); setTimeout(() => b.remove(), 400); }, 9000);
+}
+/* toucher une notification mène à ce dont elle parle */
+function ouvrirNotif(n){
+  if(!n) return;
+  if(!n.lue) marquerNotifsLues(n.id);
+  const v = document.getElementById('voile'); if(v){ v.hidden = true; v.innerHTML = ''; } S.modal = null;
+  const [genre, id] = String(n.lien || '').split(':');
+  if(genre === 'copie' && id) return feuilleArchive(id);
+  if(genre === 'epreuve' && id){
+    if(S.epreuve && S.epreuve.id === id && S.epreuve.etat !== 'terminee') return aller('aujourdhui');
+    chargerClassement(id); return aller('gagnants');
+  }
+  if(genre === 'defi' && id) return ouvrirDefi(id);
+  if(genre === 'compte') return aller('compte');
+  if(genre === 'parcours') return aller('parcours');
+  if(genre === 'installer') return installerAppli();
+  if(n.type === 'paiement' && !S.gratuit) return aller('abonnement');
+}
+
+/* chaque jour, une notification : série, minutes, niveau et ce qui reste à faire */
+async function notificationsDuJour(){
+  if(!base || !S.util.connecte || !S.stats || !S.details) return;
+  const jour = new Date().toISOString().slice(0, 10);
+  const r = lireReglages();
+  if(r.progNotif === jour) return;
+  ecrireReglage('progNotif', jour);
+  const st = S.stats, dt = S.details, n = niveauCandidat();
+  const duree = m => m >= 60 ? Math.floor(m / 60) + ' h ' + String(m % 60).padStart(2, '0') : m + ' min';
+  const serie = st.serie || 0;
+  const reste = n.suivant ? n.suivant.crit(n.v).filter(([k, c]) => n.v[k] < c).map(([k, c, l, court]) => nombreFr(c - n.v[k]) + ' ' + court) : [];
+  const msg = (serie >= 2 ? 'Félicitations : ' + serie + ' jours d\'affilée. ' : '') +
+    duree(dt.minutes_semaine || 0) + ' de travail cette semaine, ' + duree(dt.minutes_mois || 0) + ' ce mois. ' +
+    'Vous êtes au niveau ' + n.nom.toLowerCase() + '.' +
+    (n.suivant ? ' Pour atteindre le niveau « ' + n.suivant.nom + ' », il vous reste ' + reste.join(', ') + '.' : '');
+  try{
+    await base.rpc('ma_notification', { p_type:'progression', p_titre: serie >= 2 ? 'Bravo, ' + serie + ' jours d\'affilée' : 'Votre progression du jour',
+      p_message: msg.slice(0, 500), p_cle:'progression-' + jour, p_lien:'compte' });
+    if(!estInstallee() && !r.installNotif){
+      ecrireReglage('installNotif', true);
+      await base.rpc('ma_notification', { p_type:'installation', p_titre:'Installer l\'application Mon Concours',
+        p_message:'Installez Mon Concours sur votre téléphone : elle s\'ouvre comme une application, même avec peu de réseau.',
+        p_cle:'installation-1', p_lien:'installer' });
+    }
+    chargerNotifications();
+  }catch(e){}
+}
+const estInstallee = () => window.matchMedia && window.matchMedia('(display-mode: standalone)').matches;
+function installerAppli(){
+  if(CONTACT.playStore) return window.open(CONTACT.playStore, '_blank', 'noopener');
+  if(S.installer){ S.installer.prompt(); S.installer.userChoice.then(() => { S.installer = null; }); return; }
+  if(estInstallee()) return toast('L\'application est déjà installée sur ce téléphone.');
+  toast('Dans Chrome : touchez le menu ⋮ en haut à droite, puis « Installer l\'application ».', 7000);
 }
 
 async function marquerNotifsLues(id){
@@ -772,7 +861,7 @@ async function chargerProgression(){
   }).catch(() => { S.classementCharge = true; });
 
   base.rpc('mes_stats').then(({data}) => {
-    if(data) S.stats = data;
+    if(data){ S.stats = data; setTimeout(notificationsDuJour, 2500); }
     rafraichirSiVisible();
   }).catch(() => {});
 
@@ -861,13 +950,9 @@ async function reprendreSession0(){
   if(profil){
     S.util = { nom: profil.nom, tel: profil.telephone || '', pin: '', connecte: true };
     S.modalDejaVu = true;
-    /* le candidat voit d'abord le programme de sa propre classe */
-    const classes = { troisieme:'Troisième', terminale:'Terminale', licence:'Licence' };
-    if(profil.niveau && classes[profil.niveau] && classes[profil.niveau] !== S.niveau){
-      S.niveau = classes[profil.niveau];
-      chargerRessources();
-    }
-    ecrireMemoire({ nom: profil.nom, tel: profil.telephone || '', niveau: S.niveau });
+    /* « Mes cours » s'ouvre sur Troisième ; le niveau déclaré sert aux compositions et au fil */
+    S.niveauProfil = profil.niveau || null;
+    ecrireMemoire({ nom: profil.nom, tel: profil.telephone || '', niveauProfil: S.niveauProfil });
     if(ECRANS_DECOUVERTE.includes(S.ecran)) return aller('aujourdhui'), chargerProgression();
     rendre();
     chargerProgression();
@@ -917,7 +1002,7 @@ function brancherBase(){
    OBSERVATION — collecte des événements
    Rien de personnel : ni saisie, ni mot de passe, ni position.
    ===================================================================== */
-const VERSION_APP = 'v17';
+const VERSION_APP = 'v18';
 
 const O = {
   session: null, precedent: null, dernierTemps: Date.now(), entreeEcran: Date.now(),
@@ -1084,7 +1169,7 @@ async function ouvrirComposition(){
        sinon le serveur choisit le sujet, ou reprend celui en cours */
     const { data, error } = S.rejoindre
       ? await base.rpc('rejoindre_epreuve', { p_epreuve: S.rejoindre })
-      : await base.rpc('ouvrir_composition', { p_niveau: niveauBase() });
+      : await base.rpc('ouvrir_composition', { p_niveau: niveauCand() });
     S.rejoindre = null;
     if(error) throw error;
     if(!data || !data.ok){
@@ -1251,7 +1336,7 @@ function ecranAujourdhui(){
       <div class="carte">
         ${ACTU.length ? ACTU.slice(0,3).map((a,k)=>carteActu(a,k===0)).join('') : blocActuVide()}
       </div>
-      ${ACTU.length > 3 ? `<button class="voirplus" data-go="actualite">VOIR LES ${ACTU.length} INFORMATIONS →</button>` : ''}
+      ${ACTU.length > 3 ? `<button class="voir-tout" data-go="actualite"><span>Voir les ${ACTU.length} informations</span><b aria-hidden="true">→</b></button>` : ''}
     </div>
     </div>
     <div>
@@ -1262,19 +1347,19 @@ function ecranAujourdhui(){
           <div class="puce">${S.taches[0]?'✓':'1'}</div>
           <div><h3>Lire l'actualité</h3>
             <p>Cochée quand tu ouvres la page d'actualité.</p>
-            <span class="dur">3 min</span></div>
+            <span class="dur">3 min</span>${S.taches[0] ? '<span class="etat-tache fait">✓ Déjà effectué</span>' : '<span class="etat-tache">Pas encore effectué</span>'}</div>
         </div>
         <div class="etape ${S.taches[1]?'fait':(S.taches[0]?'actif':'')}">
           <div class="puce">${S.taches[1]?'✓':'2'}</div>
           <div><h3>Composer</h3>
             <p>Une épreuve chronométrée sur la feuille de réponses. Cochée à la remise de la copie.</p>
-            <span class="dur">25 min</span></div>
+            <span class="dur">25 min</span>${S.taches[1] ? '<span class="etat-tache fait">✓ Déjà effectué</span>' : '<span class="etat-tache">Pas encore effectué</span>'}</div>
         </div>
         <div class="etape ${S.taches[2]?'fait':(S.taches[1]?'actif':'')}">
           <div class="puce">${S.taches[2]?'✓':'3'}</div>
           <div><h3>Revoir mes erreurs fréquentes</h3>
             <p>${ouvertes() ? ouvertes() + ' erreur' + (ouvertes()>1?'s':'') + ' ouverte' + (ouvertes()>1?'s':'') + ', les plus ratées en premier.' : 'Aucune erreur ouverte pour l\'instant.'}</p>
-            <span class="dur">10 min</span></div>
+            <span class="dur">10 min</span>${S.taches[2] ? '<span class="etat-tache fait">✓ Déjà effectué</span>' : '<span class="etat-tache">Pas encore effectué</span>'}</div>
         </div>
       </div>
       ${f === 3 ? '' : !S.taches[0] ? `<button class="cta" data-go="actualite" style="margin-top:12px">Lire l'actualité<small>Tâche 1 sur 3</small></button>`
@@ -1652,7 +1737,7 @@ const PROGRAMME = {
   'Terminale':'Programme du baccalauréat · concours de niveau terminale',
   'Licence':'Programme supérieur · concours de niveau licence'
 };
-const SIGLE = { 'Français':'FR', 'Mathématiques':'MA', 'Sciences de la vie':'SV', 'Sciences physiques':'PC',
+const SIGLE = { 'Français':'FR', 'Mathématiques':'MA', 'Sciences de la vie et de la Terre':'SVT', 'Sciences de la vie':'SVT', 'Sciences physiques':'PC',
   'Histoire':'HI', 'Géographie':'GE', 'Culture générale':'CG', 'Institutions et AES':'IN',
   'Géopolitique':'GP', 'Droit':'DR', 'Économie':'EC' };
 const sigle = nom => SIGLE[nom] || (nom || '?').slice(0, 2).toUpperCase();
@@ -1672,10 +1757,8 @@ function ecranRevisions(){
     .forEach(r => { if(!mats.includes(r.matiere)) mats.push(r.matiere); });
   vue().innerHTML = `
   <div class="pad">
-    <div class="eyebrow">Mes révisions</div>
+    <div class="eyebrow">Mes cours</div>
     <h1 class="titre">Cours et QCM</h1>
-
-    <button class="cta" style="margin-top:14px" data-go="cours">${ico('lire',17)} Lire ou télécharger les cours<small>Toute la bibliothèque, les annales et la recherche</small></button>
 
     <div class="niveaux" role="group" aria-label="Niveau" style="margin-top:16px">
       ${['Troisième','Terminale','Licence'].map(n=>`<button class="${S.niveau===n?'on':''}" data-niv="${n}" aria-pressed="${S.niveau===n}">${n}</button>`).join('')}
@@ -1711,12 +1794,13 @@ function ecranRevisions(){
         <div class="mr-actions">
           ${chap.length ? `<button data-matiere="${encodeURIComponent(nom)}">${ico('lire',16)}<span>Lire le cours</span></button>` : ''}
           ${chap.length || fich.length ? `<button data-telecharger-mat="${encodeURIComponent(nom)}">${ico('telecharger',16)}<span>Télécharger</span></button>` : ''}
-          ${nb ? `<button class="plein" data-mat="${E(nom)}">${ico('revisions',16)}<span>${faites > 0 ? 'Continuer les QCM' : 'Faire les QCM'}</span></button>` : ''}
+          ${nb ? `<button class="plein" data-mat="${E(nom)}">${ico('revisions',16)}<span>${faites > 0 ? 'Continuer' : 'Faire les QCM'}</span></button>` : ''}
         </div>
       </div>`;
     }).join('')}
     </div>
 
+    <button class="lien-mini" style="margin-top:14px" data-go="cours">${ico('lire',13)} Anciens sujets et recherche dans les cours</button>
     ${!S.util.connecte ? `<div class="carte" style="margin-top:12px">
       <p class="sous">${S.gratuit ? "Sans compte, tu peux lire les questions. Pour voir la correction et garder tes erreurs, crée ton compte : c'est gratuit." : "Sans compte, tu peux lire les questions. Pour voir la correction, crée ton compte gratuit : 20 corrections par jour, sans limite avec l'abonnement."}</p>
     </div>` : (!S.abo.actif && !S.gratuit ? `<div class="carte" style="margin-top:12px">
@@ -1733,26 +1817,16 @@ function telechargerCoursMatiere(nom){
     if(fich.length === 1) return telechargerRessource(fich[0].id);
     return aller('cours');
   }
-  const html = '<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>' + E(nom) + ' · Mon Concours</title><style>' +
-    '@page{size:A4;margin:16mm}body{font-family:Georgia,"Times New Roman",serif;color:#111;max-width:180mm;margin:0 auto;padding:0 10px;line-height:1.55;font-size:13.5px}' +
-    '.tete{border-bottom:3px double #111;padding-bottom:8px;display:flex;justify-content:space-between;align-items:flex-end;gap:10px;flex-wrap:wrap}' +
-    '.tete b{font-size:18px;letter-spacing:.04em}.tete span{font-size:11px;color:#555}' +
-    'h1{font-size:24px;margin:18px 0 4px}h2{font-size:17px;margin:26px 0 6px;border-bottom:1px solid #111;padding-bottom:3px;break-after:avoid}' +
-    '.som{font-size:13px}.som li{margin:2px 0}h3{font-size:14px;letter-spacing:.06em;margin:14px 0 4px}p{margin:6px 0}' +
-    '.formule{font-family:"Courier New",monospace;background:#f4f1ea;padding:4px 8px}' +
-    '.pied{margin-top:24px;border-top:1px solid #111;padding-top:6px;font-size:11px;font-family:Helvetica,Arial,sans-serif;display:flex;justify-content:space-between}' +
-    '@media print{.noimp{display:none}}.noimp{text-align:center;margin:20px 0}.noimp button{font:inherit;padding:11px 22px;border:1px solid #111;background:#111;color:#fff}' +
-    '</style></head><body>' +
-    '<div class="tete"><b>MON CONCOURS</b><span>monconcours.vercel.app · ' + E(S.niveau) + '</span></div>' +
-    '<h1>' + E(nom) + '</h1><ol class="som">' + chap.map(r => '<li>' + E(r.titre) + '</li>').join('') + '</ol>' +
-    chap.map((r, i) => '<h2>' + (i + 1) + '. ' + E(r.titre) + '</h2>' + miseEnPage(r.texte)).join('') +
-    '<div class="pied"><span>monconcours.vercel.app</span><span>WhatsApp +226 ' + CONTACT.adminTel.replace(/(\d{2})(?=\d)/g, '$1 ') + '</span></div>' +
-    '<div class="noimp"><button onclick="window.print()">Enregistrer en PDF ou imprimer</button></div>' +
-    '<scr' + 'ipt>setTimeout(function(){window.print();},600);<\/scr' + 'ipt></body></html>';
-  const f = window.open('', '_blank');
-  if(!f){ toast('Autorisez les fenêtres pour télécharger le cours.'); return; }
-  f.document.write(html); f.document.close();
   pister('COURSE_DOWNLOADED', { matiere: nom });
+  return sortirDocument('Cours ' + nom + ' ' + S.niveau, () => docComplet(nom + ' · Mon Concours',
+    'h1{font-size:24px;margin:18px 0 4px}.chap{font-size:17px;margin:26px 0 6px;border-bottom:1px solid #111;padding-bottom:3px;letter-spacing:0;text-transform:none}' +
+    '.som{font-size:13px}.som li{margin:2px 0}h3{font-size:14px;letter-spacing:.06em;margin:14px 0 4px}p{margin:6px 0;font-size:13.5px}li{font-size:13.5px}' +
+    '.formule{font-family:"Courier New",monospace;background:#f4f1ea;padding:4px 8px}.niv{font:11px Helvetica,Arial,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#555;margin-top:14px}',
+    docEntete('Scannez pour lire tous les cours') +
+    '<div class="niv">Cours · ' + E(S.niveau) + '</div><h1>' + E(nom) + '</h1>' +
+    '<ol class="som">' + chap.map(r => '<li>' + E(r.titre) + '</li>').join('') + '</ol>' +
+    chap.map((r, i) => '<h2 class="chap">' + (i + 1) + '. ' + E(r.titre) + '</h2>' + miseEnPage(r.texte)).join('') +
+    docPied()));
 }
 
 /* --- les fascicules de cours --- */
@@ -1789,7 +1863,7 @@ function ecranCours(){
 
   vue().innerHTML = `
   <div class="pad">
-    <button class="retourhaut" data-go="revisions">Mes révisions</button>
+    <button class="retourhaut" data-go="revisions">Mes cours</button>
     <h1 class="titre">Les cours</h1>
     <p class="sous" style="margin:8px 0 16px">Les documents au programme ${S.niveau.toLowerCase()}. À lire ici, ou à télécharger une fois pour travailler sans connexion.</p>
 
@@ -1881,7 +1955,7 @@ function texteDePartage(quoi){
 /* Feuille de partage : les vrais logos, pas un bouton anonyme. */
 /* Feuille des notifications : la cloche l'ouvre, une par une ou tout
    marquer comme lu. Le badge se vide dès l'ouverture d'une ligne. */
-const ICONE_NOTIF = { resultat:'grille', paiement:'carte', nouveau_cours:'revisions', rappel:'cloche', motivation:'cloche', faiblesse:'erreurs', securite:'cadenas' };
+const ICONE_NOTIF = { resultat:'grille', paiement:'carte', nouveau_cours:'revisions', rappel:'cloche', motivation:'cloche', faiblesse:'erreurs', securite:'cadenas', defi:'duel', progression:'diagnostic', installation:'telecharger' };
 
 function relatif(iso){
   const d = Date.now() - new Date(iso).getTime();
@@ -1993,7 +2067,185 @@ async function partager(quoi){
    une feuille imprimée ou partagée amène directement sur Mon Concours. */
 const QR_FEUILLE = '<svg width="78" height="78" aria-label="QR code vers monconcours.vercel.app" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 35 35" shape-rendering="crispEdges"><path fill="#ffffff" d="M0 0h35v35H0z"/><path stroke="#111111" d="M1 1.5h7m3 0h1m2 0h2m1 0h5m2 0h1m2 0h7M1 2.5h1m5 0h1m3 0h1m1 0h4m1 0h1m3 0h2m3 0h1m5 0h1M1 3.5h1m1 0h3m1 0h1m1 0h2m1 0h3m1 0h1m1 0h5m1 0h1m2 0h1m1 0h3m1 0h1M1 4.5h1m1 0h3m1 0h1m1 0h4m2 0h3m3 0h1m1 0h3m1 0h1m1 0h3m1 0h1M1 5.5h1m1 0h3m1 0h1m1 0h1m2 0h1m3 0h1m2 0h1m4 0h1m2 0h1m1 0h3m1 0h1M1 6.5h1m5 0h1m1 0h1m1 0h3m2 0h2m3 0h1m1 0h1m1 0h1m1 0h1m5 0h1M1 7.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M9 8.5h1m1 0h1m1 0h1m2 0h1m5 0h1M1 9.5h1m1 0h5m2 0h2m2 0h1m1 0h3m2 0h1m1 0h3m1 0h5M3 10.5h1m1 0h1m3 0h5m3 0h1m2 0h3m1 0h1m2 0h2m1 0h2m1 0h1M1 11.5h1m2 0h1m1 0h2m3 0h1m1 0h1m2 0h2m1 0h1m2 0h2m2 0h2m1 0h1m1 0h2M1 12.5h1m1 0h1m1 0h1m2 0h2m1 0h2m2 0h2m3 0h7m2 0h3M1 13.5h2m1 0h7m5 0h1m2 0h2m1 0h1m2 0h2m2 0h2m1 0h1M2 14.5h1m1 0h1m6 0h7m3 0h2m1 0h1m2 0h2m1 0h4M2 15.5h1m1 0h1m2 0h2m1 0h1m1 0h4m2 0h3m5 0h2m1 0h4M2 16.5h2m1 0h1m3 0h1m1 0h1m1 0h3m1 0h1m1 0h5m1 0h4m1 0h2M1 17.5h1m2 0h1m1 0h2m1 0h2m2 0h2m3 0h1m1 0h1m2 0h4m1 0h3m2 0h1M3 18.5h1m6 0h1m2 0h3m1 0h4m3 0h1m2 0h2m1 0h2m1 0h1M2 19.5h3m1 0h3m3 0h1m3 0h1m1 0h1m2 0h1m1 0h1m1 0h2m1 0h2m1 0h2M2 20.5h1m3 0h1m1 0h1m2 0h3m1 0h1m1 0h4m3 0h1m2 0h7M1 21.5h10m1 0h3m2 0h1m3 0h6m2 0h2m1 0h2M1 22.5h1m1 0h2m3 0h3m3 0h3m2 0h1m4 0h1m2 0h1m3 0h1m1 0h1M1 23.5h1m1 0h1m1 0h1m1 0h2m3 0h8m1 0h1m1 0h1m2 0h2m3 0h2M1 24.5h1m2 0h3m4 0h2m2 0h2m5 0h2m2 0h1m1 0h4m1 0h1M1 25.5h1m2 0h2m1 0h1m1 0h1m2 0h3m1 0h1m1 0h1m2 0h1m1 0h1m1 0h6m1 0h2M9 26.5h1m1 0h1m2 0h1m4 0h5m1 0h1m3 0h1m1 0h3M1 27.5h7m3 0h1m1 0h1m2 0h1m2 0h1m2 0h1m1 0h2m1 0h1m1 0h1m1 0h1M1 28.5h1m5 0h1m1 0h9m2 0h1m1 0h4m3 0h5M1 29.5h1m1 0h3m1 0h1m1 0h4m1 0h2m3 0h1m2 0h1m2 0h6m1 0h2M1 30.5h1m1 0h3m1 0h1m1 0h2m1 0h1m1 0h1m1 0h2m3 0h4m1 0h1m2 0h3m1 0h1M1 31.5h1m1 0h3m1 0h1m1 0h1m2 0h1m1 0h2m4 0h1m1 0h3m2 0h2m1 0h2M1 32.5h1m5 0h1m2 0h3m4 0h1m2 0h5m1 0h1m2 0h3M1 33.5h7m1 0h2m1 0h1m1 0h1m3 0h1m1 0h2m1 0h4m1 0h1m3 0h1"/></svg>';
 
+/* =====================================================================
+   DOCUMENTS TÉLÉCHARGÉS
+   Un en-tête commun (logo, nom, site, QR, WhatsApp) et un vrai fichier
+   PDF. Quand le téléphone le permet, il demande où l'enregistrer.
+   ===================================================================== */
+const telAffiche = () => '+226 ' + CONTACT.adminTel.replace(/(\d{2})(?=\d)/g, '$1 ');
+const DOC_CSS = '@page{size:A4;margin:14mm}*{box-sizing:border-box}' +
+  'body{font-family:Georgia,"Times New Roman",serif;color:#111;max-width:190mm;margin:0 auto;padding:0 10px;line-height:1.45;background:#fff}@media print{body{padding:0}}' +
+  '.tete{display:flex;align-items:center;gap:14px;border-bottom:3px double #111;padding-bottom:12px;flex-wrap:wrap}' +
+  '.marque .n{font-size:19px;font-weight:bold;letter-spacing:.04em}.marque .d{font-size:11px;color:#555;font-style:italic}' +
+  '.marque .w{font:11px Helvetica,Arial,sans-serif;color:#111;margin-top:3px}' +
+  '.sceau{width:52px;height:52px;border-radius:13px;background:#EDE4D3;border:1px solid #C9BEA9;display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:7px;flex:0 0 auto}' +
+  '.sceau i{border-radius:50%;background:#FBFAF7;border:1px solid #C9BEA9}.sceau i:nth-child(2),.sceau i:nth-child(3){background:#1C1C1C;border-color:#1C1C1C}' +
+  '.site{margin-left:auto;display:flex;align-items:center;gap:10px;text-align:right}.site .adr{font-family:Helvetica,Arial,sans-serif;font-weight:bold;font-size:15px}' +
+  '.site .sc{font-size:10.5px;color:#333;font-family:Helvetica,Arial,sans-serif}.site svg{display:block;border:1px solid #ccc}' +
+  '.doc-titre{text-align:center;margin:18px 0 4px;font-size:19px;letter-spacing:.12em;text-transform:uppercase}.doc-st{text-align:center;font-size:13.5px;color:#333;margin:0}' +
+  'h2{font-size:14px;letter-spacing:.18em;text-transform:uppercase;margin:18px 0 8px;border-bottom:1px solid #111;padding-bottom:4px;break-after:avoid}' +
+  '.pied{margin-top:20px;border-top:2px solid #111;padding-top:8px;font-size:12px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-family:Helvetica,Arial,sans-serif}' +
+  '.filigrane{position:fixed;top:50%;left:50%;width:120mm;height:120mm;transform:translate(-50%,-50%) rotate(-12deg);opacity:.045;z-index:-1;pointer-events:none;display:grid;grid-template-columns:1fr 1fr;gap:9mm;padding:12mm;border-radius:28mm;background:#1C1C1C}' +
+  '.filigrane i{border-radius:50%;background:#fff}' +
+  '@media print{.noimp{display:none}}.noimp{text-align:center;margin:20px 0}.noimp button{font:inherit;padding:11px 22px;border:1px solid #111;background:#111;color:#fff;cursor:pointer}';
+function docEntete(phraseQr){
+  return '<div class="filigrane" aria-hidden="true"><i></i><i></i><i></i><i></i></div>' +
+    '<div class="tete"><div class="sceau"><i></i><i></i><i></i><i></i></div>' +
+    '<div class="marque"><div class="n">MON CONCOURS</div><div class="d">Préparation aux concours directs du Burkina Faso</div>' +
+    '<div class="w">WhatsApp ' + telAffiche() + ' · difficulté, urgence ou recommandation</div></div>' +
+    '<div class="site"><div><div class="adr">monconcours.vercel.app</div><div class="sc">' + E(phraseQr || 'Scannez pour réviser gratuitement') + '</div></div>' + QR_FEUILLE + '</div></div>';
+}
+function docPied(){
+  return '<div class="pied"><span><b>monconcours.vercel.app</b> · WhatsApp <b>' + telAffiche() + '</b></span><span>Document établi le ' +
+    new Date().toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' }) + '</span></div>';
+}
+function docComplet(titre, css, corps){
+  return '<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>' + E(titre) + '</title><style>' + DOC_CSS + (css || '') + '</style></head><body>' +
+    corps + '<div class="noimp"><button onclick="window.print()">Enregistrer en PDF ou imprimer</button></div>' +
+    '<scr' + 'ipt>setTimeout(function(){window.print();},600);<\/scr' + 'ipt></body></html>';
+}
+
+let libsPdf = null;
+function chargerScript(src){
+  return new Promise((ok, ko) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = ko; document.head.appendChild(s); });
+}
+function chargerLibsPdf(){
+  if(!libsPdf) libsPdf = Promise.all([chargerScript('/lib/html2canvas-1.4.1.min.js'), chargerScript('/lib/jspdf-2.5.2.umd.min.js')])
+    .catch(e => { libsPdf = null; throw e; });
+  return libsPdf;
+}
+const nomFichier = t => (t || 'document').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase().slice(0, 60) + '.pdf';
+
+/* Le HTML du document devient un PDF de pages A4, coupées entre deux blocs
+   (jamais au milieu d'une ligne), avec le pied Mon Concours sur chaque page. */
+async function htmlVersPdf(html){
+  await chargerLibsPdf();
+  const ifr = document.createElement('iframe');
+  ifr.setAttribute('aria-hidden', 'true');
+  ifr.style.cssText = 'position:fixed;left:-12000px;top:0;width:794px;height:1123px;border:0;background:#fff';
+  document.body.appendChild(ifr);
+  try{
+    const doc = ifr.contentDocument;
+    doc.open();
+    doc.write(html.replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace('</head>', '<style>.noimp,.filigrane{display:none!important}body{padding:22px 26px!important;max-width:none!important}</style></head>'));
+    doc.close();
+    await new Promise(r => setTimeout(r, 250));
+    try{ await doc.fonts.ready; }catch(e){}
+    const corps = doc.body;
+    const largeur = 794;
+    const hauteurTotale = Math.ceil(corps.scrollHeight);
+    /* les endroits où l'on peut couper : sous chaque bloc */
+    const bords = new Set(), forces = [];
+    corps.querySelectorAll('*').forEach(el => {
+      const st = doc.defaultView.getComputedStyle(el);
+      if(st.display === 'inline' || st.position === 'fixed') return;
+      const r = el.getBoundingClientRect();
+      if(r.height > 0) bords.add(Math.round(r.bottom + doc.defaultView.scrollY));
+      if(el.classList.contains('saut-page')) forces.push(Math.round(r.top + doc.defaultView.scrollY));
+    });
+    const candidats = [...bords].sort((a, b) => a - b);
+    const canvas = await window.html2canvas(corps, { scale:2, backgroundColor:'#ffffff', width:largeur, windowWidth:largeur,
+      height:hauteurTotale, windowHeight:hauteurTotale, useCORS:true, logging:false });
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ unit:'mm', format:'a4', orientation:'portrait', compress:true });
+    const mmParPx = 210 / largeur;
+    const haut = 8, bas = 14;                       /* marges en mm */
+    const pagePx = Math.floor((297 - haut - bas) / mmParPx);
+    const coupes = [];
+    let debut = 0;
+    while(debut < hauteurTotale - 4){
+      let limite = debut + pagePx;
+      const force = forces.find(f => f > debut + 40 && f < limite);
+      let fin;
+      if(force) fin = force;
+      else if(limite >= hauteurTotale) fin = hauteurTotale;
+      else {
+        const ok = candidats.filter(c => c > debut + pagePx * 0.45 && c <= limite);
+        fin = ok.length ? ok[ok.length - 1] : limite;
+      }
+      coupes.push([debut, fin]); debut = fin;
+    }
+    const total = coupes.length;
+    coupes.forEach(([a, b], i) => {
+      if(i) pdf.addPage();
+      const tranche = document.createElement('canvas');
+      tranche.width = canvas.width; tranche.height = Math.max(1, Math.round((b - a) * 2));
+      const ctx = tranche.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, tranche.width, tranche.height);
+      ctx.drawImage(canvas, 0, Math.round(a * 2), canvas.width, tranche.height, 0, 0, canvas.width, tranche.height);
+      pdf.addImage(tranche.toDataURL('image/jpeg', 0.9), 'JPEG', 0, haut, 210, (b - a) * mmParPx);
+      /* filigrane discret, par-dessus, presque transparent */
+      try{
+        pdf.saveGraphicsState(); pdf.setGState(new pdf.GState({ opacity:0.05 }));
+        pdf.setTextColor(20, 20, 20); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(54);
+        pdf.text('MON CONCOURS', 105, 175, { align:'center', angle:28 });
+        pdf.restoreGraphicsState();
+      }catch(e){}
+      pdf.setDrawColor(17); pdf.setLineWidth(0.3); pdf.line(12, 297 - bas + 3, 198, 297 - bas + 3);
+      pdf.setTextColor(17); pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8.5);
+      pdf.text('Mon Concours · monconcours.vercel.app · WhatsApp ' + telAffiche(), 12, 297 - bas + 8);
+      pdf.text('Page ' + (i + 1) + ' sur ' + total, 198, 297 - bas + 8, { align:'right' });
+    });
+    return pdf.output('blob');
+  } finally { ifr.remove(); }
+}
+
+async function enregistrerBlob(blob, nom, poignee){
+  if(poignee){
+    const w = await poignee.createWritable(); await w.write(blob); await w.close();
+    toast('Fichier enregistré : ' + nom);
+    return;
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = nom; a.rel = 'noopener';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  toast('Téléchargement lancé : ' + nom, 4500);
+}
+/* Demande l'emplacement tout de suite (le téléphone l'exige au moment du
+   toucher), puis prépare le fichier. */
+async function demanderEmplacement(nom){
+  if(!window.showSaveFilePicker) return null;
+  try{
+    return await window.showSaveFilePicker({ suggestedName:nom, types:[{ description:'Document PDF', accept:{ 'application/pdf':['.pdf'] } }] });
+  }catch(e){ if(e && e.name === 'AbortError') throw e; return null; }
+}
+async function sortirDocument(titre, fabrique){
+  const nom = nomFichier(titre);
+  let poignee = null;
+  try{ poignee = await demanderEmplacement(nom); }catch(e){ return; }
+  toast('Préparation du document…', 6000);
+  let html = null;
+  try{ html = await fabrique(); }catch(e){ html = null; }
+  if(!html){ return; }
+  try{
+    const blob = await htmlVersPdf(html);
+    await enregistrerBlob(blob, nom, poignee);
+    pister('DOCUMENT_DOWNLOADED', { titre: titre.slice(0, 40) });
+  }catch(e){
+    /* sans réseau pour les outils PDF : la page imprimable, comme avant */
+    const f = window.open('', '_blank');
+    if(!f){ toast('Le document n\'a pas pu être préparé. Réessayez avec une meilleure connexion.'); return; }
+    f.document.write(html); f.document.close();
+  }
+}
+/* Un fichier déjà prêt (PDF déposé par l'équipe) : même choix d'emplacement */
+async function telechargerUrl(url, nom){
+  let poignee = null;
+  try{ poignee = await demanderEmplacement(nom); }catch(e){ return; }
+  toast('Téléchargement…', 5000);
+  try{
+    const r = await fetch(url); if(!r.ok) throw new Error('http');
+    await enregistrerBlob(await r.blob(), nom, poignee);
+  }catch(e){ window.open(url, '_blank'); }
+}
+
 function feuilleComposition(source){
+  return sortirDocument('Feuille corrigée ' + (S.util.nom || 'candidat'), () => htmlFeuilleComposition(source));
+}
+function htmlFeuilleComposition(source){
   /* source : { grille:[{q, o, bonnes}], reponses:{}, note, duree, date, sujet, concours }
      Sans source, on imprime la composition qui vient d'être corrigée. */
   const S0 = source || { grille:S.grille, reponses:S.reponses, note:S.grilleNote,
@@ -2130,9 +2382,7 @@ function feuilleComposition(source){
 '<scr' + 'ipt>setTimeout(function(){window.print();},600);<\/scr' + 'ipt>' +
 '</body></html>';
 
-  const f = window.open('', '_blank');
-  if(!f){ toast("Autorisez les fenêtres pour télécharger votre feuille."); return; }
-  f.document.write(html); f.document.close();
+  return html;
   pister('SHEET_DOWNLOADED', { note });
 }
 
@@ -2233,21 +2483,20 @@ async function telechargerRecu(id){
 }
 
 /* Rejoue une composition déjà remise pour en réimprimer la feuille. */
-async function feuilleArchive(id){
+function feuilleArchive(id){
   if(!base){ toast('Connexion nécessaire pour retrouver cette copie.'); return; }
-  toast('Préparation de votre feuille…');
-  try{
+  return sortirDocument('Feuille corrigée ' + (S.util.nom || 'candidat'), async () => {
     const { data, error } = await base.rpc('ma_copie', { p_composition: id });
-    if(error || !data || !data.ok) throw new Error('copie');
-    if(data.correction_le){ toast('Composition nationale : la feuille corrigée sera disponible à ' + heureFr(data.correction_le) + '.'); return; }
+    if(error || !data || !data.ok){ toast('Impossible de retrouver cette copie.'); return null; }
+    if(data.correction_le){ toast('Composition nationale : la feuille corrigée sera disponible à ' + heureFr(data.correction_le) + '.'); return null; }
     const grille = [], reponses = {};
     (data.questions || []).forEach((q, i) => {
       grille.push({ q:q.enonce, o:q.options || [], bonnes:q.bonnes || [], m:q.matiere || null });
       if(q.choisies && q.choisies.length) reponses[i] = q.choisies.map(Number);
     });
-    feuilleComposition({ grille, reponses, note:data.note || 0, duree:data.duree || 0,
+    return htmlFeuilleComposition({ grille, reponses, note:data.note || 0, duree:data.duree || 0,
       date:new Date(data.date), sujet:data.sujet, concours:null, seuil:null });
-  }catch(e){ toast("Impossible de retrouver cette copie."); }
+  });
 }
 
 /* Barre de progression : elle avance avec le défilement du cours. */
@@ -2289,7 +2538,7 @@ function ecranLecture(){
     vue().innerHTML = `
     <div class="pad">
       <div class="jauge-lecture" aria-hidden="true"><i id="jauge-lecture-barre"></i></div>
-      <button class="retourhaut" data-go="revisions">Mes révisions</button>
+      <button class="retourhaut" data-go="revisions">Mes cours</button>
       <div class="eyebrow">${commun ? 'Toutes classes' : S.niveau}</div>
       <h1 class="titre">${E(S.matiereOuverte)}</h1>
       <p class="sous" style="margin:8px 0 0">${lot.length} chapitre${lot.length>1?'s':''} · lecture continue</p>
@@ -2340,12 +2589,13 @@ async function chargerRessources(){
     const niveau = S.niveau.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
     /* Un cours sans niveau est commun aux trois classes : il doit apparaitre partout. */
     const { data, error } = await base.from('ressources')
-      .select('id, titre, texte, type_ressource, theme, niveau, fichier_chemin, nom_fichier, taille_octets, matieres(nom, ordre, tous_niveaux)')
+      .select('id, titre, texte, type_ressource, theme, niveau, fichier_chemin, nom_fichier, taille_octets, matieres(nom, ordre, tous_niveaux, niveaux)')
       .eq('statut','publie')
       .or('niveau.eq.' + niveau + ',niveau.is.null')
       .limit(200);
     if(error) throw error;
     S.ressources = (data || [])
+      .filter(r => !(r.matieres && r.matieres.niveaux && !r.matieres.niveaux.includes(niveau)))
       .map(r => ({ ...r,
         matiere: r.matieres ? r.matieres.nom : 'Autres documents',
         rang:    r.matieres ? (r.matieres.ordre || 99) : 99,
@@ -2364,11 +2614,18 @@ async function telechargerRessource(id){
   const r = (S.ressources || []).find(x => x.id === id);
   if(!r || !r.fichier_chemin || !base) return;
   S.erreurCours = '';
+  const nom = r.nom_fichier || nomFichier(r.titre);
+  let poignee = null;
+  try{ poignee = await demanderEmplacement(nom); }catch(e){ return; }
   try{
     const { data, error } = await base.storage.from('cours').createSignedUrl(r.fichier_chemin, 3600);
     if(error || !data) throw error || new Error('lien indisponible');
     pister('COURSE_DOWNLOADED', { titre: r.titre });
-    window.open(data.signedUrl, '_blank');
+    toast('Téléchargement…', 5000);
+    try{
+      const rep = await fetch(data.signedUrl); if(!rep.ok) throw new Error('http');
+      await enregistrerBlob(await rep.blob(), nom, poignee);
+    }catch(e){ window.open(data.signedUrl, '_blank'); }
   }catch(e){
     S.erreurCours = "Le fichier n'a pas pu être ouvert. Réessaie avec une meilleure connexion.";
     if(S.ecran === 'cours') rendre();
@@ -2525,7 +2782,7 @@ function ecranGrille(){
   <div class="grille">
     <div class="gr-tete">
       <div><h1 class="t">Votre feuille de composition</h1>
-        <div class="eyebrow" style="color:#B5AC96">${S.epreuveCompo ? 'Composition nationale' : 'Entraînement type ' + E(S.concours)} · ${nbQ} questions</div>
+        <div class="eyebrow" style="color:#B5AC96">${S.epreuveCompo ? 'Composition nationale (simulation)' : 'Entraînement type ' + E(S.concours)} · ${nbQ} questions</div>
         <div class="gr-outils">
           <button class="gr-outil" data-quitter="1" aria-label="Quitter l'épreuve">${ico('sortie',14)}<span>Quitter</span></button>
           <button class="gr-outil" data-plein-ecran="1" aria-label="Plein écran">${ico('examen',14)}<span>${document.fullscreenElement ? 'Quitter le plein écran' : 'Plein écran'}</span></button>
@@ -2927,7 +3184,7 @@ function ecranCopie(){
     vue().innerHTML = `
     <div class="copie">
       <button class="retourhaut" data-go="aujourdhui">Actualité</button>
-      <div class="eyebrow">Composition nationale · copie remise</div>
+      <div class="eyebrow">Composition nationale (simulation) · copie remise</div>
       <h1 class="titre" style="margin-bottom:10px">Votre copie<br>est remise</h1>
       <div class="cachet-note"><div class="n num">${S.grilleNote ?? 0} / ${S.grille.length}</div>
         <div class="l">votre note</div></div>
@@ -2981,6 +3238,10 @@ function ecranCopie(){
       ? 'Vous êtes au-dessus du seuil du dernier admis de ce concours. Le seuil bouge d\'une année à l\'autre : gardez de la marge.'
       : `Il vous manque ${seuil-n} bonne${seuil-n>1?'s':''} réponse${seuil-n>1?'s':''} pour atteindre le seuil du dernier admis de ce concours.`}</p>` : ''}
 
+    <button class="cta" data-feuille="1" style="margin-top:16px">${ico('telecharger',17)} Télécharger ma feuille corrigée<small>Analyse, recommandations, puis le sujet complet corrigé</small></button>
+    ${fausses.length ? `<button class="cta creux" data-erreursdusoir="1" style="margin-top:9px">Reprendre mes fautes maintenant<small>${fausses.length} question${fausses.length>1?'s':''} dans « Mes erreurs »</small></button>` : ''}
+    <button class="cta creux" data-recommencer="neuve" style="margin-top:9px">Nouvelle composition<small>Le sujet que vous avez le moins composé</small></button>
+
     <div class="bloc">
       <div class="libelle">Ce que dit la copie</div>
       <div class="carte">
@@ -2988,23 +3249,13 @@ function ecranCopie(){
         <div class="mat"><div class="nom">Temps utilisé<em>Sur ${Math.round((S.dureeCompo || 1500)/60)} minutes accordées</em></div><div class="val num">${mmss(Math.max(0, utilise))}</div></div>
         <div class="mat"><div class="nom">Fautes ajoutées à « Mes erreurs »<em>Elles reviennent jusqu'à être acquises</em></div><div class="val num">${fausses.length}</div></div>
         ${blancs.length ? `<div class="mat"><div class="nom">Questions laissées blanches</div><div class="val num">${blancs.length}</div></div>` : ''}
+        ${analyse ? `<div class="copie-retenir"><b>${E(analyse.titre)}</b><p>${E(analyse.texte)}</p></div>` : ''}
       </div>
     </div>
 
     ${blocMatieresCopie(S.grille, S.reponses, n, total)}
 
-    ${analyse ? `<div class="bloc">
-      <div class="libelle">À retenir de cette copie</div>
-      <div class="carte">
-        <div style="font-size:13px;font-weight:600;margin-bottom:6px">${E(analyse.titre)}</div>
-        <p class="sous">${E(analyse.texte)}</p>
-      </div>
-    </div>` : ''}
-
-    <button class="cta" data-feuille="1" style="margin-top:16px">Télécharger ma feuille corrigée<small>Analyse, recommandations, puis le sujet complet corrigé</small></button>
-    ${fausses.length ? `<button class="cta creux" data-erreursdusoir="1" style="margin-top:9px">Reprendre mes fautes maintenant<small>${fausses.length} question${fausses.length>1?'s':''} dans « Mes erreurs »</small></button>` : ''}
-    <button class="cta creux" data-recommencer="neuve" style="margin-top:9px">Nouvelle composition<small>Le sujet que vous avez le moins composé</small></button>
-    <button class="cta discret" data-partage="performance" style="margin-top:9px">${ico("partage",15)} Partager<small>WhatsApp, Facebook, ou copier le lien</small></button>
+    <button class="cta discret" data-partage="performance" style="margin-top:14px">${ico("partage",15)} Partager<small>WhatsApp, Facebook, ou copier le lien</small></button>
   </div>`;
 }
 
@@ -3056,7 +3307,7 @@ function ecranCahier(){
   vue().innerHTML = `
   <div class="pad">
     <div class="eyebrow">Mes erreurs · ce qui reste à corriger</div>
-    <h1 class="titre">${ouvertes()} erreur${ouvertes()>1?'s':''}<br>encore ouverte${ouvertes()>1?'s':''}</h1>
+    <h1 class="titre">${ouvertes()} erreur${ouvertes()>1?'s':''}<br>non traitée${ouvertes()>1?'s':''}</h1>
     ${S.cahierDepuisGrille && list.some(e=>e.session===S.sessionCounter)?`<div class="carte" style="margin-top:12px;border-color:var(--vert-bord);background:var(--vert-fond)">
       <div style="font-size:12.5px;font-weight:600;margin-bottom:4px">Tes erreurs de cette composition, en premier</div>
       <p class="sous">Elles remontent en tête tant que tu ne les as pas revues.</p></div>`:''}
@@ -3331,9 +3582,6 @@ function ecranCompte(){
         </div>
         <p class="sous" style="margin-top:12px;border-left:2px solid var(--or);padding-left:11px">
           ${S.stats && S.stats.serie >= 3 ? 'Trois jours ou plus d\'affilée : c\'est la régularité qui fait la différence. Ne cassez pas la série.' : 'Un peu chaque jour vaut mieux que beaucoup une fois par semaine. Revenez demain, même pour dix questions.'}</p>
-        ${S.util.connecte && S.details ? (S.details.pause_aujourdhui
-          ? '<p class="sous" style="margin-top:10px;font-size:12.5px">Jour de pause aujourd\'hui : ta série est protégée.</p>'
-          : `<button class="cta creux" style="margin-top:12px" data-pause="1">Prendre un jour de pause<small>Malade, en voyage, en examen : ta série ne casse pas · ${Math.max(0, 2 - (S.details.pauses_mois || 0))} sur 2 ce mois-ci</small></button>`) : ''}
       </div>
     </div>
 
@@ -3361,7 +3609,6 @@ function ecranCompte(){
           ${ico("partage",16)} Partager Mon Concours à un camarade<small>Qui prépare le concours lui aussi</small></button>
       </div>
 
-      ${blocConcoursVise()}
       ${blocRappels()}
 
       <div class="carte" style="margin-top:14px;text-align:left">
@@ -3524,8 +3771,8 @@ function carteEpreuve(){
     bouton = `<button class="cta" style="margin-top:12px" data-gagnants="${E(ep.id)}">Voir les résultats et les admis</button>`;
   }
   return `<div class="carte nationale">
-    <div class="cn-tete"><span>${ico('groupe',14)} Composition nationale</span><span class="cn-samedi">Samedis · 17 h</span></div>
-    <h2 class="col-titre">${E(ep.concours || ep.titre.replace(/^Composition nationale · /, ''))}</h2>
+    <div class="cn-tete"><span>${ico('groupe',14)} Composition nationale <small class="sim">(simulation)</small></span><span class="cn-samedi">Samedis · 17 h</span></div>
+    <h2 class="col-titre">${E(ep.concours || ep.titre.replace(/^Composition nationale( \(simulation\))? · /, ''))}</h2>
     ${corps}
     ${ep.recompense ? `<p class="sous" style="margin-top:6px">Récompense : <b>${E(ep.recompense)}</b></p>` : ''}
     ${bouton}
@@ -3546,7 +3793,7 @@ function proposerNationale(){
   v.innerHTML = `
   <div class="panneau pop-nat" role="dialog" aria-modal="true" aria-labelledby="pn-titre">
     <div class="poignee"></div>
-    <div class="eyebrow" style="color:var(--or)">Composition nationale</div>
+    <div class="eyebrow" style="color:var(--or)">Composition nationale <small class="sim">(simulation)</small></div>
     <h3 id="pn-titre">${E(dateLongue(ep.debut_le).replace(/^./, x => x.toUpperCase()))} à ${heureH(ep.debut_le)}</h3>
     <p class="intro">Concours : <b>${E(ep.concours || ep.titre)}</b>. ${ep.nb_questions} questions en ${Math.round(ep.duree/60)} minutes, le même sujet pour tous les candidats, à la même heure.
       ${ep.places} places : les ${ep.places} premiers sont admis, les ${ep.places} suivants passent sur liste d'attente.</p>
@@ -3609,7 +3856,7 @@ async function lancerFil(n){
   S.fil = { liste:null, idx:0, rep:undefined, c:null, justes:0, revues:0, n:+n || 10, attente:false };
   aller('pourtoi');
   try{
-    const { data, error } = await base.rpc('fil_pour_toi', { p_niveau: niveauBase(), p_nombre: S.fil.n });
+    const { data, error } = await base.rpc('fil_pour_toi', { p_niveau: niveauCand(), p_nombre: S.fil.n });
     if(error) throw error;
     S.fil.liste = data || [];
     S.fil.debut = Date.now();
@@ -3846,7 +4093,7 @@ function ecranGagnants(){
   if(!c.ok){ vue().innerHTML = `<div class="pad">${tete}<h1 class="titre">Résultats indisponibles</h1><p class="sous">${E(c.message || 'Vérifiez votre connexion.')}</p></div>`; return; }
   if(!c.termine){
     vue().innerHTML = `<div class="pad">${tete}
-      <div class="eyebrow">Composition nationale</div>
+      <div class="eyebrow">Composition nationale <small class="sim">(simulation)</small></div>
       <h1 class="titre">Résultats à ${heureH(c.fin_le)}</h1>
       ${rebours(c.fin_le)}
       <p class="sous" style="margin-top:8px"><span class="num">${c.participants}</span> candidat${c.participants>1?'s':''} en salle. Le classement, la liste des admis et le corrigé sont publiés à la fin de l'épreuve, pour que personne ne puisse souffler les réponses.</p>
@@ -3878,7 +4125,7 @@ function ecranGagnants(){
   vue().innerHTML = `
   <div class="pad">
     ${tete}
-    <div class="eyebrow">Composition nationale · ${E(jourFr(c.debut_le))}</div>
+    <div class="eyebrow">Composition nationale <small class="sim">(simulation)</small> · ${E(jourFr(c.debut_le))}</div>
     <h1 class="titre">Résultats · ${E(c.concours || c.titre)}</h1>
     <p class="sous" style="margin-top:6px"><span class="num">${c.participants}</span> candidat${c.participants>1?'s':''} · ${c.places} places · moyenne <span class="num">${c.moyenne ?? '—'}/${c.sur}</span></p>
     <div class="trio" style="margin-top:12px">
@@ -3915,58 +4162,36 @@ function ecranGagnants(){
 function resultatsPdf(){
   const c = S.classementEp;
   if(!c || !c.termine){ toast('Les résultats ne sont pas encore publiés.'); return; }
-  const liste = c.classement || [];
-  const admis = liste.filter(l => l.statut === 'admis'), attente = liste.filter(l => l.statut === 'attente');
-  const podium = liste.filter(l => l.rang <= 3).slice(0, 3);
-  const quand = new Date(c.debut_le).toLocaleDateString('fr-FR', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
-  const emis = new Date().toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' });
-  const tableau = l => '<table class="res"><thead><tr><th>Rang</th><th>Nom</th><th>Note</th><th>Temps</th></tr></thead><tbody>' +
-    l.map(x => '<tr><td class="c">' + x.rang + (x.rang === 1 ? 'er' : 'e') + '</td><td>' + E(x.nom) + '</td><td class="c">' + x.score + ' / ' + x.sur + '</td><td class="c">' + mmssLong(x.duree) + '</td></tr>').join('') +
-    '</tbody></table>';
-  const html = '<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Résultats — ' + E(c.titre) + '</title><style>' +
-    '@page{size:A4;margin:14mm}*{box-sizing:border-box}body{font-family:Georgia,"Times New Roman",serif;color:#111;max-width:190mm;margin:0 auto;padding:0 10px;line-height:1.45}@media print{body{padding:0}}' +
-    '.tete{display:flex;align-items:center;gap:14px;border-bottom:3px double #111;padding-bottom:12px;flex-wrap:wrap}' +
-    '.marque .n{font-size:19px;font-weight:bold;letter-spacing:.04em}.marque .d{font-size:11px;color:#555;font-style:italic}' +
-    '.sceau{width:52px;height:52px;border-radius:13px;background:#EDE4D3;border:1px solid #C9BEA9;display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:7px}' +
-    '.sceau i{border-radius:50%;background:#FBFAF7;border:1px solid #C9BEA9}.sceau i:nth-child(2),.sceau i:nth-child(3){background:#1C1C1C;border-color:#1C1C1C}' +
-    '.site{margin-left:auto;display:flex;align-items:center;gap:10px;text-align:right}.site .adr{font-family:Helvetica,Arial,sans-serif;font-weight:bold;font-size:15px}.site .sc{font-size:10.5px;color:#333;font-family:Helvetica,Arial,sans-serif}.site svg{display:block;border:1px solid #ccc}' +
-    '.titre{text-align:center;margin:18px 0 4px;font-size:20px;letter-spacing:.12em;text-transform:uppercase}.st{text-align:center;font-size:13.5px;color:#333;margin:0}' +
-    'h2{font-size:14px;letter-spacing:.18em;text-transform:uppercase;margin:18px 0 8px;border-bottom:1px solid #111;padding-bottom:4px;break-after:avoid}' +
-    '.chiffres{display:flex;gap:8px;margin-top:14px}.chiffres div{flex:1;border:1px solid #bbb;padding:7px;text-align:center}.chiffres b{display:block;font-size:20px}.chiffres span{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#555}' +
-    '.felic{border:2px solid #B08A2E;background:#FBF6EA;padding:12px 16px;margin-top:16px;font-size:14px}.felic b.t{display:block;letter-spacing:.16em;text-transform:uppercase;font-size:12px;color:#8A6A1E;margin-bottom:4px}' +
-    '.felic ol{margin:6px 0 0 18px;padding:0}' +
-    'table.res{width:100%;border-collapse:collapse;font-size:12.5px}table.res th{font-family:Helvetica,Arial,sans-serif;font-size:10px;letter-spacing:.12em;text-transform:uppercase;text-align:left;border-bottom:2px solid #111;padding:4px 8px}' +
-    'table.res td{border-bottom:1px solid #ddd;padding:4px 8px}table.res td.c{text-align:center;white-space:nowrap}table.res tr{break-inside:avoid}' +
-    '.note{font-size:12px;color:#444;margin-top:14px}' +
-    '.filigrane{position:fixed;top:50%;left:50%;width:120mm;height:120mm;transform:translate(-50%,-50%) rotate(-12deg);opacity:.045;z-index:-1;pointer-events:none;display:grid;grid-template-columns:1fr 1fr;gap:9mm;padding:12mm;border-radius:28mm;background:#1C1C1C}' +
-    '.filigrane i{border-radius:50%;background:#fff}' +
-    '.pied{margin-top:20px;border-top:2px solid #111;padding-top:8px;font-size:12px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-family:Helvetica,Arial,sans-serif}' +
-    '@media print{.noimp{display:none}}.noimp{text-align:center;margin:20px 0}.noimp button{font:inherit;padding:11px 22px;border:1px solid #111;background:#111;color:#fff;cursor:pointer}' +
-    '</style></head><body>' +
-    '<div class="filigrane" aria-hidden="true"><i></i><i></i><i></i><i></i></div>' +
-    '<div class="tete"><div class="sceau"><i></i><i></i><i></i><i></i></div>' +
-      '<div class="marque"><div class="n">MON CONCOURS</div><div class="d">Préparation aux concours directs du Burkina Faso</div></div>' +
-      '<div class="site"><div><div class="adr">monconcours.vercel.app</div><div class="sc">Scannez pour composer samedi prochain</div></div>' + QR_FEUILLE + '</div></div>' +
-    '<p class="titre">Composition nationale</p>' +
-    '<p class="st"><b>Résultats · ' + E(c.concours || c.titre) + '</b></p>' +
-    '<p class="st">Épreuve du ' + quand + ' à ' + heureH(c.debut_le) + '</p>' +
-    '<div class="chiffres"><div><b>' + c.participants + '</b><span>candidats</span></div><div><b>' + c.places + '</b><span>places</span></div>' +
-      '<div><b>' + c.admis + '</b><span>admis</span></div><div><b>' + c.attente + '</b><span>liste d\'attente</span></div><div><b>' + (c.moyenne ?? '—') + '</b><span>moyenne / ' + c.sur + '</span></div></div>' +
-    (podium.length ? '<div class="felic"><b class="t">Félicitations</b>Mon Concours félicite chaleureusement les trois premiers de cette composition :<ol>' +
-      podium.map(l => '<li><b>' + E(l.nom) + '</b>, ' + (l.rang === 1 ? 'major' : l.rang + 'e') + ' avec ' + l.score + ' / ' + l.sur + '</li>').join('') + '</ol>' +
-      (c.recompense ? '<p style="margin:6px 0 0">Récompense du major : ' + E(c.recompense) + '.</p>' : '') +
-      '<p style="margin:6px 0 0">Bravo à tous les admis. Pour les autres, la prochaine composition a lieu samedi à 17 h.</p></div>' : '') +
-    (admis.length ? '<h2>Liste des admis par ordre de mérite</h2>' + tableau(admis) : '') +
-    (attente.length ? '<h2>Liste d\'attente</h2>' + tableau(attente) : '') +
-    (c.echoues ? '<p class="note">Non admis : ' + c.echoues + ' candidat' + (c.echoues > 1 ? 's' : '') + '. Leurs noms ne sont pas publiés.</p>' : '') +
-    '<p class="note">À note égale, le candidat le plus rapide est classé devant. Composition d\'entraînement organisée par Mon Concours ; elle ne remplace pas les résultats officiels des concours de la fonction publique.</p>' +
-    '<div class="pied"><span><b>monconcours.vercel.app</b> · WhatsApp <b>+226 ' + CONTACT.adminTel.replace(/(\d{2})(?=\d)/g, '$1 ') + '</b></span><span>Document établi le ' + emis + '</span></div>' +
-    '<div class="noimp"><button onclick="window.print()">Enregistrer en PDF ou imprimer</button></div>' +
-    '<scr' + 'ipt>setTimeout(function(){window.print();},600);<\/scr' + 'ipt></body></html>';
-  const f = window.open('', '_blank');
-  if(!f){ toast('Autorisez les fenêtres pour télécharger les résultats.'); return; }
-  f.document.write(html); f.document.close();
-  pister('NATIONAL_RESULTS_PDF');
+  return sortirDocument('Résultats composition nationale ' + (c.concours || ''), () => {
+    const liste = c.classement || [];
+    const admis = liste.filter(l => l.statut === 'admis'), attente = liste.filter(l => l.statut === 'attente');
+    const podium = liste.filter(l => l.rang <= 3).slice(0, 3);
+    const quand = new Date(c.debut_le).toLocaleDateString('fr-FR', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+    const tableau = l => '<table class="res"><thead><tr><th>Rang</th><th>Nom</th><th>Note</th><th>Temps</th></tr></thead><tbody>' +
+      l.map(x => '<tr><td class="c">' + x.rang + (x.rang === 1 ? 'er' : 'e') + '</td><td>' + E(x.nom) + '</td><td class="c">' + x.score + ' / ' + x.sur + '</td><td class="c">' + mmssLong(x.duree) + '</td></tr>').join('') +
+      '</tbody></table>';
+    const css = '.chiffres{display:flex;gap:8px;margin-top:14px}.chiffres div{flex:1;border:1px solid #bbb;padding:7px;text-align:center}.chiffres b{display:block;font-size:20px}.chiffres span{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#555}' +
+      '.felic{border:2px solid #B08A2E;background:#FBF6EA;padding:12px 16px;margin-top:16px;font-size:14px}.felic b.t{display:block;letter-spacing:.16em;text-transform:uppercase;font-size:12px;color:#8A6A1E;margin-bottom:4px}.felic ol{margin:6px 0 0 18px;padding:0}' +
+      'table.res{width:100%;border-collapse:collapse;font-size:12.5px}table.res th{font-family:Helvetica,Arial,sans-serif;font-size:10px;letter-spacing:.12em;text-transform:uppercase;text-align:left;border-bottom:2px solid #111;padding:4px 8px}' +
+      'table.res td{border-bottom:1px solid #ddd;padding:4px 8px}table.res td.c{text-align:center;white-space:nowrap}table.res tr{break-inside:avoid}.note{font-size:12px;color:#444;margin-top:14px}' +
+      '.sim{font-size:12px;letter-spacing:.06em;text-transform:none;color:#555}';
+    return docComplet('Résultats — ' + (c.concours || c.titre), css,
+      docEntete('Scannez pour composer samedi prochain') +
+      '<p class="doc-titre">Composition nationale <span class="sim">(simulation)</span></p>' +
+      '<p class="doc-st"><b>Résultats · ' + E(c.concours || c.titre) + '</b></p>' +
+      '<p class="doc-st">Épreuve du ' + quand + ' à ' + heureH(c.debut_le) + '</p>' +
+      '<div class="chiffres"><div><b>' + c.participants + '</b><span>candidats</span></div><div><b>' + c.places + '</b><span>places</span></div>' +
+        '<div><b>' + c.admis + '</b><span>admis</span></div><div><b>' + c.attente + '</b><span>liste d\'attente</span></div><div><b>' + (c.moyenne ?? '—') + '</b><span>moyenne / ' + c.sur + '</span></div></div>' +
+      (podium.length ? '<div class="felic"><b class="t">Félicitations</b>Mon Concours félicite chaleureusement les trois premiers de cette composition :<ol>' +
+        podium.map(l => '<li><b>' + E(l.nom) + '</b>, ' + (l.rang === 1 ? 'major' : l.rang + 'e') + ' avec ' + l.score + ' / ' + l.sur + '</li>').join('') + '</ol>' +
+        (c.recompense ? '<p style="margin:6px 0 0">Récompense du major : ' + E(c.recompense) + '.</p>' : '') +
+        '<p style="margin:6px 0 0">Bravo à tous les admis. Pour les autres, la prochaine composition a lieu samedi à 17 h.</p></div>' : '') +
+      (admis.length ? '<h2>Liste des admis par ordre de mérite</h2>' + tableau(admis) : '') +
+      (attente.length ? '<h2>Liste d\'attente</h2>' + tableau(attente) : '') +
+      (c.echoues ? '<p class="note">Non admis : ' + c.echoues + ' candidat' + (c.echoues > 1 ? 's' : '') + '. Leurs noms ne sont pas publiés.</p>' : '') +
+      '<p class="note">À note égale, le candidat le plus rapide est classé devant. Composition d\'entraînement (simulation) organisée par Mon Concours ; elle ne remplace pas les résultats officiels des concours de la fonction publique.</p>' +
+      docPied());
+  });
 }
 async function reagir(val){
   if(!S.util.connecte){ S.modal = 'connexion'; S.erreur = ''; return surcouche(); }
@@ -4046,27 +4271,37 @@ async function chargerRappel(){
   if(!base || !S.util.connecte) return;
   try{ const { data } = await base.rpc('mon_rappel'); S.rappel = data || null; rafraichirSiVisible(); }catch(e){}
 }
-const FREQ_RAPPEL = [['heure','Chaque heure'],['4h','Toutes les 4 h'],['6h','Toutes les 6 h'],['12h','Toutes les 12 h']];
-async function activerRappel(heure, frequence){
-  frequence = frequence || 'quotidien';
+/* dans combien de temps sonne le prochain rappel ? */
+function delaiRappel(h, m){
+  const maintenant = new Date(), cible = new Date();
+  cible.setHours(h, m, 0, 0);
+  if(cible <= maintenant) cible.setDate(cible.getDate() + 1);
+  const min = Math.round((cible - maintenant) / 60000);
+  const hh = Math.floor(min / 60), mm = min % 60;
+  return hh ? hh + ' h' + (mm ? ' ' + String(mm).padStart(2, '0') + ' min' : '') : Math.max(1, mm) + ' min';
+}
+const hm = (h, m) => h + ' h ' + String(m).padStart(2, '0');
+async function activerRappel(heure, minute){
+  heure = +heure; minute = +minute || 0;
   if(!S.util.connecte){ S.modal = 'inscription'; S.erreur = ''; return surcouche(); }
-  if(!pushPossible()){ toast('Ce téléphone ne permet pas les rappels. Installe l\'application depuis Chrome pour les recevoir.', 6000); return; }
+  if(!pushPossible()){ toast('Ce téléphone ne permet pas les rappels. Installez l\'application depuis Chrome pour les recevoir.', 6000); return; }
   try{
     const perm = await Notification.requestPermission();
-    if(perm !== 'granted'){ toast('Les notifications sont refusées. Autorise-les dans les réglages du navigateur.', 6000); return; }
+    if(perm !== 'granted'){ toast('Les notifications sont refusées. Autorisez-les dans les réglages du navigateur.', 6000); return; }
     const reg = await navigator.serviceWorker.ready;
     let sub = await reg.pushManager.getSubscription();
     if(!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: cleVapid(VAPID_PUBLIC) });
     const j = sub.toJSON();
+    /* l'heure choisie est celle du téléphone ; le serveur compte en heure de Ouagadougou (UTC) */
+    const d = new Date(); d.setHours(heure, minute, 0, 0);
     const { data } = await base.rpc('enregistrer_rappel_freq', { p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth,
-      p_heure: +heure, p_minute: 0, p_frequence: frequence });
+      p_heure: d.getUTCHours(), p_minute: d.getUTCMinutes(), p_frequence: 'quotidien' });
     if(!data || !data.ok) throw new Error('refus');
-    S.rappel = { heure:+heure, minute:0, actif:true, frequence }; S.rappelChoix = false;
-    const lib = (FREQ_RAPPEL.find(x => x[0] === frequence) || [])[1];
-    toast(lib ? 'Rappel activé : ' + lib.toLowerCase() + ', de 6 h à 21 h.' : 'Rappel activé chaque jour à ' + heure + ' h.');
-    pister('REMINDER_ENABLED', { heure:+heure, frequence });
+    S.rappel = { heure: d.getUTCHours(), minute: d.getUTCMinutes(), actif:true, frequence:'quotidien' };
+    signalCandidat('Vous serez rappelé dans ' + delaiRappel(heure, minute) + ', à ' + hm(heure, minute) + ', puis chaque jour à la même heure.');
+    pister('REMINDER_ENABLED', { heure, minute });
     rendre();
-  }catch(e){ toast('Le rappel n\'a pas pu être activé. Réessaie avec une meilleure connexion.'); }
+  }catch(e){ toast('Le rappel n\'a pas pu être activé. Réessayez avec une meilleure connexion.'); }
 }
 async function retirerRappel(){
   try{
@@ -4078,18 +4313,20 @@ async function retirerRappel(){
 }
 function blocRappels(){
   if(!S.util.connecte) return '';
-  const r = S.rappel, f = r ? (r.frequence || 'quotidien') : null;
-  const choisir = S.rappelChoix || f === 'quotidien';
+  const r = S.rappel;
+  let h = 19, m = 0;
+  if(r){ const d = new Date(); d.setUTCHours(r.heure, r.minute || 0, 0, 0); h = d.getHours(); m = d.getMinutes(); }
   return `<div class="carte rappel-c" style="margin-top:14px">
-    <div class="libelle" style="margin-bottom:8px"><span>${ico('cloche',14)} Rappels</span>${r ? '<span class="tampon t-ok">Activé</span>' : ''}</div>
-    <div class="puces-rappel" role="group" aria-label="Fréquence des rappels">
-      ${FREQ_RAPPEL.map(([k, l]) => `<button class="${f === k ? 'on' : ''}" data-rappel-freq="${k}" aria-pressed="${f === k}">${l}</button>`).join('')}
-      <button class="${choisir ? 'on' : ''}" data-rappel-choisir="1" aria-pressed="${choisir}">${f === 'quotidien' ? 'Chaque jour à ' + r.heure + ' h' : 'Choisir votre heure'}</button>
+    <div class="libelle" style="margin-bottom:8px"><span>${ico('cloche',14)} Me rappeler</span>${r ? '<span class="tampon t-ok">Activé</span>' : ''}</div>
+    <p class="sous" style="margin:0 0 10px;font-size:12.5px">${r ? 'Chaque jour à <b>' + hm(h, m) + '</b> · prochain rappel dans ' + delaiRappel(h, m) + '.' : 'Choisissez votre heure : le téléphone vous le rappelle chaque jour, même si l\'application est fermée.'}</p>
+    <div class="rappel-heure">
+      <label class="sr" for="rappel-h">Heure</label>
+      <select id="rappel-h">${Array.from({ length:24 }, (_, i) => `<option value="${i}" ${i === h ? 'selected' : ''}>${i} h</option>`).join('')}</select>
+      <label class="sr" for="rappel-m">Minutes</label>
+      <select id="rappel-m">${Array.from({ length:60 }, (_, i) => `<option value="${i}" ${i === m ? 'selected' : ''}>${String(i).padStart(2, '0')}</option>`).join('')}</select>
+      <button class="mini" data-rappel-heure="1">Valider</button>
     </div>
-    ${choisir ? `<div class="rappel-heure">
-      <select id="rappel-h" aria-label="Heure du rappel">${Array.from({ length:17 }, (_, i) => i + 5).map(h => `<option value="${h}" ${(r && f === 'quotidien' ? r.heure : 19) === h ? 'selected' : ''}>${h} h</option>`).join('')}</select>
-      <button class="mini" data-rappel-heure="1">Valider</button></div>` : ''}
-    <p class="sous" style="margin:8px 0 0;font-size:12px">${r ? 'Pas de rappel la nuit. ' : 'De 6 h à 21 h, jamais la nuit. '}${r ? '<button class="lien" style="display:inline;padding:0" data-rappel-retirer="1">Arrêter les rappels</button>' : ''}</p>
+    ${r ? '<button class="lien" style="margin-top:8px;padding:0" data-rappel-retirer="1">Arrêter le rappel</button>' : ''}
   </div>`;
 }
 
@@ -4149,6 +4386,9 @@ function ouvrirLienDirect(){
   else if(/^[0-9a-f-]{36}$/i.test(p.get('question') || '')){ cible = 'question'; S.lienQuestion = p.get('question'); S.qp = null; }
   else if(/^[0-9a-f-]{36}$/i.test(p.get('epreuve') || '')){ cible = 'gagnants'; S.lienEpreuve = p.get('epreuve'); S.classementEp = null; }
   else if(/^[0-9a-f-]{36}$/i.test(p.get('defi') || '')){ cible = 'defi'; S.lienDefi = p.get('defi'); S.defi = { etat:'chargement', id:p.get('defi') }; }
+  else if(/^[0-9a-f-]{36}$/i.test(p.get('copie') || '')){ const id = p.get('copie'); setTimeout(() => feuilleArchive(id), 1500); }
+  else if(p.has('compte')) cible = 'compte';
+  else if(p.has('parcours')) cible = 'parcours';
   if(p.toString()) try{ history.replaceState({ ecran: cible || S.ecran }, '', location.pathname); }catch(e){}
   if(cible){
     S.modalDejaVu = true;
@@ -4185,7 +4425,7 @@ window.addEventListener('popstate', ev => {
 /* Les nouveaux boutons ont leur propre écouteur : le grand aiguillage
    plus bas reste tel quel. */
 document.addEventListener('click', ev => {
-  const t = ev.target.closest('[data-quitter],[data-quitter-oui],[data-quitter-non],[data-son],[data-correction-differee],[data-gagnants],[data-pourtoi],[data-fil-rep],[data-fil-suiv],[data-qdj-rep],[data-qp-rep],[data-signaler],[data-signal-envoi],[data-objectif],[data-rejoindre],[data-rappel-activer],[data-rappel-retirer],[data-reagir],[data-partage-question],[data-partage-qdj],[data-partage-rang],[data-sortir-reprise],[data-inscrire-nat],[data-nat-oui],[data-nat-non],[data-resultats-pdf],[data-telecharger-mat],[data-rappel-freq],[data-rappel-choisir],[data-rappel-heure]');
+  const t = ev.target.closest('[data-quitter],[data-quitter-oui],[data-quitter-non],[data-son],[data-correction-differee],[data-gagnants],[data-pourtoi],[data-fil-rep],[data-fil-suiv],[data-qdj-rep],[data-qp-rep],[data-signaler],[data-signal-envoi],[data-objectif],[data-rejoindre],[data-rappel-activer],[data-rappel-retirer],[data-reagir],[data-partage-question],[data-partage-qdj],[data-partage-rang],[data-sortir-reprise],[data-inscrire-nat],[data-nat-oui],[data-nat-non],[data-resultats-pdf],[data-telecharger-mat],[data-rappel-heure]');
   if(!t) return;
   const d = t.dataset;
   try{ const cle = Object.keys(d)[0]; pister('BUTTON_CLICKED', { valeur: String(d[cle]).slice(0,40) }, cle); }catch(e){}
@@ -4239,7 +4479,7 @@ document.addEventListener('click', ev => {
     pister('NATIONAL_JOINED');
     return aller('grille');
   }
-  if(d.rappelActiver) return activerRappel(d.rappelActiver, 'quotidien');
+  if(d.rappelActiver) return activerRappel(d.rappelActiver, 0);
   if(d.rappelRetirer) return retirerRappel();
   if(d.reagir) return reagir(d.reagir);
   if(d.partageQuestion){
@@ -4267,9 +4507,7 @@ document.addEventListener('click', ev => {
   if(d.natNon){ ecrireReglage('nonNat-' + d.natNon, true); document.getElementById('voile').hidden = true; S.modal = null; pister('NATIONAL_DECLINED'); return; }
   if(d.resultatsPdf) return resultatsPdf();
   if(d.telechargerMat) return telechargerCoursMatiere(decodeURIComponent(d.telechargerMat));
-  if(d.rappelFreq) return activerRappel(8, d.rappelFreq);
-  if(d.rappelChoisir){ S.rappelChoix = !S.rappelChoix; return rendre(); }
-  if(d.rappelHeure){ const h = document.getElementById('rappel-h'); return activerRappel(h ? +h.value : 19, 'quotidien'); }
+  if(d.rappelHeure){ const h = document.getElementById('rappel-h'), m = document.getElementById('rappel-m'); return activerRappel(h ? +h.value : 19, m ? +m.value : 0); }
 });
 
 /* =====================================================================
@@ -4280,14 +4518,14 @@ document.addEventListener('click', ev => {
    ===================================================================== */
 async function chargerDetails(){
   if(!base || !S.util.connecte) return;
-  try{ const { data } = await base.rpc('mes_details'); if(data){ S.details = data; rafraichirSiVisible(); verifierNiveau(); } }catch(e){}
+  try{ const { data } = await base.rpc('mes_details'); if(data){ S.details = data; rafraichirSiVisible(); verifierNiveau(); setTimeout(notificationsDuJour, 2500); } }catch(e){}
 }
 
 /* ---------- les niveaux : Débutant, Confirmé, Prêt pour le concours ---------- */
 const NIVEAUX_C = [
   { nom:'Débutant', crit:() => [] },
-  { nom:'Confirmé', crit:() => [['questions', 300, 'questions résolues', 'questions'], ['compos', 50, 'compositions', 'compositions']] },
-  { nom:'Prêt pour le concours', crit:v => [['qcm', 500, 'questions de QCM (hors compositions)', 'questions de QCM'], ['cours', v.coursTotal, 'cours de votre niveau lus', 'cours lus']] }
+  { nom:'Confirmé', crit:() => [['questions', 500, 'questions résolues (QCM)', 'questions'], ['compos', 150, 'compositions', 'compositions']] },
+  { nom:'Prêt pour le concours', crit:v => [['questions', 4000, 'questions résolues (QCM)', 'questions'], ['compos', 2500, 'compositions', 'compositions'], ['cours', v.coursTotal, 'cours de votre niveau lus', 'cours lus']] }
 ];
 function valeursNiveau(){
   const st = S.stats || {}, dt = S.details || {};
@@ -4312,40 +4550,44 @@ function verifierNiveau(){
   }
   ecrireReglage('niveauAtteint', n);
 }
+/* le chemin Débutant → Confirmé → Prêt, avec des flèches */
+function cheminNiveaux(n){
+  return `<div class="niv-route">${NIVEAUX_C.map((x, i) => {
+    const etat = i < n.i ? 'passe' : (i === n.i ? 'actuel' : 'avenir');
+    return `${i ? `<span class="niv-fleche ${i <= n.i ? 'on' : ''}" aria-hidden="true">→</span>` : ''}
+      <div class="niv-pas ${etat}"><span class="niv-rond">${etat === 'passe' ? '✓' : i + 1}</span><b>${x.nom}</b>${etat === 'actuel' ? '<em>Vous êtes ici</em>' : ''}</div>`;
+  }).join('')}</div>`;
+}
+function criteresNiveau(niv, v){
+  return niv.crit(v).map(([k, c, l, court]) => {
+    const fait = Math.min(v[k], c), pct = c ? Math.round(fait / c * 100) : 100;
+    return `<div class="nd-crit">
+      <div class="nd-l"><span>${l.charAt(0).toUpperCase() + l.slice(1)}</span><b class="num">${nombreFr(v[k])} / ${nombreFr(c)}</b></div>
+      <div class="nd-barre ${pct >= 100 ? 'ok' : ''}"><i style="width:${pct}%"></i></div>
+      <div class="nd-s">${pct >= 100 ? 'Atteint.' : 'Vous avez réalisé ' + nombreFr(v[k]) + ' ' + court + '. Il vous reste ' + nombreFr(c - v[k]) + '.'}</div>
+    </div>`;
+  }).join('');
+}
 function blocNiveau(court){
   if(!S.stats) return '';
   const n = niveauCandidat();
-  const etapes = NIVEAUX_C.map((x, i) => `<span class="niv-etape ${i <= n.i ? 'on' : ''}">${x.nom}</span>`).join('<i class="niv-trait"></i>');
-  const reste = n.suivant ? n.suivant.crit(n.v).filter(([k, c]) => n.v[k] < c).map(([k, c, l]) => `${nombreFr(c - n.v[k])} ${l}`) : [];
   return `<div class="carte niveau-carte" ${court ? 'style="margin-top:12px"' : ''}>
-    <div class="libelle" style="margin-bottom:8px"><span>Votre niveau</span><b style="color:var(--or)">${n.nom}</b></div>
-    <div class="niv-chemin">${etapes}</div>
-    ${n.suivant ? `<p class="sous" style="margin-top:10px;font-size:12.5px">Il vous reste, pour passer « ${n.suivant.nom} » : ${reste.join(' · ')}.</p>`
+    <div class="libelle" style="margin-bottom:10px"><span>Votre niveau</span><b style="color:var(--or)">${n.nom}</b></div>
+    ${cheminNiveaux(n)}
+    ${n.suivant ? `<div class="nd-palier"><div class="nd-nom">Pour atteindre le niveau « ${n.suivant.nom} »</div>${criteresNiveau(n.suivant, n.v)}</div>`
       : '<p class="sous" style="margin-top:10px;font-size:12.5px">Vous avez atteint le dernier niveau. Gardez le rythme jusqu\'au jour du concours.</p>'}
   </div>`;
 }
-/* la page Parcours : ce qui est fait, ce qui reste, en barres */
+/* la page Parcours : tous les paliers qui restent */
 function blocNiveauDetail(){
   if(!S.stats) return '';
   const n = niveauCandidat();
-  const etapes = NIVEAUX_C.map((x, i) => `<span class="niv-etape ${i <= n.i ? 'on' : ''}">${x.nom}</span>`).join('<i class="niv-trait"></i>');
-  const paliers = NIVEAUX_C.slice(n.i + 1).map(niv => `
-    <div class="nd-palier">
-      <div class="nd-nom">Pour devenir « ${niv.nom} »</div>
-      ${niv.crit(n.v).map(([k, c, l, court]) => {
-        const fait = Math.min(n.v[k], c), pct = c ? Math.round(fait / c * 100) : 100;
-        return `<div class="nd-crit">
-          <div class="nd-l"><span>${l.charAt(0).toUpperCase() + l.slice(1)}</span><b class="num">${nombreFr(n.v[k])} / ${nombreFr(c)}</b></div>
-          <div class="nd-barre ${pct >= 100 ? 'ok' : ''}"><i style="width:${pct}%"></i></div>
-          <div class="nd-s">${pct >= 100 ? 'Fait.' : 'Vous avez réalisé ' + nombreFr(n.v[k]) + ' ' + court + '. Il vous reste ' + nombreFr(c - n.v[k]) + '.'}</div>
-        </div>`;
-      }).join('')}
-    </div>`).join('');
+  const paliers = NIVEAUX_C.slice(n.i + 1).map(niv => `<div class="nd-palier"><div class="nd-nom">Pour atteindre le niveau « ${niv.nom} »</div>${criteresNiveau(niv, n.v)}</div>`).join('');
   return `<div class="carte niveau-carte niveau-detail" style="margin-top:14px">
     <p class="nd-titre">Vous êtes au niveau <b>${n.nom.toLowerCase()}</b>.</p>
-    <div class="niv-chemin">${etapes}</div>
+    ${cheminNiveaux(n)}
     ${paliers || '<p class="sous" style="margin-top:10px">Vous avez atteint le dernier niveau. Gardez le rythme jusqu\'au jour du concours.</p>'}
-    ${n.v.coursTotal ? '' : '<p class="sous" style="margin-top:8px;font-size:12px">Les cours lus sont comptés dès que vous lisez un chapitre jusqu\'au bout dans Révisions.</p>'}
+    <p class="sous" style="margin-top:10px;font-size:12px">Tout compte : questions de révision, erreurs reprises, défis et compositions. Un cours est compté comme lu quand vous l'avez lu jusqu'au bout.</p>
   </div>`;
 }
 
@@ -4372,7 +4614,7 @@ function missionDuJour(){
     { t:'Mini-test express : 5 questions sans t\'arrêter', a:'data-pourtoi="5"' },
     { t:'Lire un chapitre de cours, puis faire ses QCM', a:'data-go="revisions"' },
     { t:'Composer en conditions réelles : 50 questions, 25 minutes', a:'data-go="grille"' },
-    { t:'Relever un défi : 10 questions en 5 minutes', a:'data-go="defi"' }
+    { t:'Défier un ami : 10 questions en 5 minutes', a:'data-defi-lancer="1"' }
   ];
   return m[jourAnnee() % m.length];
 }
@@ -4396,33 +4638,25 @@ function blocPlus(){
   const dernier = lireReglages().dernierQcm;
   const pos = dernier && S.qcmPos ? (S.qcmPos[dernier] || 0) : 0;
   return `
-    ${S.util.connecte && S.stats ? `<h2 class="titre-section">Ma progression</h2>${bandeauAccueil()}` : ''}
-    ${S.direct && S.direct.en_ligne >= 3 ? `<p class="direct-ligne"><i></i><span class="num">${S.direct.en_ligne}</span> candidats révisent en ce moment${S.direct.composent >= 2 ? ` · <span class="num">${S.direct.composent}</span> composent` : ''}</p>` : ''}
     ${dernier && pos > 0 ? `<button class="grande" style="margin-top:12px" data-mat="${E(dernier)}">
       <span class="ic">${ico('revisions',19)}</span><span><b>Reprendre ${E(dernier)}</b><span>Question ${pos + 1}, là où tu t'es arrêté</span></span><span class="fl">→</span></button>` : ''}
     ${debutant && S.util.connecte ? `<div class="carte" style="margin-top:12px"><div class="libelle" style="margin-bottom:6px">Pour bien commencer</div>
       <p class="sous" style="margin-bottom:10px">Commence par les bases : quelques questions chaque jour, puis ta première composition. Ton cahier d'erreurs se remplit tout seul et te guide.</p>
       <button class="cta creux" data-retest="1">Refaire le test de niveau</button></div>` : ''}
 
-    <h2 class="titre-section">Défis</h2>
-    <div class="defis-duo">
-      ${S.util.connecte ? `<div class="carte mission">
-        <div class="libelle" style="margin-bottom:6px"><span>${ico('cible',14)} Défi du jour</span></div>
-        <div style="font-weight:600;font-size:14.5px;margin-bottom:10px">${E(mission.t)}</div>
-        <button class="cta creux" ${mission.a}>Relever le défi</button>
-      </div>` : ''}
-      ${blocDefi()}
-    </div>
+    ${S.util.connecte ? `<div class="carte mission" style="margin-top:18px">
+      <div class="libelle" style="margin-bottom:6px"><span>${ico('cible',14)} Défi du jour</span></div>
+      <div style="font-weight:600;font-size:14.5px;margin-bottom:10px">${E(mission.t)}</div>
+      <button class="cta creux" ${mission.a}>Relever le défi</button>
+    </div>` : ''}
 
     <h2 class="titre-section">S'entraîner autrement</h2>
     <div class="raccourcis">
       <button data-go="qdj">${ico('question',18)}<b>Question du jour</b><span>La même pour tous</span></button>
-      ${!debutant ? `<button data-pieges="1">${ico('drapeau',18)}<b>Les plus ratées</b><span>Les 10 pièges de tous</span></button>` : ''}
-      <button data-go="defi">${ico('duel',18)}<b>Défier un ami</b><span>10 questions en 5 min</span></button>
-      <button data-go="top">${ico('trophee',18)}<b>Top 10 de la semaine</b><span>Classement par pseudo</span></button>
+      <button data-defi-lancer="1">${ico('duel',18)}<b>Défier un ami</b><span>Un ou plusieurs, par leur numéro</span></button>
+      <button data-go="top" style="grid-column:1 / -1">${ico('trophee',18)}<b>Top 10 de la semaine</b><span>Défiez les meilleurs</span></button>
     </div>
-    ${blocCitation()}
-    ${S.installer ? `<button class="cta creux" style="margin-top:12px" data-installer="1">${ico('telecharger',16)} Installer l'application<small>Elle s'ouvre comme une appli, même avec peu de réseau</small></button>` : ''}`;
+    ${blocCitation()}`;
 }
 
 /* ---------- fil générique : une liste venue du serveur ---------- */
@@ -4446,7 +4680,7 @@ function lancerFilListe(liste, titre){
 /* ---------- notion du jour ---------- */
 async function chargerNotion(){
   if(!base) return;
-  try{ const { data } = await base.rpc('notion_du_jour', { p_niveau: niveauBase() }); S.notion = data || { vide:true }; }
+  try{ const { data } = await base.rpc('notion_du_jour', { p_niveau: niveauCand() }); S.notion = data || { vide:true }; }
   catch(e){ S.notion = { erreur:true }; }
   if(S.ecran === 'notion') rendre();
 }
@@ -4494,16 +4728,40 @@ window.filtrerQuestions = function(v){
   }, 220);
 };
 
-/* ---------- défis entre amis ---------- */
-async function creerDefi(matiere){
+/* ---------- défier un ou plusieurs amis ---------- */
+/* étape 1 : les matières ; étape 2 : les numéros (ou le pseudo choisi dans le top 10) */
+function nouveauDefi(cible){
+  S.defi = null;
+  S.defiPrep = { matieres:[], numeros:[''], pseudo: cible || null, etape:1 };
+}
+async function creerDefi(){
   if(!S.util.connecte){ S.modal = 'inscription'; S.erreur = ''; return surcouche(); }
+  const p = S.defiPrep || { matieres:[], numeros:[] };
+  const numeros = [...document.querySelectorAll('[data-defi-num]')].map(x => x.value.trim()).filter(Boolean);
+  p.numeros = numeros.length ? numeros : [''];
+  const valides = numeros.filter(n => n.replace(/\D/g, '').length >= 8);
+  if(!valides.length && !p.pseudo){ toast('Entrez au moins un numéro de téléphone (8 chiffres).'); return; }
   S.defi = { etat:'chargement' }; rendre();
   try{
-    const { data } = await base.rpc('creer_defi', { p_matiere: matiere || null, p_niveau: niveauBase() });
+    const { data } = await base.rpc('creer_defi_matieres', { p_matieres: p.matieres, p_niveau: niveauCand() });
     if(!data || !data.ok){ S.defi = { etat:'erreur', message:(data && data.message) || 'Défi impossible.' }; return rendre(); }
-    pister('CHALLENGE_CREATED', { matiere });
-    return ouvrirDefi(data.id);
-  }catch(e){ S.defi = { etat:'erreur', message:'Vérifie ta connexion.' }; rendre(); }
+    const inv = await base.rpc('inviter_defi', { p_defi: data.id, p_telephones: valides, p_pseudos: p.pseudo ? [p.pseudo] : [] });
+    const r = inv.data || {};
+    if(!r.ok){ S.defi = { etat:'erreur', message: r.message || 'Invitation impossible.' }; return rendre(); }
+    pister('CHALLENGE_CREATED', { matieres: p.matieres.length, invites: r.invites || 0 });
+    S.defi = { etat:'envoye', id:data.id, invites:r.invites || 0, introuvables:r.introuvables || [], matieres:p.matieres };
+    S.defiPrep = null;
+    rendre();
+  }catch(e){ S.defi = { etat:'erreur', message:'Vérifiez votre connexion.' }; rendre(); }
+}
+async function repondreDefi(id, accepte){
+  try{
+    const { data } = await base.rpc('repondre_defi', { p_defi: id, p_accepte: accepte });
+    if(!data || !data.ok) throw new Error('refus');
+    pister(accepte ? 'CHALLENGE_ACCEPTED' : 'CHALLENGE_DECLINED');
+    if(accepte) return ouvrirDefi(id);
+    S.defi = { ...S.defi, invitation:'refuse' }; rendre();
+  }catch(e){ toast('Réponse non envoyée. Vérifiez votre connexion.'); }
 }
 async function ouvrirDefi(id){
   S.defi = { etat:'chargement', id };
@@ -4512,7 +4770,12 @@ async function ouvrirDefi(id){
   try{
     const { data } = await base.rpc('ouvrir_defi', { p_defi: id });
     if(!data || !data.ok){ S.defi = { etat: data && data.connexion ? 'connexion' : 'erreur', id, message:(data && data.message) || 'Défi introuvable.', auteur:data && data.auteur, matiere:data && data.matiere }; return rendre(); }
-    if(data.termine){ S.defi = { etat:'resultat', id, ...data, ...(data.resultat || {}) }; return rendre(); }
+    if(data.invitation){ S.defi = { etat:'invitation', ...data, id }; return rendre(); }
+    if(data.termine){
+      const rep = {}; Object.entries(data.reponses || {}).forEach(([k, v]) => { rep[k] = (v || []).map(Number); });
+      S.defi = { etat:'resultat', ...data, ...(data.resultat || {}), rep, corrige:(data.questions || []).map(q => q.bonnes || []) };
+      return rendre();
+    }
     S.defi = { etat:'jeu', id, ...data, rep:{}, chrono:data.restant };
     rendre();
     clearInterval(S.defiTimer);
@@ -4525,7 +4788,7 @@ async function ouvrirDefi(id){
       if(S.defi.chrono === 60){ bip(2); }
       if(S.defi.chrono <= 0){ clearInterval(S.defiTimer); bip(4); remettreDefi(); }
     }, 1000);
-  }catch(e){ S.defi = { etat:'erreur', id, message:'Vérifie ta connexion.' }; rendre(); }
+  }catch(e){ S.defi = { etat:'erreur', id, message:'Vérifiez votre connexion.' }; rendre(); }
 }
 async function remettreDefi(){
   const d = S.defi; if(!d || d.etat !== 'jeu') return;
@@ -4537,38 +4800,100 @@ async function remettreDefi(){
     data.score >= data.sur * 0.7 ? sonJuste() : sonFaux();
     pister('CHALLENGE_DONE', { score:data.score });
     chargerCahier(); chargerJournee();
-  }catch(e){ d.etat = 'jeu'; toast('Envoi impossible. Vérifie ta connexion et réessaie.'); }
+  }catch(e){ d.etat = 'jeu'; toast('Envoi impossible. Vérifiez votre connexion et réessayez.'); }
   rendre();
 }
 function lienDefi(id){ return CONTACT.site + '/?defi=' + encodeURIComponent(id); }
+/* la feuille corrigée du défi, à l'en-tête Mon Concours */
+function feuilleDefi(){
+  const d = S.defi; if(!d || !d.questions || !d.corrige) return;
+  const moi = (d.classement || []).find(l => l.moi);
+  return sortirDocument('Defi ' + (d.matiere || '') + ' ' + (S.util.nom || ''), () => docComplet('Défi · Mon Concours',
+    '.q{break-inside:avoid;margin:0 0 9px;font-size:12.5px}.q ol{margin:3px 0 0 22px;padding:0}.q li{margin:1px 0}' +
+    '.q li.bonne{color:#0E7A54;font-weight:bold}.q li.mauvaise{color:#B4231C;text-decoration:line-through}' +
+    '.res{display:flex;gap:10px;margin-top:14px}.res div{flex:1;border:1px solid #bbb;padding:8px;text-align:center}.res b{display:block;font-size:20px}.res span{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#555}' +
+    'table.cl{width:100%;border-collapse:collapse;font-size:12.5px}table.cl th{font:10px Helvetica,Arial,sans-serif;letter-spacing:.12em;text-transform:uppercase;text-align:left;border-bottom:2px solid #111;padding:4px 8px}table.cl td{border-bottom:1px solid #ddd;padding:4px 8px}',
+    docEntete('Scannez pour relever un défi') +
+    '<p class="doc-titre">Défi entre amis</p><p class="doc-st"><b>' + E(S.util.nom || 'Candidat') + '</b> · ' + E(d.matiere || 'toutes matières') + ' · ' + new Date().toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' }) + '</p>' +
+    '<div class="res"><div><b>' + (d.score ?? '—') + ' / ' + (d.sur || d.questions.length) + '</b><span>note</span></div><div><b>' + mmssLong(d.duree) + '</b><span>temps</span></div>' +
+      (moi ? '<div><b>' + moi.rang + (moi.rang === 1 ? 'er' : 'e') + '</b><span>rang sur ' + (d.participants || (d.classement || []).length) + '</span></div>' : '') + '</div>' +
+    ((d.classement || []).length ? '<h2>Classement</h2><table class="cl"><thead><tr><th>Rang</th><th>Nom</th><th>Note</th><th>Temps</th></tr></thead><tbody>' +
+      d.classement.map(l => '<tr><td>' + l.rang + '</td><td>' + E(l.nom || l.pseudo) + '</td><td>' + l.score + ' / ' + d.sur + '</td><td>' + mmssLong(l.duree) + '</td></tr>').join('') + '</tbody></table>' : '') +
+    '<h2>Le défi corrigé</h2>' +
+    d.questions.map((q, i) => {
+      const b = d.corrige[i] || [], r = (d.rep || {})[i] || [];
+      return '<div class="q"><b>' + (i + 1) + '.</b> ' + E(q.enonce) + '<ol type="a">' + (q.options || []).map((o, k) =>
+        '<li class="' + (b.includes(k) ? 'bonne' : (r.includes(k) ? 'mauvaise' : '')) + '">' + E(o) + (b.includes(k) ? ' ✓' : (r.includes(k) ? ' ✗' : '')) + '</li>').join('') + '</ol></div>';
+    }).join('') + docPied()));
+}
+const STATUT_INVITE = { en_attente:'n\'a pas encore répondu', accepte:'a accepté, compose', refuse:'a refusé le défi', termine:'a terminé' };
 function ecranDefi(){
   const d = S.defi;
   const tete = `<button class="retourhaut" data-go="aujourdhui">Actualité</button>`;
   if(!d){
+    if(!S.defiPrep) nouveauDefi();
+    const p = S.defiPrep;
     const mats = (S.banque || []).map(m => m.nom);
     if(!S.banque && S.banqueEtat !== 'chargement') chargerQuestions();
+    if(p.etape === 1){
+      vue().innerHTML = `<div class="pad">${tete}
+        <div class="eyebrow">Défier ${p.pseudo ? E(p.pseudo) : 'un ami'} · étape 1 sur 2</div>
+        <h1 class="titre">Choisissez les matières</h1>
+        <p class="sous" style="margin:6px 0 14px">10 questions en 5 minutes, les mêmes pour tous les invités. Choisissez une ou plusieurs matières, ou toutes.</p>
+        <div class="choix-mat">
+          <button class="${!p.matieres.length ? 'on' : ''}" data-defi-mat="">Toutes les matières</button>
+          ${mats.map(m => `<button class="${p.matieres.includes(m) ? 'on' : ''}" data-defi-mat="${E(m)}" aria-pressed="${p.matieres.includes(m)}">${E(m)}</button>`).join('')}
+        </div>
+        <button class="cta" style="margin-top:16px" data-defi-etape="2">Continuer</button>
+      </div>`;
+      return;
+    }
     vue().innerHTML = `<div class="pad">${tete}
-      <div class="eyebrow">Défi entre amis</div>
-      <h1 class="titre">10 questions, 5 minutes</h1>
-      <p class="sous" style="margin:6px 0 14px">Tu composes d'abord. Ensuite tu envoies le lien : ton ami reçoit exactement les mêmes questions, avec le même temps. Le classement du défi compare vos notes, puis le temps.</p>
-      <div class="libelle">Choisis la matière</div>
-      <div class="choix-mat">
-        <button data-creer-defi="">Toutes les matières</button>
-        ${mats.map(m => `<button data-creer-defi="${E(m)}">${E(m)}</button>`).join('')}
-      </div>
+      <div class="eyebrow">Défier ${p.pseudo ? E(p.pseudo) : 'un ami'} · étape 2 sur 2</div>
+      <h1 class="titre">${p.pseudo ? 'Envoyer le défi' : 'Qui voulez-vous défier ?'}</h1>
+      <p class="sous" style="margin:6px 0 14px">${p.pseudo ? `<b>${E(p.pseudo)}</b> recevra votre défi dans ses notifications et pourra l'accepter ou le refuser.` : 'Entrez le numéro de téléphone de chaque ami (celui de son compte Mon Concours). Il reçoit une notification sur son téléphone et choisit d\'accepter ou de refuser.'}</p>
+      <p class="sous" style="margin:-6px 0 12px;font-size:12.5px">Matières : <b>${p.matieres.length ? E(p.matieres.join(', ')) : 'toutes'}</b> · <button class="lien" style="display:inline;padding:0" data-defi-etape="1">modifier</button></p>
+      ${p.pseudo ? '' : `<div class="numeros">
+        ${p.numeros.map((n, i) => `<div class="champ num-ami"><label for="num-${i}">Numéro ${i + 1}</label>
+          <div class="prefixe"><span class="ind">+226</span><input id="num-${i}" data-defi-num="${i}" type="tel" inputmode="numeric" maxlength="11" placeholder="70 00 00 00" value="${E(n)}" autocomplete="off"></div></div>`).join('')}
+        ${p.numeros.length < 10 ? `<button class="lien-mini" data-defi-ajout="1">+ Ajouter un numéro</button>` : ''}
+      </div>`}
+      <button class="cta" style="margin-top:16px" data-creer-defi="1">${ico('duel',16)} Envoyer le défi</button>
     </div>`;
     return;
   }
   if(d.etat === 'chargement' || d.etat === 'envoi'){ vue().innerHTML = `<div class="pad">${tete}<div class="squelette large" style="margin-top:16px"></div><p class="sous">${d.etat === 'envoi' ? 'Correction…' : 'Préparation du défi…'}</p></div>`; return; }
+  if(d.etat === 'envoye'){
+    vue().innerHTML = `<div class="pad">${tete}
+      <div class="eyebrow">Défi envoyé</div>
+      <h1 class="titre">${d.invites ? (d.invites > 1 ? d.invites + ' invitations envoyées' : 'Invitation envoyée') : 'Personne n\'a été invité'}</h1>
+      ${d.invites ? `<p class="sous" style="margin-top:6px">Vos amis reçoivent une notification. Vous verrez ici qui accepte, qui refuse, et le classement à la fin.</p>` : ''}
+      ${d.introuvables.length ? `<div class="carte" style="margin-top:12px"><p class="sous">${d.introuvables.length > 1 ? 'Ces numéros ne sont' : 'Ce numéro n\'est'} pas encore inscrit${d.introuvables.length > 1 ? 's' : ''} sur Mon Concours : <b>${d.introuvables.map(n => E(n.replace(/(\d{2})(?=\d)/g, '$1 '))).join(', ')}</b>. Envoyez-lui le lien du défi sur WhatsApp.</p>
+        <button class="cta creux" style="margin-top:10px" data-partage-defi="${E(d.id)}">${ico('partage',16)} Envoyer le lien sur WhatsApp</button></div>` : ''}
+      <button class="cta" style="margin-top:14px" data-defi-ouvrir="${E(d.id)}">Commencer mon défi maintenant</button>
+    </div>`;
+    return;
+  }
+  if(d.etat === 'invitation'){
+    vue().innerHTML = `<div class="pad">${tete}
+      <div class="eyebrow">Défi · ${E(d.matiere || 'toutes matières')}</div>
+      <h1 class="titre">${E(d.auteur || 'Un ami')} vous défie</h1>
+      <p class="sous" style="margin:8px 0 14px">${d.nb || 10} questions en ${Math.round((d.duree || 300) / 60)} minutes, les mêmes pour tous. Le chronomètre démarre dès que vous acceptez.</p>
+      ${d.invitation === 'refuse' ? `<div class="carte"><p class="sous">Vous avez refusé ce défi. Vous pouvez encore changer d'avis.</p></div>` : ''}
+      <button class="cta" style="margin-top:12px" data-defi-accepter="${E(d.id)}">Accepter et commencer</button>
+      ${d.invitation !== 'refuse' ? `<button class="cta creux" style="margin-top:9px" data-defi-refuser="${E(d.id)}">Refuser</button>` : ''}
+    </div>`;
+    return;
+  }
   if(d.etat === 'connexion'){ vue().innerHTML = `<div class="pad">${tete}<div class="eyebrow">Défi${d.matiere ? ' · ' + E(d.matiere) : ''}</div>
-    <h1 class="titre">${d.auteur ? E(d.auteur) + ' te défie' : 'Un ami te défie'}</h1>
-    <p class="sous" style="margin:8px 0 14px">10 questions, 5 minutes, les mêmes pour vous deux. Crée ton compte gratuit (trente secondes) pour relever le défi.</p>
+    <h1 class="titre">${d.auteur ? E(d.auteur) + ' vous défie' : 'Un ami vous défie'}</h1>
+    <p class="sous" style="margin:8px 0 14px">10 questions, 5 minutes, les mêmes pour tous. Créez votre compte gratuit (trente secondes) pour relever le défi.</p>
     <button class="cta" data-modal="inscription">Créer mon compte et relever le défi</button>
     <button class="cta creux" style="margin-top:9px" data-modal="connexion">J'ai déjà un compte</button></div>`; return; }
   if(d.etat === 'erreur'){ vue().innerHTML = `<div class="pad">${tete}<h1 class="titre">Défi indisponible</h1><p class="sous">${E(d.message || '')}</p><button class="cta" style="margin-top:14px" data-defi-nouveau="1">Lancer un autre défi</button></div>`; return; }
   if(d.etat === 'jeu'){
     vue().innerHTML = `
-    <div class="defi-tete"><span class="eyebrow">${d.mien ? 'Ton défi' : 'Défi de ' + E(d.auteur || 'un ami')}${d.matiere ? ' · ' + E(d.matiere) : ''}</span>
+    <div class="defi-tete"><span class="eyebrow">${d.mien ? 'Votre défi' : 'Défi de ' + E(d.auteur || 'un ami')}${d.matiere ? ' · ' + E(d.matiere) : ''}</span>
       <span class="gr-chrono ${couleurChrono(d.chrono, d.duree)}" id="dchrono">${mmss(Math.max(0, d.chrono))}</span></div>
     <div class="pad" style="padding-top:10px">
       ${(d.questions || []).map((q, i) => `<div class="defi-q">
@@ -4580,22 +4905,36 @@ function ecranDefi(){
     </div>`;
     return;
   }
-  /* résultat */
+  /* résultat : classement (podium des trois premiers), invités, corrigé */
   const cl = d.classement || [];
+  const podium = cl.filter(l => l.rang <= 3).slice(0, 3);
+  const nomL = l => E(l.nom || l.pseudo);
   vue().innerHTML = `<div class="pad">${tete}
     <div class="eyebrow">Défi${d.matiere ? ' · ' + E(d.matiere) : ''}</div>
     ${typeof d.score === 'number' ? `<h1 class="titre">${d.score}/${d.sur} en ${mmssLong(d.duree)}</h1>` : '<h1 class="titre">Résultat du défi</h1>'}
-    ${d.corrige && d.questions ? `<div class="carte" style="margin-top:12px">${d.questions.map((q, i) => {
-        const b = d.corrige[i] || [], r = d.rep[i] || [];
+    ${d.questions && d.corrige ? `<button class="cta" style="margin-top:12px" data-defi-feuille="1">${ico('telecharger',16)} Télécharger ma feuille corrigée</button>` : ''}
+    ${podium.length ? `<div class="podium" style="margin-top:16px">
+      ${podium.map(l => `<div class="marche r${l.rang}${l.moi ? ' moi' : ''}">
+        <div class="medaille">${l.rang}</div>
+        <div class="av">${E(initialesPseudo(l.nom || l.pseudo))}</div>
+        <b>${nomL(l)}${l.moi ? ' (vous)' : ''}</b>
+        <div class="note num">${l.score}<small>/${d.sur}</small></div>
+        <div class="duree">${mmssLong(l.duree)}</div>
+      </div>`).join('')}
+    </div>` : ''}
+    ${cl.length > 3 ? `<div class="bloc"><div class="libelle">Classement</div><div class="carte">
+      ${cl.filter(l => l.rang > 3).map(l => `<div class="ligne-rang${l.moi ? ' moi' : ''}"><span class="p num">${l.rang}</span><span class="n">${nomL(l)}${l.moi ? ' (vous)' : ''}<em>${mmssLong(l.duree)}</em></span><span class="s num">${l.score}/${d.sur}</span></div>`).join('')}
+    </div></div>` : ''}
+    ${(d.invites || []).length ? `<div class="bloc"><div class="libelle">Invités</div><div class="carte">
+      ${d.invites.map(i => `<div class="invite-l"><b>${E(i.nom)}</b><span class="st-${i.statut}">${STATUT_INVITE[i.statut] || ''}</span></div>`).join('')}
+    </div></div>` : ''}
+    <button class="cta creux" style="margin-top:12px" data-defi-ouvrir="${E(d.id)}">Actualiser le classement</button>
+    ${d.corrige && d.questions ? `<div class="bloc"><div class="libelle">Le corrigé</div><div class="carte">${d.questions.map((q, i) => {
+        const b = d.corrige[i] || [], r = (d.rep || {})[i] || [];
         const ok = r.length && r.length === b.length && r.every(x => b.includes(x));
-        return `<div class="defi-corr ${ok ? 'ok' : 'ko'}"><b>${i + 1}.</b> ${E(q.enonce)}<br><span>${ok ? '✓' : '✗'} Bonne réponse : ${E(b.map(k => q.options[k]).join(' + '))}</span></div>`;
-      }).join('')}</div>` : ''}
-    <div class="bloc"><div class="libelle">Classement du défi · ${d.participants || cl.length} participant${(d.participants || cl.length) > 1 ? 's' : ''}</div><div class="carte">
-      ${cl.map(l => `<div class="ligne-rang${l.moi ? ' moi' : ''}"><span class="p num">${l.rang}</span><span class="n">${E(l.pseudo)}${l.moi ? ' (toi)' : ''}${l.auteur ? ' · a lancé le défi' : ''}<em>${mmssLong(l.duree)}</em></span><span class="s num">${l.score}/${d.sur}</span></div>`).join('')}
-    </div></div>
-    <button class="cta" style="margin-top:12px" data-partage-defi="${E(d.id)}">${ico('partage',16)} Envoyer ce défi sur WhatsApp</button>
-    <button class="cta creux" style="margin-top:9px" data-copier="${encodeURIComponent(lienDefi(d.id))}">Copier le lien du défi</button>
-    <button class="cta creux" style="margin-top:9px" data-defi-nouveau="1">Lancer un nouveau défi</button>
+        return `<div class="defi-corr ${ok ? 'ok' : 'ko'}"><b>${i + 1}.</b> ${E(q.enonce)}<br><span>${ok ? '✓' : '✗'} Bonne réponse : ${E(b.map(k => (q.options || [])[k]).join(' + '))}</span></div>`;
+      }).join('')}</div></div>` : ''}
+    <button class="cta creux" style="margin-top:12px" data-defi-nouveau="1">Lancer un nouveau défi</button>
   </div>`;
 }
 
@@ -4612,9 +4951,9 @@ function ecranTop(){
   vue().innerHTML = `<div class="pad">${tete}
     <div class="eyebrow">Depuis lundi</div>
     <h1 class="titre">Top 10 de la semaine</h1>
-    <p class="sous" style="margin:6px 0 14px">Classé par points gagnés cette semaine (bonnes réponses, compositions, erreurs refermées). Les candidats apparaissent sous leur pseudo. Remise à zéro chaque lundi.</p>
+    <p class="sous" style="margin:6px 0 14px">Classé par points gagnés cette semaine (bonnes réponses, compositions, erreurs refermées). Les candidats apparaissent sous leur pseudo. Touchez « Défier » pour lancer un défi à l'un d'eux. Remise à zéro chaque lundi.</p>
     ${t.erreur ? '<p class="sous">Le classement n\'a pas pu être chargé.</p>' : `<div class="carte">
-      ${(t.top || []).length ? t.top.map(l => `<div class="ligne-rang${l.moi ? ' moi' : ''}"><span class="p num">${l.rang}</span><span class="n">${E(l.pseudo)}${l.moi ? ' (toi)' : ''}</span><span class="s num">${nombreFr(l.points)} pts</span></div>`).join('') : '<p class="sous">Personne n\'a encore marqué de points cette semaine. Sois le premier.</p>'}
+      ${(t.top || []).length ? t.top.map(l => `<div class="ligne-rang${l.moi ? ' moi' : ''}"><span class="p num">${l.rang}</span><span class="n">${E(l.pseudo)}${l.moi ? ' (vous)' : ''}<em class="num">${nombreFr(l.points)} pts</em></span>${l.moi ? '' : `<button class="mini btn-defier" data-defier-pseudo="${E(l.pseudo)}">${ico('duel',13)} Défier</button>`}</div>`).join('') : '<p class="sous">Personne n\'a encore marqué de points cette semaine. Soyez le premier.</p>'}
     </div>
     ${t.moi && t.moi.rang > 10 ? `<div class="ma-place"><span>Ta place</span><b class="num">${t.moi.rang}<sup>e</sup> sur ${t.participants}</b><span class="num">${nombreFr(t.moi.points)} pts</span></div>` : ''}`}
     <button class="cta" style="margin-top:14px" data-pourtoi="10">Gagner des points maintenant</button>
@@ -4657,16 +4996,7 @@ function ecranParcours(){
     <h1 class="titre">${debut ? 'Depuis le ' + E(new Date(debut).toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' })) : 'Ton chemin'}</h1>
     ${jours ? `<p class="sous" style="margin-top:6px">${jours} jour${jours > 1 ? 's' : ''} depuis ta première séance.</p>` : ''}
     ${blocNiveauDetail()}
-    <div class="trio" style="margin-top:14px">
-      <div><b class="num">${nombreFr(st.questions_resolues || 0)}</b><span>questions</span></div>
-      <div><b class="num">${st.record || 0}</b><span>jours travaillés</span></div>
-      <div><b class="num">${st.compositions || 0}</b><span>compositions</span></div>
-    </div>
-    <div class="trio" style="margin-top:10px">
-      <div><b class="num">${dt.refermees_total || 0}</b><span>erreurs refermées</span></div>
-      <div><b class="num">${dt.defis || 0}</b><span>défis relevés</span></div>
-      <div><b class="num">${dt.propositions || 0}</b><span>questions publiées</span></div>
-    </div>
+
     ${typeof dt.percentile === 'number' ? `<div class="carte" style="margin-top:12px"><div class="libelle" style="margin-bottom:6px">Par rapport aux autres</div>
       <p class="sous">Sur les 30 derniers jours, ta moyenne aux compositions (<b>${dt.moyenne_30j} %</b>) dépasse celle de <b>${dt.percentile} %</b> des candidats de Mon Concours.</p></div>` : ''}
     ${mats.length ? `<div class="bloc"><div class="libelle">Matière par matière</div><div class="carte">
@@ -4751,21 +5081,16 @@ window.addEventListener('appinstalled', () => { S.installer = null; pister('APP_
 function exporterCahier(){
   const list = S.cahier.filter(e => e.suite < 3);
   if(!list.length){ toast('Ton cahier est vide.'); return; }
-  const html = '<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Mon cahier d\'erreurs</title><style>' +
-    '@page{size:A4;margin:14mm}body{font-family:Georgia,serif;color:#111;max-width:190mm;margin:0 auto;padding:0 10px;line-height:1.45}' +
-    'h1{font-size:20px;border-bottom:3px double #111;padding-bottom:8px}.e{break-inside:avoid;border-bottom:1px solid #ccc;padding:9px 0;font-size:13px}' +
-    '.m{font:11px Helvetica,Arial,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#666}.b{color:#0E7A54;font-weight:bold}.n{font-style:italic;color:#444}' +
-    '.pied{margin-top:16px;border-top:2px solid #111;padding-top:6px;font:12px Helvetica,Arial,sans-serif}.noimp{text-align:center;margin:16px}@media print{.noimp{display:none}}</style></head><body>' +
-    '<h1>Mon cahier d\'erreurs · ' + E(S.util.nom || '') + '</h1><p style="font-size:12px">' + list.length + ' erreur(s) encore ouverte(s), le ' + new Date().toLocaleDateString('fr-FR') + '.</p>' +
+  pister('ERRORS_EXPORTED', { n: list.length });
+  return sortirDocument('Cahier d erreurs ' + (S.util.nom || ''), () => docComplet('Mon cahier d\'erreurs',
+    '.e{break-inside:avoid;border-bottom:1px solid #ccc;padding:9px 0;font-size:13px}' +
+    '.m{font:11px Helvetica,Arial,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#666}.b{color:#0E7A54;font-weight:bold}.n{font-style:italic;color:#444}',
+    docEntete() +
+    '<p class="doc-titre">Cahier d\'erreurs</p><p class="doc-st">' + E(S.util.nom || '') + ' · ' + list.length + ' erreur' + (list.length > 1 ? 's' : '') + ' non traitée' + (list.length > 1 ? 's' : '') + ' · ' + new Date().toLocaleDateString('fr-FR') + '</p>' +
     list.map((e, i) => '<div class="e"><div class="m">' + E(e.matiere || '') + ' · ratée ' + e.rate + ' fois</div><b>' + (i + 1) + '.</b> ' + E(e.q) +
       '<br>Bonne réponse : <span class="b">' + E(e.bon) + '</span>' + (e.note ? '<br>' + E(e.note) : '') +
       (e.notePerso ? '<br><span class="n">Ma note : ' + E(e.notePerso) + '</span>' : '') + '</div>').join('') +
-    '<div class="pied"><b>monconcours.vercel.app</b> · WhatsApp <b>+226 ' + CONTACT.adminTel.replace(/(\d{2})(?=\d)/g, '$1 ') + '</b></div>' +
-    '<div class="noimp"><button onclick="window.print()">Enregistrer en PDF ou imprimer</button></div><scr' + 'ipt>setTimeout(function(){window.print();},600);<\/scr' + 'ipt></body></html>';
-  const f = window.open('', '_blank');
-  if(!f){ toast('Autorise les fenêtres pour télécharger ton cahier.'); return; }
-  f.document.write(html); f.document.close();
-  pister('ERRORS_EXPORTED', { n: list.length });
+    docPied()));
 }
 
 /* ---------- mode concentration et plein écran ---------- */
@@ -4791,11 +5116,11 @@ document.addEventListener('fullscreenchange', () => { if(S.ecran === 'grille' &&
 })();
 
 document.addEventListener('click', ev => {
-  const t = ev.target.closest('[data-pieges],[data-similaires],[data-notion-q],[data-ouvrirq],[data-creer-defi],[data-defi-rep],[data-defi-remettre],[data-defi-nouveau],[data-partage-defi],[data-prop-bonne],[data-prop-envoyer],[data-carte-progres],[data-pause],[data-installer],[data-export-cahier],[data-cahier-vue],[data-note-edit],[data-note-save],[data-plein-ecran],[data-concentration],[data-son-global],[data-graph]');
+  const t = ev.target.closest('[data-pieges],[data-similaires],[data-notion-q],[data-ouvrirq],[data-creer-defi],[data-defi-rep],[data-defi-remettre],[data-defi-nouveau],[data-partage-defi],[data-defi-mat],[data-defi-etape],[data-defi-ajout],[data-defi-ouvrir],[data-defi-accepter],[data-defi-refuser],[data-defi-feuille],[data-defier-pseudo],[data-defi-lancer],[data-prop-bonne],[data-prop-envoyer],[data-carte-progres],[data-pause],[data-installer],[data-export-cahier],[data-cahier-vue],[data-note-edit],[data-note-save],[data-plein-ecran],[data-concentration],[data-son-global],[data-graph]');
   if(!t) return;
   const d = t.dataset;
   try{ const cle = Object.keys(d)[0]; pister('BUTTON_CLICKED', { valeur: String(d[cle]).slice(0,40) }, cle); }catch(e){}
-  if(d.pieges) return lancerFilRpc('questions_plus_ratees', { p_niveau: niveauBase() }, 'LES PLUS RATÉES');
+  if(d.pieges) return lancerFilRpc('questions_plus_ratees', { p_niveau: niveauCand() }, 'LES PLUS RATÉES');
   if(d.similaires) return lancerFilRpc('questions_similaires', { p_question: d.similaires, p_nombre: 3 }, 'QUESTIONS SIMILAIRES');
   if(d.notionQ && S.notion) return lancerFilListe(S.notion.questions || [], 'NOTION DU JOUR');
   if(d.ouvrirq){
@@ -4804,7 +5129,30 @@ document.addEventListener('click', ev => {
     S.qp = { id:x.id, enonce:x.q, options:x.o, matiere:x.matiere, charge:true };
     return aller('question');
   }
-  if(d.creerDefi !== undefined) return creerDefi(d.creerDefi);
+  if(d.creerDefi !== undefined) return creerDefi();
+  if(d.defiMat !== undefined){
+    const p = S.defiPrep; if(!p) return;
+    if(!d.defiMat) p.matieres = [];
+    else p.matieres = p.matieres.includes(d.defiMat) ? p.matieres.filter(x => x !== d.defiMat) : p.matieres.concat(d.defiMat);
+    return rendre();
+  }
+  if(d.defiEtape){
+    const p = S.defiPrep; if(!p) return;
+    const nums = [...document.querySelectorAll('[data-defi-num]')].map(x => x.value);
+    if(nums.length) p.numeros = nums;
+    p.etape = +d.defiEtape; return rendre();
+  }
+  if(d.defiAjout){
+    const p = S.defiPrep; if(!p) return;
+    p.numeros = [...document.querySelectorAll('[data-defi-num]')].map(x => x.value).concat('');
+    rendre(); const c = document.getElementById('num-' + (p.numeros.length - 1)); if(c) c.focus(); return;
+  }
+  if(d.defiOuvrir) return ouvrirDefi(d.defiOuvrir);
+  if(d.defiAccepter) return repondreDefi(d.defiAccepter, true);
+  if(d.defiRefuser) return repondreDefi(d.defiRefuser, false);
+  if(d.defiFeuille) return feuilleDefi();
+  if(d.defierPseudo){ nouveauDefi(d.defierPseudo); return aller('defi'); }
+  if(d.defiLancer){ nouveauDefi(); return aller('defi'); }
   if(d.defiRep){
     const [i, k] = d.defiRep.split('-').map(Number), r = S.defi.rep;
     r[i] = (r[i] || []).includes(k) ? r[i].filter(x => x !== k) : [k];
@@ -4815,12 +5163,12 @@ document.addEventListener('click', ev => {
     return;
   }
   if(d.defiRemettre) return remettreDefi();
-  if(d.defiNouveau){ S.defi = null; return rendre(); }
+  if(d.defiNouveau){ nouveauDefi(); return rendre(); }
   if(d.partageDefi){
-    const m = S.defi && S.defi.matiere ? ' en ' + S.defi.matiere : '';
+    const m = S.defi && S.defi.matiere ? ' en ' + S.defi.matiere : (S.defi && S.defi.matieres && S.defi.matieres.length ? ' en ' + S.defi.matieres.join(', ') : '');
     const sc = S.defi && typeof S.defi.score === 'number' ? ` J'ai eu ${S.defi.score}/${S.defi.sur}.` : '';
     pister('CHALLENGE_SHARED');
-    window.open('https://wa.me/?text=' + encodeURIComponent(`Je te défie sur Mon Concours : 10 questions${m} en 5 minutes.${sc} Tu fais mieux ? ${lienDefi(d.partageDefi)}`), '_blank', 'noopener');
+    window.open('https://wa.me/?text=' + encodeURIComponent(`Je te défie sur Mon Concours : 10 questions${m} en 5 minutes.${sc} Inscris-toi gratuitement et relève le défi : ${lienDefi(d.partageDefi)}`), '_blank', 'noopener');
     return;
   }
   if(d.propBonne !== undefined){ S.prop.bonne = +d.propBonne; return ecranProposer(); }
@@ -4893,7 +5241,7 @@ function apptete(){
       : `<button class="bouton-tete" data-modal="inscription" aria-label="Se connecter">${ico('compte',17)}<span>Se connecter</span></button>`}`;
 }
 function annoncer(){
-  const n = {aujourdhui:'Actualité', actualite:'Actualité du matin', revisions:'Mes révisions',
+  const n = {aujourdhui:'Actualité', actualite:'Actualité du matin', revisions:'Mes cours',
     qcm:'Question', grille:'Composition', copie:'Copie corrigée', cahier:'Mon cahier', compte:'Mon compte',
     inscription:'Création de compte', connexion:'Connexion', abonnement:'Formules', paiement:'Paiement',
     test:'Test de niveau', resultat:'Résultat', pourtoi:'Fil pour toi', qdj:'Question du jour',
@@ -5102,7 +5450,8 @@ document.addEventListener('click', ev=>{
       creerCompte(f.nom.trim(), tel, pin).then(r => {
         if(r.erreur){ S.erreur = r.erreur; return surcouche(); }
         S.erreur = ''; S.util = {nom:f.nom.trim(), tel:tel, pin:'', connecte:true};
-        ecrireMemoire({ nom:f.nom.trim(), tel:tel, niveau:S.niveau });
+        S.niveauProfil = niveauBase();
+        ecrireMemoire({ nom:f.nom.trim(), tel:tel, niveauProfil:S.niveauProfil });
         pister('ACCOUNT_CREATED', { niveau: S.niveau });
         S.modal = null; chargerProgression();
         if(S.defi && S.defi.etat === 'connexion') ouvrirDefi(S.defi.id); else aller('aujourdhui');
@@ -5233,7 +5582,7 @@ document.addEventListener('click', ev=>{
   if(d.archive){ feuilleArchive(d.archive); return; }
   if(d.notifs){ ouvrirNotifications(); return; }
   if(d.notifsTout){ marquerNotifsLues(null); return; }
-  if(d.notifLire){ marquerNotifsLues(d.notifLire); return; }
+  if(d.notifLire){ ouvrirNotif((S.notifications || []).find(n => String(n.id) === String(d.notifLire))); return; }
   if(d.partage){ ouvrirPartage(d.partage); return; }
   if(d.partageNatif){ document.getElementById('voile').hidden = true; partager(d.partageNatif); return; }
   if(d.copier){

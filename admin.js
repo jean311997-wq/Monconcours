@@ -2264,8 +2264,8 @@ async function vueCollectives(){
   const defaut = samedi.toISOString().slice(0, 10) + 'T17:00';
 
   $('#vue').innerHTML = `
-    <h2 class="titre">Compositions nationales</h2>
-    <p class="sous">Chaque samedi à 17 h, une composition est programmée automatiquement : le concours change à tour de rôle et le sujet choisi n'a jamais servi en composition nationale. Les candidats s'inscrivent depuis l'application ; à la fin, ils voient leur statut (admis, liste d'attente, non admis), la liste des admis et peuvent télécharger les résultats en PDF.</p>
+    <h2 class="titre">Compositions nationales <small style="font-size:.55em;font-weight:500;opacity:.75">(simulation)</small></h2>
+    <p class="sous">Vous pouvez lancer une composition nationale quand vous voulez : choisissez le concours, le sujet, la date et l'heure, puis « Programmer ». Tous les candidats reçoivent une notification. En plus, chaque samedi à 17 h, une composition est programmée automatiquement : le concours change à tour de rôle et le sujet choisi n'a jamais servi en composition nationale. Les candidats s'inscrivent depuis l'application ; à la fin, ils voient leur statut (admis, liste d'attente, non admis), la liste des admis et peuvent télécharger les résultats en PDF.</p>
 
     <div class="bloc">
       <div class="libelle">Programmer une composition</div>
@@ -2315,7 +2315,7 @@ async function vueCollectives(){
     if(!debut) return signal('Choisissez la date et l\'heure.', 'mal');
     const o = selC && selC.selectedOptions[0];
     const { data, error } = await db.rpc('programmer_nationale', {
-      p_titre: 'Composition nationale · ' + (o ? o.textContent.split(' · ')[0] : ''),
+      p_titre: 'Composition nationale (simulation) · ' + (o ? o.textContent.split(' · ')[0] : ''),
       p_sujet: document.getElementById('ec-sujet').value,
       p_debut: new Date(debut + ':00Z').toISOString(),
       p_recompense: document.getElementById('ec-recompense').value,
