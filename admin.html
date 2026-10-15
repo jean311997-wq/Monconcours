@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="admin.css?v=17">
+<link rel="stylesheet" href="admin.css?v=18">
 </head>
 <body>
 
@@ -31,8 +31,8 @@
 
     <div class="alerte" id="err-connexion" hidden></div>
 
-    <label for="email">Adresse e-mail</label>
-    <input id="email" type="email" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="votre adresse e-mail">
+    <label for="email">Adresse e-mail ou identifiant</label>
+    <input id="email" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="adresse e-mail ou identifiant">
 
     <label for="motdepasse">Mot de passe</label>
     <input id="motdepasse" type="password" autocomplete="current-password" placeholder="••••••••">
@@ -63,6 +63,10 @@
     </div>
   </header>
 
+  <div class="bienvenue" id="bienvenue" hidden>
+    <b>Bienvenue, cher investisseur</b>
+    <span>Tableau de bord d'administration de Mon Concours</span>
+  </div>
   <div class="signal" id="signal"></div>
 
   <div class="corps">
@@ -101,6 +105,6 @@
   </div>
 </div>
 
-<script src="admin-boot.js?v=18"></script>
+<script src="admin-boot.js?v=19"></script>
 </body>
 </html>

@@ -89,6 +89,9 @@ function signal(texte, type){
 /* toute erreur remontée par la base passe par ici */
 function erreur(e, contexte){
   console.error(contexte || '', e);
+  if(A.investisseur && /permission|denied|policy|security|réservé|interdit/i.test(e?.message || '')){
+    return signal('Compte investisseur : consultation seulement.', 'info');
+  }
   signal((contexte ? contexte + ' : ' : '') + (e?.message || 'erreur inconnue'), 'mal');
 }
 
@@ -139,7 +142,8 @@ async function entrer(session){
   if(error){ return refuser("Impossible de lire vos droits : " + error.message); }
 
   A.equipe = (roles || []).some(r => r.role === 'admin' || r.role === 'correcteur');
-  if(!A.equipe){
+  A.investisseur = !A.equipe && (roles || []).some(r => r.role === 'investisseur');
+  if(!A.equipe && !A.investisseur){
     return refuser("Ce compte n'a pas les droits d'administration. Attribuez-lui le rôle « admin » dans la table roles_utilisateur.");
   }
 
@@ -151,8 +155,14 @@ async function entrer(session){
   document.getElementById('admin').hidden = false;
   window.scrollTo(0, 0);
   document.getElementById('qui').textContent =
-    (profil?.nom || session.user.email) + ' · équipe';   // textContent : pas d'interprétation HTML
+    A.investisseur ? 'Investisseur · consultation' : (profil?.nom || session.user.email) + ' · équipe';   // textContent : pas d'interprétation HTML
 
+  if(A.investisseur){
+    document.body.classList.add('mode-investisseur');
+    $$('#menu [data-vue="acces"], #menu [data-vue="musique"]').forEach(b => b.remove());
+    const bienvenue = document.getElementById('bienvenue');
+    if(bienvenue) bienvenue.hidden = false;
+  }
   await chargerReferentiel();
   rendre();
   majPastilles();
@@ -176,15 +186,21 @@ function refuser(message){
   db.auth.signOut();
 }
 
+/* « investisseur Jules » devient l'adresse technique du compte ; une vraie adresse reste telle quelle */
+function identifiantVersEmail(v){
+  v = String(v || '').trim().toLowerCase();
+  if(!v || v.includes('@')) return v;
+  return v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '') + '@candidat.monconcours.bf';
+}
 async function connexion(){
   const bouton = document.getElementById('btn-connexion');
-  const email  = document.getElementById('email').value.trim().toLowerCase();
+  const email  = identifiantVersEmail(document.getElementById('email').value);
   const mdp    = document.getElementById('motdepasse').value;
   const z      = document.getElementById('err-connexion');
   z.hidden = true;
 
   if(!email || !mdp){
-    z.textContent = 'Saisissez votre adresse et votre mot de passe.'; z.hidden = false; return;
+    z.textContent = 'Saisissez votre identifiant et votre mot de passe.'; z.hidden = false; return;
   }
 
   bouton.disabled = true; bouton.textContent = 'Connexion…';
@@ -192,7 +208,7 @@ async function connexion(){
     const { data, error } = await db.auth.signInWithPassword({ email, password: mdp });
     if(error){
       z.textContent = error.message === 'Invalid login credentials'
-        ? "Adresse ou mot de passe incorrect. Attention aux majuscules et au point d'exclamation final."
+        ? "Identifiant ou mot de passe incorrect. Attention aux majuscules."
         : error.message;
       z.hidden = false;
       return;
@@ -416,7 +432,7 @@ async function vueApercu(){
     db.from('actualites').select('id', { count:'exact', head:true }).eq('statut','publie'),
     db.from('documents_importes').select('id', { count:'exact', head:true }),
     db.from('propositions_ia').select('id', { count:'exact', head:true }).eq('statut','a_valider'),
-    db.from('profils').select('id', { count:'exact', head:true }),
+    db.rpc('candidats_page', { p_offset: 0, p_limite: 1 }).then(r => ({ count: r.data ? r.data.total : 0 })),
     db.from('depots').select('id', { count:'exact', head:true }).eq('statut','a_ranger')
   ]);
 
@@ -1889,13 +1905,11 @@ async function vueCandidats(pageC){
     <p class="sous">Qui revient, et le parcours détaillé de chacun.</p>
     <div id="zone-candidats">Chargement…</div>`;
 
-  const [{ data: ret }, { count: totalC }, { data: gens }] = await Promise.all([
+  const [{ data: ret }, { data: pageCand }] = await Promise.all([
     db.rpc('retention'),
-    db.from('profils').select('id', { count:'exact', head:true }),
-    db.from('profils').select('id, nom, telephone, niveau, cree_le')
-      .order('cree_le', { ascending:false })
-      .range(pageC * parPage, pageC * parPage + parPage - 1)
+    db.rpc('candidats_page', { p_offset: pageC * parPage, p_limite: parPage })
   ]);
+  const totalC = pageCand ? pageCand.total : 0, gens = pageCand ? pageCand.liste : [];
 
   const zK = document.getElementById('zone-candidats');
   if(!zK) return;
@@ -1921,12 +1935,12 @@ async function vueCandidats(pageC){
         ${gens.map(p => `<tr>
           <td><b>${E(p.nom)}</b><br><span class="num" style="font-size:11px;color:var(--craie2)">
             ${p.telephone ? '+226 ' + E(p.telephone) : '—'} · ${E(p.niveau || '—')} · ${dateCourte(p.cree_le)}</span></td>
-          <td style="text-align:right"><button class="lien" data-chrono="${E(p.id)}">voir son parcours</button></td>
+          <td style="text-align:right">${A.investisseur ? '' : `<button class="lien" data-chrono="${E(p.id)}">voir son parcours</button>`}</td>
         </tr>`).join('')}</tbody></table>${barrePagination(pageC, parPage, totalC || 0)}`}
       </div>
     </div>
 
-    <div class="bloc">
+    <div class="bloc" ${A.investisseur ? 'hidden' : ''}>
       <div class="libelle">Changer le code d'un candidat<span>après vérification sur WhatsApp</span></div>
       <div class="carte">
         <p class="sous" style="font-size:12.5px;margin-top:0">À faire seulement quand le candidat vous a écrit depuis son propre numéro et que vous êtes sûr de son identité. Le numéro est aussi débloqué s'il avait épuisé ses essais.</p>
@@ -2696,7 +2710,7 @@ async function vueBannissement(){
   $('#vue').innerHTML = `
     <h2 class="titre">Bannissement</h2>
     <p class="sous">Les comptes au comportement anormal sont repérés automatiquement. Un compte banni ne peut plus se connecter ; ses rappels sont coupés. Tout est inscrit au journal.</p>
-    <div class="bloc">
+    <div class="bloc" ${A.investisseur ? 'hidden' : ''}>
       <div class="libelle">Chercher un candidat</div>
       <div class="carte">
         <div class="rangee"><input id="b-cherche" placeholder="Numéro, nom ou pseudo" style="flex:1;min-width:200px"><button class="cta petit" id="b-go">Chercher</button></div>
@@ -2710,13 +2724,13 @@ async function vueBannissement(){
   const ligneCompte = (p, extra) => `<tr>
     <td><b>${E(p.nom || '—')}</b>${p.pseudo ? ` <span style="color:var(--craie2)">· ${E(p.pseudo)}</span>` : ''}<br>
       <span class="num" style="font-size:11px;color:var(--craie2)">${p.telephone ? '+226 ' + E(p.telephone) : 'sans numéro'} · inscrit le ${dateCourte(p.cree_le)}</span>${extra || ''}</td>
-    <td style="text-align:right;white-space:nowrap">${p.banni
+    <td style="text-align:right;white-space:nowrap">${A.investisseur ? (p.banni ? '<span style="color:var(--craie2)">banni</span>' : '') : p.banni
       ? `<button class="lien" data-lever="${E(p.id)}">réintégrer</button>`
       : `<button class="lien danger" data-bannir="${E(p.id)}" data-qui="${E(p.nom || p.telephone || '')}">bannir</button>`}</td></tr>`;
 
   const [{ data: sus, error: e1 }, { data: bans }] = await Promise.all([
     db.rpc('candidats_suspects'),
-    db.from('bannissements').select('*').order('cree_le', { ascending:false }).limit(200)
+    db.from('bannissements').select('id, user_id, nom, motif, jusqu_au, par, cree_le, leve_le, leve_par').order('cree_le', { ascending:false }).limit(200)
   ]);
   if(e1) erreur(e1, 'Détection impossible');
   const actifs = (bans || []).filter(b => !b.leve_le && (!b.jusqu_au || new Date(b.jusqu_au) > new Date()));
@@ -2726,12 +2740,12 @@ async function vueBannissement(){
     : `<table><tbody>${sus.map(p => ligneCompte(p, `<div class="raisons">${(p.raisons || []).map(r => `<span>${E(r)}</span>`).join('')}</div>`)).join('')}</tbody></table>`;
   document.getElementById('b-bannis').innerHTML = !actifs.length ? '<div class="vide">Personne n\'est banni.</div>'
     : `<table><thead><tr><th>Candidat</th><th>Motif</th><th>Jusqu'au</th><th></th></tr></thead><tbody>${actifs.map(b => `<tr>
-        <td><b>${E(b.nom || '—')}</b><br><span class="num" style="font-size:11px;color:var(--craie2)">${b.telephone ? '+226 ' + E(b.telephone) : ''}</span></td>
+        <td><b>${E(b.nom || '—')}</b></td>
         <td>${E(b.motif)}</td><td class="num">${b.jusqu_au ? dateCourte(b.jusqu_au) : 'définitif'}</td>
-        <td style="text-align:right"><button class="lien" data-lever="${E(b.user_id)}">réintégrer</button></td></tr>`).join('')}</tbody></table>`;
+        <td style="text-align:right">${A.investisseur ? '' : `<button class="lien" data-lever="${E(b.user_id)}">réintégrer</button>`}</td></tr>`).join('')}</tbody></table>`;
   document.getElementById('b-histo').innerHTML = !(bans || []).length ? '<div class="vide">Aucun bannissement pour l\'instant.</div>'
     : `<table><thead><tr><th>Date</th><th>Candidat</th><th>Motif</th><th>État</th></tr></thead><tbody>${bans.slice(0, 50).map(b => `<tr>
-        <td class="num">${dateCourte(b.cree_le)}</td><td>${E(b.nom || b.telephone || '—')}</td><td>${E(b.motif)}</td>
+        <td class="num">${dateCourte(b.cree_le)}</td><td>${E(b.nom || '—')}</td><td>${E(b.motif)}</td>
         <td>${b.leve_le ? 'levé le ' + dateCourte(b.leve_le) : (b.jusqu_au && new Date(b.jusqu_au) <= new Date() ? 'expiré' : 'en cours')}</td></tr>`).join('')}</tbody></table>`;
 
   const brancher = () => {
@@ -2862,6 +2876,19 @@ function formulaireNouveauMotDePasse(){
    ÉVÉNEMENTS
    ============================================================ */
 document.getElementById('btn-connexion').onclick = connexion;
+/* investisseur : consultation seulement, les boutons qui modifient sont bloqués avant d'agir */
+const VERBES_ECRITURE = /publier|enregistrer|supprimer|valider|rejeter|bannir|réintégrer|changer|importer|programmer|ajouter|créer|modifier|confirmer|envoyer|ranger|archiver|retirer|déposer|téléverser|générer|corriger|lancer|dépublier|traiter|attribuer|remplacer|effacer/i;
+document.addEventListener('click', ev => {
+  if(!A.investisseur) return;
+  const b = ev.target.closest('#vue button, #vue input[type="file"], #vue label[for], .fenetre button');
+  if(!b || b.closest('#menu')) return;
+  if(b.matches('[data-periode],[data-aller],[data-page-vers],[data-fermer]')) return;
+  const texte = (b.textContent || b.value || b.getAttribute('aria-label') || '') + ' ' + (b.title || '');
+  if(b.matches('input[type="file"], label[for]') || VERBES_ECRITURE.test(texte)){
+    ev.preventDefault(); ev.stopImmediatePropagation();
+    signal('Compte investisseur : consultation seulement.', 'info');
+  }
+}, true);
 document.getElementById('btn-oubli').onclick = motDePasseOublie;
 document.getElementById('motdepasse').addEventListener('keydown',
   e => { if(e.key === 'Enter') connexion(); });
