@@ -1570,3 +1570,53 @@ body.concentration .app{grid-template-columns:minmax(0,1fr) !important;grid-temp
 .btn-defier{flex:none;padding:6px 10px;min-height:32px;font-size:12px}
 .ligne-rang .n em.num{font-style:normal}
 .cn-tete{flex-wrap:wrap;row-gap:4px}
+
+/* =====================================================================
+   15 octobre (2) — tâches cliquables et animations
+   ===================================================================== */
+button.etape{width:100%;text-align:left;align-items:center;border-radius:10px;padding-left:4px;padding-right:4px;color:inherit}
+button.etape:hover{background:var(--ardoise2)}
+button.etape > div:nth-child(2){flex:1;min-width:0}
+.fl-tache{flex:none;font-size:17px;color:var(--craie2);transition:transform .2s}
+button.etape:hover .fl-tache{transform:translateX(3px)}
+button.etape.fait .fl-tache{opacity:.45}
+
+/* une tâche qui vient d'être faite */
+.etape.vient .puce{animation:pop-puce .45s cubic-bezier(.3,1.6,.5,1)}
+@keyframes pop-puce{0%{transform:scale(.4)}60%{transform:scale(1.18)}100%{transform:scale(1)}}
+
+/* la bulle noircie : l'encre se répand */
+.pastille-op.encre{animation:encre-op .24s cubic-bezier(.3,.7,.3,1)}
+@keyframes encre-op{0%{transform:scale(.7);box-shadow:0 0 0 0 rgba(34,31,23,.45)}65%{transform:scale(1.12)}100%{transform:scale(1);box-shadow:0 0 0 7px rgba(34,31,23,0)}}
+
+/* bonne réponse : léger rebond ; mauvaise : petit tremblement */
+.opt.juste{animation:rebond-rep .42s cubic-bezier(.3,1.6,.5,1)}
+.opt.faux{animation:tremble-rep .38s ease}
+@keyframes rebond-rep{0%{transform:scale(1)}40%{transform:scale(1.03)}100%{transform:scale(1)}}
+@keyframes tremble-rep{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(5px)}60%{transform:translateX(-3px)}80%{transform:translateX(2px)}}
+
+/* la copie corrigée : le cachet se pose */
+.copie .cachet-note.pose{animation:cachet-pose .5s cubic-bezier(.2,1.4,.4,1) .85s both}
+@keyframes cachet-pose{0%{transform:rotate(-6deg) scale(1.25)}60%{transform:rotate(1deg) scale(.98)}100%{transform:none}}
+.statut-nat.pose .sn-tampon{animation:tampon-pose .45s cubic-bezier(.2,1.4,.4,1) .2s both}
+@keyframes tampon-pose{0%{transform:rotate(-14deg) scale(2);opacity:0}60%{opacity:1}100%{transform:rotate(-2deg) scale(1);opacity:1}}
+
+/* le podium monte */
+.podium.monte .marche{animation:marche-monte .55s cubic-bezier(.2,1.2,.4,1) both}
+.podium.monte .marche.r3{animation-delay:.05s}
+.podium.monte .marche.r2{animation-delay:.2s}
+.podium.monte .marche.r1{animation-delay:.4s}
+@keyframes marche-monte{0%{transform:translateY(40px);opacity:0}100%{transform:none;opacity:1}}
+canvas.confettis{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:5}
+.statut-nat,.podium{position:relative}
+
+/* barres de niveau qui se remplissent */
+.nd-barre i{transition:width 1s cubic-bezier(.2,.8,.3,1)}
+
+/* tout s'arrête si le téléphone ou le candidat le demande */
+body.sans-anim .etape.vient .puce,body.sans-anim .pastille-op.encre,body.sans-anim .opt.juste,body.sans-anim .opt.faux,
+body.sans-anim .cachet-note.pose,body.sans-anim .statut-nat.pose .sn-tampon,body.sans-anim .podium.monte .marche{animation:none!important}
+body.sans-anim .nd-barre i{transition:none}
+@media (prefers-reduced-motion: reduce){
+  .etape.vient .puce,.pastille-op.encre,.opt.juste,.opt.faux,.cachet-note.pose,.statut-nat.pose .sn-tampon,.podium.monte .marche{animation:none!important}
+}

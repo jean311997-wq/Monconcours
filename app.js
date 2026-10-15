@@ -315,6 +315,7 @@ window.addEventListener('beforeunload', e => {
   if(r.qcmPos && typeof r.qcmPos === 'object') S.qcmPos = r.qcmPos;
   if(r.musique) S.musiqueVoulue = true;   // relancée au premier geste du candidat
   if(r.sonCoupe) S.sonCoupe = true;
+  if(r.sansAnim) S.sansAnim = true;
   if(r.concentration) S.concentration = true;
 })();
 
@@ -1002,7 +1003,7 @@ function brancherBase(){
    OBSERVATION — collecte des événements
    Rien de personnel : ni saisie, ni mot de passe, ni position.
    ===================================================================== */
-const VERSION_APP = 'v18';
+const VERSION_APP = 'v19';
 
 const O = {
   session: null, precedent: null, dernierTemps: Date.now(), entreeEcran: Date.now(),
@@ -1306,6 +1307,14 @@ function blocActuVide(){
   return `<div class="info att"><p>Aucune actualité publiée pour le moment.</p></div>`;
 }
 
+/* une tâche qui vient d'être faite : sa coche s'anime une seule fois */
+function tacheNeuve(k){
+  if(!S.taches[k]) return '';
+  const jour = new Date().toDateString(), r = lireReglages(), vues = r.tachesVues && r.tachesVues.j === jour ? r.tachesVues.l : [];
+  if(vues.includes(k)) return '';
+  ecrireReglage('tachesVues', { j:jour, l:vues.concat(k) });
+  return ' vient';
+}
 function ecranAujourdhui(){
   const f = S.taches.filter(Boolean).length;
   const enCours = !S.corrige && Object.keys(S.reponses).length > 0;
@@ -1343,28 +1352,28 @@ function ecranAujourdhui(){
     <div class="bloc">
       <div class="libelle">Vos tâches du jour<span class="num">${f}/3</span></div>
       <div class="carte">
-        <div class="etape ${S.taches[0]?'fait':'actif'}">
+        <button class="etape ${S.taches[0]?'fait':'actif'}${tacheNeuve(0)}" data-go="actualite">
           <div class="puce">${S.taches[0]?'✓':'1'}</div>
           <div><h3>Lire l'actualité</h3>
-            <p>Cochée quand tu ouvres la page d'actualité.</p>
+            <p>Ouvrez la page d'actualité.</p>
             <span class="dur">3 min</span>${S.taches[0] ? '<span class="etat-tache fait">✓ Déjà effectué</span>' : '<span class="etat-tache">Pas encore effectué</span>'}</div>
-        </div>
-        <div class="etape ${S.taches[1]?'fait':(S.taches[0]?'actif':'')}">
+          <span class="fl-tache" aria-hidden="true">→</span>
+        </button>
+        <button class="etape ${S.taches[1]?'fait':(S.taches[0]?'actif':'')}${tacheNeuve(1)}" data-go="grille">
           <div class="puce">${S.taches[1]?'✓':'2'}</div>
           <div><h3>Composer</h3>
-            <p>Une épreuve chronométrée sur la feuille de réponses. Cochée à la remise de la copie.</p>
+            <p>Une épreuve chronométrée sur la feuille de réponses.</p>
             <span class="dur">25 min</span>${S.taches[1] ? '<span class="etat-tache fait">✓ Déjà effectué</span>' : '<span class="etat-tache">Pas encore effectué</span>'}</div>
-        </div>
-        <div class="etape ${S.taches[2]?'fait':(S.taches[1]?'actif':'')}">
+          <span class="fl-tache" aria-hidden="true">→</span>
+        </button>
+        <button class="etape ${S.taches[2]?'fait':(S.taches[1]?'actif':'')}${tacheNeuve(2)}" data-cahierfreq="1">
           <div class="puce">${S.taches[2]?'✓':'3'}</div>
           <div><h3>Revoir mes erreurs fréquentes</h3>
-            <p>${ouvertes() ? ouvertes() + ' erreur' + (ouvertes()>1?'s':'') + ' ouverte' + (ouvertes()>1?'s':'') + ', les plus ratées en premier.' : 'Aucune erreur ouverte pour l\'instant.'}</p>
+            <p>${ouvertes() ? ouvertes() + ' erreur' + (ouvertes()>1?'s':'') + ' non traitée' + (ouvertes()>1?'s':'') + ', les plus ratées en premier.' : 'Aucune erreur pour l\'instant.'}</p>
             <span class="dur">10 min</span>${S.taches[2] ? '<span class="etat-tache fait">✓ Déjà effectué</span>' : '<span class="etat-tache">Pas encore effectué</span>'}</div>
-        </div>
+          <span class="fl-tache" aria-hidden="true">→</span>
+        </button>
       </div>
-      ${f === 3 ? '' : !S.taches[0] ? `<button class="cta" data-go="actualite" style="margin-top:12px">Lire l'actualité<small>Tâche 1 sur 3</small></button>`
-        : (!S.taches[1] ? `<button class="cta" data-go="grille" style="margin-top:12px">Composer<small>Tâche 2 sur 3</small></button>`
-        : `<button class="cta" data-cahierfreq="1" style="margin-top:12px">Revoir mes erreurs fréquentes<small>Tâche 3 sur 3</small></button>`)}
     </div>
     </div>
     </div>
@@ -2066,6 +2075,76 @@ async function partager(quoi){
 /* QR code vers le site, calculé une fois pour toutes (rien à charger) :
    une feuille imprimée ou partagée amène directement sur Mon Concours. */
 const QR_FEUILLE = '<svg width="78" height="78" aria-label="QR code vers monconcours.vercel.app" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 35 35" shape-rendering="crispEdges"><path fill="#ffffff" d="M0 0h35v35H0z"/><path stroke="#111111" d="M1 1.5h7m3 0h1m2 0h2m1 0h5m2 0h1m2 0h7M1 2.5h1m5 0h1m3 0h1m1 0h4m1 0h1m3 0h2m3 0h1m5 0h1M1 3.5h1m1 0h3m1 0h1m1 0h2m1 0h3m1 0h1m1 0h5m1 0h1m2 0h1m1 0h3m1 0h1M1 4.5h1m1 0h3m1 0h1m1 0h4m2 0h3m3 0h1m1 0h3m1 0h1m1 0h3m1 0h1M1 5.5h1m1 0h3m1 0h1m1 0h1m2 0h1m3 0h1m2 0h1m4 0h1m2 0h1m1 0h3m1 0h1M1 6.5h1m5 0h1m1 0h1m1 0h3m2 0h2m3 0h1m1 0h1m1 0h1m1 0h1m5 0h1M1 7.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M9 8.5h1m1 0h1m1 0h1m2 0h1m5 0h1M1 9.5h1m1 0h5m2 0h2m2 0h1m1 0h3m2 0h1m1 0h3m1 0h5M3 10.5h1m1 0h1m3 0h5m3 0h1m2 0h3m1 0h1m2 0h2m1 0h2m1 0h1M1 11.5h1m2 0h1m1 0h2m3 0h1m1 0h1m2 0h2m1 0h1m2 0h2m2 0h2m1 0h1m1 0h2M1 12.5h1m1 0h1m1 0h1m2 0h2m1 0h2m2 0h2m3 0h7m2 0h3M1 13.5h2m1 0h7m5 0h1m2 0h2m1 0h1m2 0h2m2 0h2m1 0h1M2 14.5h1m1 0h1m6 0h7m3 0h2m1 0h1m2 0h2m1 0h4M2 15.5h1m1 0h1m2 0h2m1 0h1m1 0h4m2 0h3m5 0h2m1 0h4M2 16.5h2m1 0h1m3 0h1m1 0h1m1 0h3m1 0h1m1 0h5m1 0h4m1 0h2M1 17.5h1m2 0h1m1 0h2m1 0h2m2 0h2m3 0h1m1 0h1m2 0h4m1 0h3m2 0h1M3 18.5h1m6 0h1m2 0h3m1 0h4m3 0h1m2 0h2m1 0h2m1 0h1M2 19.5h3m1 0h3m3 0h1m3 0h1m1 0h1m2 0h1m1 0h1m1 0h2m1 0h2m1 0h2M2 20.5h1m3 0h1m1 0h1m2 0h3m1 0h1m1 0h4m3 0h1m2 0h7M1 21.5h10m1 0h3m2 0h1m3 0h6m2 0h2m1 0h2M1 22.5h1m1 0h2m3 0h3m3 0h3m2 0h1m4 0h1m2 0h1m3 0h1m1 0h1M1 23.5h1m1 0h1m1 0h1m1 0h2m3 0h8m1 0h1m1 0h1m2 0h2m3 0h2M1 24.5h1m2 0h3m4 0h2m2 0h2m5 0h2m2 0h1m1 0h4m1 0h1M1 25.5h1m2 0h2m1 0h1m1 0h1m2 0h3m1 0h1m1 0h1m2 0h1m1 0h1m1 0h6m1 0h2M9 26.5h1m1 0h1m2 0h1m4 0h5m1 0h1m3 0h1m1 0h3M1 27.5h7m3 0h1m1 0h1m2 0h1m2 0h1m2 0h1m1 0h2m1 0h1m1 0h1m1 0h1M1 28.5h1m5 0h1m1 0h9m2 0h1m1 0h4m3 0h5M1 29.5h1m1 0h3m1 0h1m1 0h4m1 0h2m3 0h1m2 0h1m2 0h6m1 0h2M1 30.5h1m1 0h3m1 0h1m1 0h2m1 0h1m1 0h1m1 0h2m3 0h4m1 0h1m2 0h3m1 0h1M1 31.5h1m1 0h3m1 0h1m1 0h1m2 0h1m1 0h2m4 0h1m1 0h3m2 0h2m1 0h2M1 32.5h1m5 0h1m2 0h3m4 0h1m2 0h5m1 0h1m2 0h3M1 33.5h7m1 0h2m1 0h1m1 0h1m3 0h1m1 0h2m1 0h4m1 0h1m3 0h1"/></svg>';
+
+/* =====================================================================
+   ANIMATIONS
+   Courtes, utiles, coupées si le téléphone demande moins d'animations
+   ou si le candidat les désactive dans Apparence.
+   ===================================================================== */
+const animOk = () => !S.sansAnim && !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+const dejaAnime = new Set();
+function uneFois(cle){ if(dejaAnime.has(cle)) return false; dejaAnime.add(cle); return true; }
+function compterJusqua(el, cible, duree){
+  if(!el || !animOk()) return;
+  const debut = performance.now(), suffixe = el.dataset.suffixe || '';
+  const pas = now => {
+    const k = Math.min(1, (now - debut) / duree), e = 1 - Math.pow(1 - k, 3);
+    el.textContent = Math.round(cible * e) + suffixe;
+    if(k < 1) requestAnimationFrame(pas);
+  };
+  el.textContent = '0' + suffixe; requestAnimationFrame(pas);
+}
+function confettis(zone){
+  if(!animOk() || !zone) return;
+  const cv = document.createElement('canvas');
+  cv.className = 'confettis'; cv.setAttribute('aria-hidden', 'true');
+  zone.style.position = zone.style.position || 'relative'; zone.appendChild(cv);
+  const r = zone.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1), cx = cv.getContext('2d');
+  cv.width = r.width * dpr; cv.height = r.height * dpr; cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const couleurs = ['#E3A82B', '#0E7A54', '#4FC28F', '#EFE9DA', '#C2392E'];
+  const parts = Array.from({ length: 60 }, () => ({ x: r.width / 2 + (Math.random() - .5) * 60, y: r.height * .4,
+    vx: (Math.random() - .5) * 7, vy: -Math.random() * 7 - 3, a: Math.random() * 6, va: (Math.random() - .5) * .3,
+    w: 5 + Math.random() * 4, h: 8 + Math.random() * 6, c: couleurs[Math.floor(Math.random() * couleurs.length)] }));
+  const fin = performance.now() + 2400;
+  const tour = now => {
+    cx.clearRect(0, 0, r.width, r.height);
+    parts.forEach(p => { p.vy += .18; p.vx *= .99; p.x += p.vx; p.y += p.vy; p.a += p.va;
+      cx.save(); cx.translate(p.x, p.y); cx.rotate(p.a); cx.fillStyle = p.c; cx.globalAlpha = Math.max(0, Math.min(1, (fin - now) / 800));
+      cx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h); cx.restore(); });
+    if(now < fin) requestAnimationFrame(tour); else cv.remove();
+  };
+  requestAnimationFrame(tour);
+}
+function animerApresRendu(){
+  document.body.classList.toggle('sans-anim', !animOk());
+  if(!animOk()) return;
+  /* barres de niveau : elles se remplissent */
+  document.querySelectorAll('.nd-barre i:not([data-vu])').forEach(i => {
+    const w = i.style.width; i.dataset.vu = '1'; i.style.width = '0';
+    requestAnimationFrame(() => requestAnimationFrame(() => { i.style.width = w; }));
+  });
+  /* copie corrigée : la note monte, puis le cachet se pose */
+  const cachet = document.querySelector('.copie .cachet-note');
+  if(cachet && S.ecran === 'copie' && uneFois('copie-' + (S.compositionId || S.derniereCompo || ''))){
+    const n = cachet.querySelector('.n'), txt = n ? n.textContent : '';
+    const m = txt.match(/^(\d+)\s*\/\s*(\d+)/);
+    if(m){ n.dataset.suffixe = ' / ' + m[2]; compterJusqua(n, +m[1], 900); }
+    cachet.classList.add('pose');
+  }
+  /* résultats de la composition nationale : podium, cachet, confettis pour les admis */
+  if(S.ecran === 'gagnants' && S.classementEp && S.classementEp.termine && uneFois('res-' + S.classementEp.id)){
+    const pod = document.querySelector('.podium'); if(pod) pod.classList.add('monte');
+    const st = document.querySelector('.statut-nat'); if(st) st.classList.add('pose');
+    const m = S.classementEp.moi;
+    if(m && (m.statut === 'admis' || m.rang <= 3)) setTimeout(() => confettis(document.querySelector('.statut-nat') || pod), 700);
+  }
+  /* défi terminé : podium, confettis si premier */
+  if(S.ecran === 'defi' && S.defi && S.defi.etat === 'resultat' && uneFois('defi-' + S.defi.id + '-' + (S.defi.participants || 0))){
+    const pod = document.querySelector('.podium'); if(pod) pod.classList.add('monte');
+    const moi = (S.defi.classement || []).find(l => l.moi);
+    if(moi && moi.rang === 1 && (S.defi.classement || []).length > 1) setTimeout(() => confettis(pod), 700);
+  }
+}
 
 /* =====================================================================
    DOCUMENTS TÉLÉCHARGÉS
@@ -5116,7 +5195,7 @@ document.addEventListener('fullscreenchange', () => { if(S.ecran === 'grille' &&
 })();
 
 document.addEventListener('click', ev => {
-  const t = ev.target.closest('[data-pieges],[data-similaires],[data-notion-q],[data-ouvrirq],[data-creer-defi],[data-defi-rep],[data-defi-remettre],[data-defi-nouveau],[data-partage-defi],[data-defi-mat],[data-defi-etape],[data-defi-ajout],[data-defi-ouvrir],[data-defi-accepter],[data-defi-refuser],[data-defi-feuille],[data-defier-pseudo],[data-defi-lancer],[data-prop-bonne],[data-prop-envoyer],[data-carte-progres],[data-pause],[data-installer],[data-export-cahier],[data-cahier-vue],[data-note-edit],[data-note-save],[data-plein-ecran],[data-concentration],[data-son-global],[data-graph]');
+  const t = ev.target.closest('[data-pieges],[data-similaires],[data-notion-q],[data-ouvrirq],[data-creer-defi],[data-defi-rep],[data-defi-remettre],[data-defi-nouveau],[data-partage-defi],[data-defi-mat],[data-defi-etape],[data-defi-ajout],[data-defi-ouvrir],[data-defi-accepter],[data-defi-refuser],[data-defi-feuille],[data-defier-pseudo],[data-defi-lancer],[data-prop-bonne],[data-prop-envoyer],[data-carte-progres],[data-pause],[data-installer],[data-export-cahier],[data-cahier-vue],[data-note-edit],[data-note-save],[data-plein-ecran],[data-concentration],[data-son-global],[data-anim-global],[data-graph]');
   if(!t) return;
   const d = t.dataset;
   try{ const cle = Object.keys(d)[0]; pister('BUTTON_CLICKED', { valeur: String(d[cle]).slice(0,40) }, cle); }catch(e){}
@@ -5209,6 +5288,7 @@ document.addEventListener('click', ev => {
   if(d.concentration){ S.concentration = !S.concentration; ecrireReglage('concentration', S.concentration); return rendre(); }
   if(d.sonGlobal){ S.sonCoupe = !S.sonCoupe; ecrireReglage('sonCoupe', S.sonCoupe); if(!S.sonCoupe) bip(1); return rendre(); }
   if(d.graph){ S.graph = +d.graph; return rendre(); }
+  if(d.animGlobal){ S.sansAnim = !S.sansAnim; ecrireReglage('sansAnim', S.sansAnim); return rendre(); }
 });
 
 /* =====================================================================
@@ -5362,6 +5442,7 @@ function ecranApparence(){
 
     <div class="carte reglages" style="margin-top:16px">
       <button data-son-global="1" aria-pressed="${!S.sonCoupe}">Sons (sonneries, bonnes et mauvaises réponses)<span>${S.sonCoupe ? 'COUPÉS' : 'ACTIVÉS'}</span></button>
+      <button data-anim-global="1" aria-pressed="${!S.sansAnim}">Animations (bulles, notes, podium)<span>${S.sansAnim ? 'COUPÉES' : 'ACTIVÉES'}</span></button>
       <button data-concentration="1" aria-pressed="${!!S.concentration}">Mode concentration<span>${S.concentration ? 'ACTIVÉ' : 'DÉSACTIVÉ'}</span></button>
     </div>
     <p class="sous" style="margin-top:8px;font-size:12.5px">Le mode concentration cache l'en-tête et le menu pendant les questions : il ne reste que la question. Il se règle aussi d'un geste, avec la cible en haut de chaque question.</p>
@@ -5416,6 +5497,7 @@ function rendre(){
       </div>`;
   }
   try{ nav(); apptete(); annoncer(); surcouche(); appliquerConcentration(); }catch(e){ console.error(e); }
+  try{ animerApresRendu(); }catch(e){}
 }
 
 document.addEventListener('click', ev=>{
@@ -5716,7 +5798,10 @@ document.addEventListener('click', ev=>{
     S.reponses[q] = [...l, i].sort();
     sauverEpreuve();
     pister('COMPOSITION_ANSWER_SELECTED', { question: q + 1, total: S.grille.length });
-    return ecranGrille();
+    ecranGrille();
+    const bulle = document.querySelector('[data-b="' + q + '-' + i + '"]');
+    if(bulle) bulle.classList.add('encre');
+    return;
   }
 
   if(d.remettre) return remettre();
