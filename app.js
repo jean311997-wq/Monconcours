@@ -3855,7 +3855,7 @@ async function supprimerCompte(){
   if(!base){ S.supprErreur = 'Pas de connexion au serveur. Réessayez avec du réseau.'; return rendre(); }
   S.supprEnCours = true; S.supprErreur = ''; rendre();
   try{
-    const { data, error } = await base.rpc('supprimer_mon_compte', { p_code: code });
+    const { data, error } = await base.functions.invoke('supprimer-compte', { body: { code } });
     if(error) throw error;
     if(!data || !data.ok){ S.supprEnCours = false; S.supprErreur = (data && data.message) || 'Suppression impossible.'; return rendre(); }
     pister('ACCOUNT_DELETED');
