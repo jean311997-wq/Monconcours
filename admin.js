@@ -20,6 +20,8 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
    ------------------------------------------------------------ */
 let db = null;
 let panne = null;
+/* un lien « mot de passe oublié » ramène ici avec ce marqueur dans l'adresse */
+const RECUPERATION = /type=recovery/.test(location.hash || '');
 
 try{
   if(typeof supabase === 'undefined' || !supabase.createClient){
@@ -98,7 +100,7 @@ const A = {
   session: null,
   profil: null,
   equipe: false,
-  vue: 'apercu',
+  vue: 'tableau',
   ref: { matieres: [], concours: [], chapitres: [] },
   aValider: 0
 };
@@ -106,7 +108,7 @@ const A = {
 /* ============================================================
    CONNEXION
    ============================================================ */
-const VERSION = 'v9 · sujets';
+const VERSION = 'v10 · tableau de bord';
 
 async function demarrer(){
   const rep = document.getElementById('version');
@@ -115,10 +117,12 @@ async function demarrer(){
   if(!db){ afficherPanne(); return; }
 
   const { data } = await db.auth.getSession();
-  if(data.session){ await entrer(data.session); }
+  if(RECUPERATION && data.session){ formulaireNouveauMotDePasse(); }
+  else if(data.session){ await entrer(data.session); }
   else { document.getElementById('portail').hidden = false; }
 
-  db.auth.onAuthStateChange((_e, session) => {
+  db.auth.onAuthStateChange((evenement, session) => {
+    if(evenement === 'PASSWORD_RECOVERY'){ formulaireNouveauMotDePasse(); return; }
     if(!session){
       document.getElementById('admin').hidden = true;
       document.getElementById('portail').hidden = false;
@@ -151,6 +155,17 @@ async function entrer(session){
 
   await chargerReferentiel();
   rendre();
+  majPastilles();
+}
+/* les pastilles du menu (à valider, au dépôt), quelle que soit la page ouverte */
+async function majPastilles(){
+  const [p, dep] = await Promise.all([
+    db.from('propositions_ia').select('id', { count:'exact', head:true }).eq('statut','a_valider'),
+    db.from('depots').select('id', { count:'exact', head:true }).eq('statut','a_ranger')
+  ]);
+  const pv = document.getElementById('pastille-validation'), pd = document.getElementById('pastille-depot');
+  if(pv){ pv.hidden = !p.count; pv.textContent = p.count || ''; }
+  if(pd){ pd.hidden = !dep.count; pd.textContent = dep.count || ''; }
 }
 
 function refuser(message){
@@ -222,12 +237,12 @@ const statut = s => `<span class="marque-statut s-${E(s)}">${E((s||'').replace(/
    ============================================================ */
 function rendre(){
   $$('#menu button').forEach(b => b.classList.toggle('on', b.dataset.vue === A.vue));
-  ({ apercu:vueApercu, analyse:vueAnalyse, direct:vueDirect, comportement:vueComportement,
+  ({ tableau:vueTableau, bannissement:vueBannissement, acces:vueAcces, apercu:vueApercu, analyse:vueAnalyse, direct:vueDirect, comportement:vueComportement,
      pedagogie:vuePedagogie, candidats:vueCandidats,
      depot:vueDepot, import:vueImport, bibliotheque:vueBibliotheque,
      validation:vueValidation, questions:vueQuestions, sujets:vueSujets, actualites:vueActualites,
      referentiel:vueReferentiel, journal:vueJournal, musique:vueMusique, paiements:vuePaiements,
-     collectives:vueCollectives, signalements:vueSignalements, indicateurs:vueIndicateurs, propositions:vuePropositions }[A.vue] || vueApercu)();
+     collectives:vueCollectives, signalements:vueSignalements, indicateurs:vueIndicateurs, propositions:vuePropositions }[A.vue] || vueTableau)();
   $('#vue').scrollTop = 0;
 }
 
@@ -385,7 +400,7 @@ async function vuePaiements(){
 /* ---------- vue d'ensemble ---------- */
 async function vueApercu(){
   $('#vue').innerHTML = `
-    <h2 class="titre">Vue d'ensemble</h2>
+    <h2 class="titre">État du contenu</h2>
     <p class="sous">L'état du contenu à cet instant. Tout ce qui n'est pas publié reste invisible pour les candidats.</p>
     <div class="bloc"><div class="compteurs" id="compteurs">
       <div class="carte">Chargement…</div></div></div>
@@ -1673,7 +1688,7 @@ function choixPeriode(){
 /* ---------- vue générale ---------- */
 async function vueAnalyse(){
   $('#vue').innerHTML = `
-    <h2 class="titre">Analyse</h2>
+    <h2 class="titre">Entrée et compositions</h2>
     <p class="sous">Tout ce qui suit provient des actions réellement observées. Aucun chiffre n'est estimé.</p>
     ${choixPeriode()}
     <div id="zone-analyse">Chargement…</div>`;
@@ -1754,7 +1769,7 @@ async function vueAnalyse(){
 /* ---------- comportement : écrans et boutons ---------- */
 async function vueComportement(){
   $('#vue').innerHTML = `
-    <h2 class="titre">Comportement</h2>
+    <h2 class="titre">Écrans et boutons</h2>
     <p class="sous">Où ils vont, sur quoi ils appuient, et surtout ce qu'ils ignorent.</p>
     ${choixPeriode()}
     <div id="zone-comportement">Chargement…</div>`;
@@ -1805,7 +1820,7 @@ async function vueComportement(){
 /* ---------- pédagogie : les questions qui bloquent ---------- */
 async function vuePedagogie(){
   $('#vue').innerHTML = `
-    <h2 class="titre">Pédagogie</h2>
+    <h2 class="titre">Questions difficiles</h2>
     <p class="sous">La difficulté réelle, mesurée sur les réponses des candidats — pas celle qu'on avait supposée.</p>
     <div id="zone-pedago">Chargement…</div>`;
 
@@ -2455,10 +2470,399 @@ async function vuePropositions(){
   });
 }
 
+/* =====================================================================
+   TABLEAU DE BORD — la croissance, qui est là, où ils passent leur temps
+   ===================================================================== */
+const NOMS_ECRANS = {
+  aujourdhui:'Actualité (accueil)', actualite:'Article d\'actualité', revisions:'Mes cours', cours:'Anciens sujets et recherche',
+  lecture:'Lecture d\'un cours', qcm:'QCM de révision', grille:'Composition (feuille)', copie:'Copie corrigée',
+  cahier:'Mes erreurs', compte:'Mon compte', parcours:'Mon parcours', defi:'Défis entre amis', top:'Top 10',
+  qdj:'Question du jour', pourtoi:'Fil « Pour toi »', gagnants:'Résultats nationale', notion:'Notion du jour',
+  recherche:'Recherche', proposer:'Proposer une question', horsligne:'Révision hors ligne', suppression:'Suppression du compte',
+  engagement:'Accueil découverte', testIntro:'Test d\'entrée (début)', test:'Test d\'entrée', resultat:'Résultat du test',
+  inscription:'Inscription', connexion:'Connexion', apparence:'Apparence', abonnement:'Abonnement', paiement:'Paiement',
+  question:'Question partagée'
+};
+const NOMS_ACTIONS = {
+  COMPOSITION_SUBMITTED:'Copies remises', COMPOSITION_COMPLETED:'Compositions terminées', COMPOSITION_ANSWER_SELECTED:'Cases noircies en composition',
+  COMPOSITION_QUIT:'Compositions quittées', COMPOSITION_RESTARTED:'Compositions recommencées',
+  QUESTION_ANSWERED:'Questions de révision répondues', DAILY_QUESTION_ANSWERED:'Questions du jour répondues',
+  FEED_OPENED:'Fil « Pour toi » ouvert', FEED_ANSWERED:'Questions du fil répondues',
+  COURSE_OPENED:'Cours ouverts', COURSE_STARTED:'Cours commencés', COURSE_READ:'Cours lus jusqu\'au bout', COURSE_DOWNLOADED:'Cours téléchargés',
+  SHEET_DOWNLOADED:'Feuilles de composition téléchargées', DOCUMENT_DOWNLOADED:'Documents PDF téléchargés',
+  ERRORS_OPENED:'« Mes erreurs » ouvert', ERRORS_EXPORTED:'Cahiers d\'erreurs exportés',
+  CHALLENGE_CREATED:'Défis créés', CHALLENGE_DONE:'Défis joués', CHALLENGE_SHARED:'Défis envoyés sur WhatsApp',
+  CHALLENGE_ACCEPTED:'Défis acceptés', CHALLENGE_DECLINED:'Défis refusés',
+  NATIONAL_REGISTERED:'Inscriptions à la nationale', NATIONAL_DECLINED:'Nationale refusée',
+  RESULT_CARD_SHARED:'Cartes de résultat partagées', PROGRESS_CARD_SHARED:'Cartes de progression partagées',
+  QUESTION_SHARED:'Questions partagées', DAILY_QUESTION_SHARED:'Questions du jour partagées', SHARE:'Partages', SHARE_OPENED:'Menu de partage ouvert',
+  BADGE_EARNED:'Badges gagnés', LEVEL_REACHED:'Niveaux atteints', CERTIFICATE_DOWNLOADED:'Attestations téléchargées',
+  OFFLINE_PACK_DOWNLOADED:'Packs hors ligne téléchargés', REMINDER_ENABLED:'Rappels activés', DAILY_GOAL_SET:'Objectifs du jour choisis',
+  ACCOUNT_CREATED:'Comptes créés', ACCOUNT_DELETED:'Comptes supprimés', LEVEL_CHANGED:'Changements de niveau',
+  DIAGNOSTIC_STARTED:'Tests d\'entrée commencés', DIAGNOSTIC_COMPLETED:'Tests d\'entrée terminés', DIAGNOSTIC_RESULT_VIEWED:'Résultats du test vus',
+  DIAGNOSTIC_ANSWER_SELECTED:'Réponses au test d\'entrée', ONBOARDING_STEP_COMPLETED:'Étapes d\'accueil franchies',
+  NEWS_LIST_VIEWED:'Liste des actualités vue', QUESTION_REPORTED:'Questions signalées', TARGET_EXAM_SET:'Concours visé choisi',
+  ERROR_OCCURRED:'Erreurs techniques', SCREEN_ERROR:'Écrans en panne', ERROR_REATTEMPTED:'Nouvel essai après erreur',
+  ARRIVED_FROM:'Arrivées par un lien', PAYMENT_STARTED:'Paiements commencés', PAYMENT_DECLARED:'Paiements déclarés',
+  PAYMENT_ABANDONED:'Paiements abandonnés', PAYMENT_PROOF_SENT:'Preuves de paiement', SUBSCRIPTION_PAGE_VIEWED:'Page abonnement vue',
+  SUBSCRIPTION_PLAN_SELECTED:'Formule choisie'
+};
+const nomAction = n => NOMS_ACTIONS[n] || String(n || '').replace(/_/g, ' ').toLowerCase();
+const nomEcran = e => NOMS_ECRANS[e] || e || '—';
+const jourCourt = iso => new Date(iso + 'T12:00:00Z').toLocaleDateString('fr-FR', { day:'numeric', month:'short' });
+
+/* petits graphiques dessinés à la main (aucune bibliothèque à charger) */
+function graphiqueCroissance(serie, avant){
+  if(!serie.length) return insuffisant();
+  const W = 720, H = 200, g = 44, d = 14, h0 = 18, b = 30;
+  let cumul = avant || 0;
+  const pts = serie.map(s => (cumul += s.inscrits));
+  const max = Math.max(1, ...pts), min = Math.min(...pts, avant || 0);
+  const lo = Math.max(0, min - Math.ceil((max - min) * .15)), hi = max + Math.ceil((max - lo) * .1) || 1;
+  const X = i => g + (serie.length === 1 ? (W - g - d) / 2 : i * (W - g - d) / (serie.length - 1));
+  const Y = v => h0 + (H - h0 - b) * (1 - (v - lo) / Math.max(1, hi - lo));
+  const ligne = pts.map((v, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1)).join(' ');
+  const aire = ligne + ` L${X(pts.length - 1).toFixed(1)} ${H - b} L${X(0).toFixed(1)} ${H - b} Z`;
+  const pas = Math.max(1, Math.ceil(serie.length / 6));
+  const graduations = [lo, Math.round((lo + hi) / 2), hi];
+  return `<svg viewBox="0 0 ${W} ${H}" class="graphe" role="img" aria-label="Inscrits au total, jour par jour">
+    ${graduations.map(v => `<line x1="${g}" x2="${W - d}" y1="${Y(v)}" y2="${Y(v)}" class="gr-grille"/><text x="${g - 8}" y="${Y(v) + 4}" text-anchor="end" class="gr-axe">${nombre(v)}</text>`).join('')}
+    <path d="${aire}" class="gr-aire"/><path d="${ligne}" class="gr-ligne"/>
+    ${pts.map((v, i) => `<circle cx="${X(i)}" cy="${Y(v)}" r="${i === pts.length - 1 ? 4.5 : 2.2}" class="gr-point${i === pts.length - 1 ? ' fort' : ''}"><title>${jourCourt(serie[i].jour)} : ${nombre(v)} inscrits (+${serie[i].inscrits})</title></circle>`).join('')}
+    ${serie.map((s, i) => i % pas === 0 || i === serie.length - 1 ? `<text x="${X(i)}" y="${H - 9}" text-anchor="middle" class="gr-axe">${jourCourt(s.jour)}</text>` : '').join('')}
+  </svg>`;
+}
+function graphiqueBarres(valeurs, etiquettes, titre, options){
+  options = options || {};
+  if(!valeurs.length || Math.max(...valeurs) === 0) return insuffisant(options.vide);
+  const W = options.largeur || 720, H = options.hauteur || 170, g = 34, d = 8, h0 = 14, b = 26;
+  const max = Math.max(1, ...valeurs), n = valeurs.length, larg = (W - g - d) / n;
+  const pas = options.pas || Math.max(1, Math.ceil(n / 8));
+  const fort = options.fort === undefined ? valeurs.indexOf(max) : options.fort;
+  return `<svg viewBox="0 0 ${W} ${H}" class="graphe" role="img" aria-label="${E(titre)}">
+    <line x1="${g}" x2="${W - d}" y1="${H - b}" y2="${H - b}" class="gr-grille"/>
+    <text x="${g - 6}" y="${h0 + 4}" text-anchor="end" class="gr-axe">${nombre(max)}</text>
+    ${valeurs.map((v, i) => {
+      const hh = (H - h0 - b) * v / max, x = g + i * larg + larg * .15;
+      return `<rect x="${x.toFixed(1)}" y="${(H - b - hh).toFixed(1)}" width="${(larg * .7).toFixed(1)}" height="${Math.max(v ? 1.5 : 0, hh).toFixed(1)}" rx="2" class="gr-barre${i === fort ? ' fort' : ''}"><title>${E(etiquettes[i])} : ${nombre(v)}</title></rect>`;
+    }).join('')}
+    ${etiquettes.map((t, i) => i % pas === 0 ? `<text x="${(g + i * larg + larg / 2).toFixed(1)}" y="${H - 8}" text-anchor="middle" class="gr-axe">${E(t)}</text>` : '').join('')}
+  </svg>`;
+}
+const tendance = (n, avant) => {
+  if(!avant) return n ? '<span class="tend hausse">nouveau</span>' : '';
+  const p = Math.round(100 * (n - avant) / avant);
+  return `<span class="tend ${p >= 0 ? 'hausse' : 'baisse'}">${p >= 0 ? '+' : ''}${p} % vs 7 j avant</span>`;
+};
+
+let minuteurTableau = null;
+async function vueTableau(){
+  clearTimeout(minuteurTableau);
+  const j = [7, 30, 90].includes(periode) ? periode : 30;
+  $('#vue').innerHTML = `
+    <h2 class="titre">Tableau de bord</h2>
+    <p class="sous">La croissance, qui est là en ce moment, et ce que les candidats font vraiment. Mis à jour toutes les minutes.</p>
+    <div class="rangee" style="margin-bottom:16px">
+      ${[[7,'7 jours'],[30,'30 jours'],[90,'90 jours']].map(p => `<button class="cta creux petit" style="${j===p[0]?'border-color:var(--craie2);background:var(--ardoise2)':''}" data-periode="${p[0]}">${p[1]}</button>`).join('')}
+    </div>
+    <div id="zone-tableau">Chargement…</div>`;
+  brancherPeriode(vueTableau);
+  const { data: t, error } = await db.rpc('tableau_de_bord', { p_jours: j });
+  if(error) return erreur(error, 'Lecture impossible');
+  const z = document.getElementById('zone-tableau');
+  if(!z || A.vue !== 'tableau') return;
+
+  const croiss = t.croissance || [], heures = t.heures || [], zones = (t.zones || []).filter(x => x.ecran);
+  const totalMin = zones.reduce((a, x) => a + Number(x.minutes || 0), 0) || 1;
+  const maxZ = Math.max(1, ...zones.map(x => Number(x.minutes || 0)));
+  const actions = t.actions || [], maxA = Math.max(1, ...actions.map(a => a.n));
+  const nv = t.nouveautes || {};
+  const heurePic = heures.length ? heures.reduce((a, x) => x.n > a.n ? x : a, heures[0]) : null;
+  const zone1 = zones[0];
+
+  z.innerHTML = `
+    <div class="compteurs six">
+      <div class="compteur en-ligne"><div class="v num"><i class="pouls"></i>${nombre(t.en_ligne)}</div><div class="l">En ligne maintenant</div>
+        <div class="d">${nombre(t.en_ligne_comptes)} connecté${t.en_ligne_comptes > 1 ? 's' : ''} · ${nombre(t.en_composition)} en composition</div></div>
+      <div class="compteur"><div class="v num">${nombre(t.actifs_jour)}</div><div class="l">Actifs aujourd'hui</div>
+        <div class="d">${nombre(t.visiteurs_jour)} visiteurs en tout</div></div>
+      <div class="compteur"><div class="v num">${nombre(t.inscrits)}</div><div class="l">Inscrits au total</div>
+        <div class="d">+${nombre(t.nouveaux_jour)} aujourd'hui</div></div>
+      <div class="compteur"><div class="v num">+${nombre(t.nouveaux_7j)}</div><div class="l">Nouveaux sur 7 jours</div>
+        <div class="d">${tendance(t.nouveaux_7j, t.nouveaux_7j_avant)}</div></div>
+      <div class="compteur"><div class="v num">${nombre(t.actifs_7j)}</div><div class="l">Actifs sur 7 jours</div>
+        <div class="d">${t.inscrits ? Math.round(100 * t.actifs_7j / t.inscrits) : 0} % des inscrits</div></div>
+      <div class="compteur"><div class="v num">${nombre(t.questions_jour)}</div><div class="l">Questions aujourd'hui</div>
+        <div class="d">${nombre(t.compositions_jour)} composition${t.compositions_jour > 1 ? 's' : ''} aujourd'hui</div></div>
+    </div>
+
+    <div class="bloc">
+      <div class="libelle">La croissance<span>inscrits au total, ${j} jours</span></div>
+      <div class="carte">${graphiqueCroissance(croiss, t.avant_periode)}
+        <p class="sous" style="font-size:12.5px;margin-top:6px">${nombre(croiss.reduce((a, s) => a + s.inscrits, 0))} inscriptions sur la période. Survolez un point pour le détail du jour.</p></div>
+    </div>
+
+    <div class="deux-col">
+      <div class="bloc">
+        <div class="libelle">Candidats actifs par jour</div>
+        <div class="carte">${graphiqueBarres(croiss.map(s => s.actifs), croiss.map(s => jourCourt(s.jour)), 'Candidats actifs par jour', { fort: croiss.length - 1, largeur: 420, hauteur: 190 })}</div>
+      </div>
+      <div class="bloc">
+        <div class="libelle">Les heures où ils viennent<span>7 derniers jours, heure de Ouagadougou</span></div>
+        <div class="carte">${graphiqueBarres(heures.map(x => x.n), heures.map(x => x.h + ' h'), 'Visites par heure', { pas: 3, largeur: 420, hauteur: 190 })}
+          ${heurePic && heurePic.n ? `<p class="sous" style="font-size:12.5px;margin-top:6px">Le pic est vers <b>${heurePic.h} h</b> : le bon moment pour les rappels et les annonces.</p>` : ''}</div>
+      </div>
+    </div>
+
+    <div class="bloc">
+      <div class="libelle">Où ils passent leur temps<span>${j} jours</span></div>
+      <div class="carte">
+        ${!zones.length ? insuffisant() : `
+        ${zone1 ? `<p class="sous" style="margin-top:0">« ${E(nomEcran(zone1.ecran))} » prend <b>${Math.round(100 * zone1.minutes / totalMin)} %</b> du temps passé sur le site.</p>` : ''}
+        <table><thead><tr><th>Zone</th><th>Temps total</th><th>Part</th><th>Visites</th><th>Personnes</th><th>Durée moyenne</th></tr></thead><tbody>
+        ${zones.slice(0, 18).map(x => `<tr>
+          <td>${E(nomEcran(x.ecran))}${barreHorizontale(Number(x.minutes), maxZ)}</td>
+          <td class="num">${dureeLisible(x.minutes)}</td>
+          <td class="num">${Math.round(100 * x.minutes / totalMin)} %</td>
+          <td class="num">${nombre(x.visites)}</td>
+          <td class="num">${nombre(x.personnes)}</td>
+          <td class="num" style="${x.moyenne_s < 15 ? 'color:var(--rouge-texte)' : ''}">${x.moyenne_s} s</td></tr>`).join('')}
+        </tbody></table>
+        <p class="sous" style="font-size:12.5px">Une durée moyenne très courte (en rouge) veut dire que les candidats passent sans s'arrêter : la zone n'accroche pas ou sert seulement de passage.</p>`}
+      </div>
+    </div>
+
+    <div class="bloc">
+      <div class="libelle">Ce qu'ils font le plus<span>${j} jours</span></div>
+      <div class="carte">
+        ${!actions.length ? insuffisant('Aucune action observée.') : `
+        <table><thead><tr><th>Action</th><th>Fois</th><th>Personnes</th></tr></thead><tbody>
+        ${actions.map(a => `<tr><td>${E(nomAction(a.nom))}${barreHorizontale(a.n, maxA, 'var(--or)')}</td>
+          <td class="num">${nombre(a.n)}</td><td class="num">${nombre(a.personnes)}</td></tr>`).join('')}
+        </tbody></table>`}
+      </div>
+    </div>
+
+    <div class="bloc">
+      <div class="libelle">Les nouveautés : sont-elles utilisées ?<span>${j} jours</span></div>
+      <div class="carte"><div class="mini-compteurs">
+        ${[['Inscriptions à la nationale', nv.nationale_inscrits], ['Défis créés', nv.defis], ['Invitations à des défis', nv.invitations],
+           ['Packs hors ligne', nv.packs], ['Cartes de résultat partagées', nv.cartes], ['Attestations téléchargées', nv.attestations],
+           ['Badges gagnés', nv.badges], ['Relances J+3 / J+7 envoyées', nv.relances], ['Revenus après une relance', nv.retours_relance],
+           ['Rappels actifs (notifications)', t.push_actifs]]
+          .map(([l, v]) => `<div><b class="num">${nombre(v || 0)}</b><span>${l}</span></div>`).join('')}
+      </div></div>
+    </div>
+
+    <div class="deux-col">
+      <div class="bloc">
+        <div class="libelle">Leurs téléphones</div>
+        <div class="carte">${(t.appareils || []).length ? `<table><tbody>${t.appareils.map(a => `<tr><td>${E(a.systeme)}</td><td class="num">${nombre(a.n)}</td></tr>`).join('')}</tbody></table>` : insuffisant()}</div>
+      </div>
+      <div class="bloc">
+        <div class="libelle">Sécurité</div>
+        <div class="carte">
+          <div class="mini-compteurs">
+            <div><b class="num">${nombre(t.bannis)}</b><span>Comptes bannis</span></div>
+            <div><b class="num">${nombre(t.suppressions_30j)}</b><span>Comptes supprimés (30 j)</span></div>
+          </div>
+          <button class="cta creux petit" style="margin-top:12px" data-aller="bannissement">Voir les comptes à surveiller</button>
+        </div>
+      </div>
+    </div>`;
+  $$('[data-aller]').forEach(b => b.onclick = () => { A.vue = b.dataset.aller; rendre(); });
+  minuteurTableau = setTimeout(() => { if(A.vue === 'tableau') vueTableau(); }, 60000);
+}
+function dureeLisible(min){
+  min = Number(min) || 0;
+  if(min < 1) return Math.round(min * 60) + ' s';
+  if(min < 60) return Math.round(min) + ' min';
+  return Math.floor(min / 60) + ' h ' + String(Math.round(min % 60)).padStart(2, '0');
+}
+
+/* =====================================================================
+   BANNISSEMENT — repérer, suspendre, réintégrer
+   ===================================================================== */
+async function appelerBannir(corps){
+  const { data, error } = await db.functions.invoke('admin-bannir', { body: corps });
+  if(error){
+    let m = '';
+    try{ m = (await error.context.json()).message; }catch(e){}
+    return { ok:false, message: m || 'Action impossible.' };
+  }
+  return data || { ok:false };
+}
+async function vueBannissement(){
+  $('#vue').innerHTML = `
+    <h2 class="titre">Bannissement</h2>
+    <p class="sous">Les comptes au comportement anormal sont repérés automatiquement. Un compte banni ne peut plus se connecter ; ses rappels sont coupés. Tout est inscrit au journal.</p>
+    <div class="bloc">
+      <div class="libelle">Chercher un candidat</div>
+      <div class="carte">
+        <div class="rangee"><input id="b-cherche" placeholder="Numéro, nom ou pseudo" style="flex:1;min-width:200px"><button class="cta petit" id="b-go">Chercher</button></div>
+        <div id="b-resultats" style="margin-top:10px"></div>
+      </div>
+    </div>
+    <div class="bloc"><div class="libelle">À surveiller<span>repérés automatiquement</span></div><div class="carte" id="b-suspects">Chargement…</div></div>
+    <div class="bloc"><div class="libelle">Bannis en ce moment</div><div class="carte" id="b-bannis">Chargement…</div></div>
+    <div class="bloc"><div class="libelle">Historique</div><div class="carte" id="b-histo">Chargement…</div></div>`;
+
+  const ligneCompte = (p, extra) => `<tr>
+    <td><b>${E(p.nom || '—')}</b>${p.pseudo ? ` <span style="color:var(--craie2)">· ${E(p.pseudo)}</span>` : ''}<br>
+      <span class="num" style="font-size:11px;color:var(--craie2)">${p.telephone ? '+226 ' + E(p.telephone) : 'sans numéro'} · inscrit le ${dateCourte(p.cree_le)}</span>${extra || ''}</td>
+    <td style="text-align:right;white-space:nowrap">${p.banni
+      ? `<button class="lien" data-lever="${E(p.id)}">réintégrer</button>`
+      : `<button class="lien danger" data-bannir="${E(p.id)}" data-qui="${E(p.nom || p.telephone || '')}">bannir</button>`}</td></tr>`;
+
+  const [{ data: sus, error: e1 }, { data: bans }] = await Promise.all([
+    db.rpc('candidats_suspects'),
+    db.from('bannissements').select('*').order('cree_le', { ascending:false }).limit(200)
+  ]);
+  if(e1) erreur(e1, 'Détection impossible');
+  const actifs = (bans || []).filter(b => !b.leve_le && (!b.jusqu_au || new Date(b.jusqu_au) > new Date()));
+  const zs = document.getElementById('b-suspects'); if(!zs) return;
+  zs.innerHTML = !(sus || []).length
+    ? `<div class="vide">Aucun comportement anormal repéré.<br><span style="font-size:12.5px">Sont surveillés : codes faux en série, « code oublié » raté, invitations en masse, rythme de robot, signalements en rafale, noms qui imitent l'équipe.</span></div>`
+    : `<table><tbody>${sus.map(p => ligneCompte(p, `<div class="raisons">${(p.raisons || []).map(r => `<span>${E(r)}</span>`).join('')}</div>`)).join('')}</tbody></table>`;
+  document.getElementById('b-bannis').innerHTML = !actifs.length ? '<div class="vide">Personne n\'est banni.</div>'
+    : `<table><thead><tr><th>Candidat</th><th>Motif</th><th>Jusqu'au</th><th></th></tr></thead><tbody>${actifs.map(b => `<tr>
+        <td><b>${E(b.nom || '—')}</b><br><span class="num" style="font-size:11px;color:var(--craie2)">${b.telephone ? '+226 ' + E(b.telephone) : ''}</span></td>
+        <td>${E(b.motif)}</td><td class="num">${b.jusqu_au ? dateCourte(b.jusqu_au) : 'définitif'}</td>
+        <td style="text-align:right"><button class="lien" data-lever="${E(b.user_id)}">réintégrer</button></td></tr>`).join('')}</tbody></table>`;
+  document.getElementById('b-histo').innerHTML = !(bans || []).length ? '<div class="vide">Aucun bannissement pour l\'instant.</div>'
+    : `<table><thead><tr><th>Date</th><th>Candidat</th><th>Motif</th><th>État</th></tr></thead><tbody>${bans.slice(0, 50).map(b => `<tr>
+        <td class="num">${dateCourte(b.cree_le)}</td><td>${E(b.nom || b.telephone || '—')}</td><td>${E(b.motif)}</td>
+        <td>${b.leve_le ? 'levé le ' + dateCourte(b.leve_le) : (b.jusqu_au && new Date(b.jusqu_au) <= new Date() ? 'expiré' : 'en cours')}</td></tr>`).join('')}</tbody></table>`;
+
+  const brancher = () => {
+    $$('[data-bannir]').forEach(b => b.onclick = () => fenetreBannir(b.dataset.bannir, b.dataset.qui));
+    $$('[data-lever]').forEach(b => b.onclick = async () => {
+      if(!confirm('Réintégrer ce candidat ? Il pourra de nouveau se connecter.')) return;
+      const r = await appelerBannir({ user_id: b.dataset.lever, action:'lever' });
+      signal(r.ok ? 'Candidat réintégré.' : r.message, r.ok ? 'bien' : 'mal');
+      if(r.ok) vueBannissement();
+    });
+  };
+  brancher();
+
+  const chercher = async () => {
+    const q = document.getElementById('b-cherche').value.trim();
+    const zr = document.getElementById('b-resultats');
+    if(q.length < 2){ zr.innerHTML = ''; return; }
+    const chiffres = q.replace(/\D/g, '');
+    const motif = '%' + q.replace(/[%_,()]/g, ' ') + '%';
+    let req = db.from('profils').select('id, nom, pseudo, telephone, cree_le').limit(20);
+    req = chiffres.length >= 4 ? req.ilike('telephone', '%' + chiffres + '%') : req.or(`nom.ilike.${motif},pseudo.ilike.${motif}`);
+    const { data, error } = await req;
+    if(error) return erreur(error, 'Recherche impossible');
+    const bannisIds = new Set(actifs.map(b => b.user_id));
+    zr.innerHTML = !(data || []).length ? '<div class="vide">Aucun candidat trouvé.</div>'
+      : `<table><tbody>${data.map(p => ligneCompte({ ...p, banni: bannisIds.has(p.id) })).join('')}</tbody></table>`;
+    brancher();
+  };
+  document.getElementById('b-go').onclick = chercher;
+  document.getElementById('b-cherche').onkeydown = e => { if(e.key === 'Enter') chercher(); };
+}
+function fenetreBannir(id, qui){
+  const f = document.createElement('div');
+  f.className = 'fenetre';
+  f.innerHTML = `<div class="fenetre-boite" role="dialog" aria-modal="true" aria-label="Bannir un candidat">
+    <h3>Bannir ${E(qui || 'ce candidat')}</h3>
+    <p class="sous">Il ne pourra plus se connecter. Vous pourrez le réintégrer à tout moment.</p>
+    <label for="bf-motif">Motif (gardé au journal)</label>
+    <input id="bf-motif" placeholder="Ex. : se fait passer pour l'équipe, triche, insultes…" maxlength="300">
+    <label for="bf-duree" style="margin-top:12px">Durée</label>
+    <select id="bf-duree"><option value="1">1 jour</option><option value="7" selected>7 jours</option><option value="30">30 jours</option><option value="0">Définitif</option></select>
+    <div class="rangee" style="margin-top:16px;justify-content:flex-end">
+      <button class="cta creux petit" data-fermer>Annuler</button>
+      <button class="cta petit danger" data-confirmer>Bannir</button>
+    </div></div>`;
+  document.body.appendChild(f);
+  const fermer = () => f.remove();
+  f.querySelector('[data-fermer]').onclick = fermer;
+  f.onclick = e => { if(e.target === f) fermer(); };
+  f.querySelector('#bf-motif').focus();
+  f.querySelector('[data-confirmer]').onclick = async () => {
+    const motif = f.querySelector('#bf-motif').value.trim();
+    if(motif.length < 3) return signal('Indiquez le motif.', 'mal');
+    const bouton = f.querySelector('[data-confirmer]'); bouton.disabled = true; bouton.textContent = 'Bannissement…';
+    const r = await appelerBannir({ user_id: id, action:'bannir', motif, jours: Number(f.querySelector('#bf-duree').value) });
+    fermer();
+    signal(r.ok ? 'Candidat banni.' : r.message, r.ok ? 'bien' : 'mal');
+    if(r.ok) vueBannissement();
+  };
+}
+
+/* =====================================================================
+   MON ACCÈS — changer son mot de passe, retrouver l'adresse
+   ===================================================================== */
+function vueAcces(){
+  const email = A.session && A.session.user ? A.session.user.email : '';
+  $('#vue').innerHTML = `
+    <h2 class="titre">Mon accès</h2>
+    <p class="sous">Vos identifiants d'administration. Notez-les dans un endroit sûr.</p>
+    <div class="bloc"><div class="carte">
+      <table><tbody>
+        <tr><td>Adresse de l'administration</td><td><b>${E(location.origin)}/admin.html</b></td></tr>
+        <tr><td>Raccourci caché dans l'application</td><td>Touchez 5 fois de suite le logo Mon Concours en haut à gauche</td></tr>
+        <tr><td>Votre identifiant</td><td><b>${E(email)}</b></td></tr>
+      </tbody></table>
+    </div></div>
+    <div class="bloc"><div class="libelle">Changer mon mot de passe</div><div class="carte">
+      <div class="deux">
+        <div><label for="m-n1">Nouveau mot de passe</label><input id="m-n1" type="password" autocomplete="new-password" placeholder="10 caractères au moins"></div>
+        <div><label for="m-n2">Encore une fois</label><input id="m-n2" type="password" autocomplete="new-password"></div>
+      </div>
+      <button class="cta petit" id="m-changer" style="margin-top:12px">Enregistrer le nouveau mot de passe</button>
+      <p class="sous" style="font-size:12.5px">Si vous l'oubliez, la page de connexion propose « Mot de passe oublié ? » : un lien arrive sur ${E(email || 'votre adresse')}.</p>
+    </div></div>`;
+  document.getElementById('m-changer').onclick = async () => {
+    const a = document.getElementById('m-n1').value, b = document.getElementById('m-n2').value;
+    if(a.length < 10) return signal('10 caractères au moins.', 'mal');
+    if(a !== b) return signal('Les deux mots de passe ne sont pas identiques.', 'mal');
+    const { error } = await db.auth.updateUser({ password: a });
+    if(error) return erreur(error, 'Changement impossible');
+    document.getElementById('m-n1').value = ''; document.getElementById('m-n2').value = '';
+    signal('Mot de passe changé.', 'bien');
+  };
+}
+
+/* mot de passe oublié : un lien par e-mail, qui revient ici */
+async function motDePasseOublie(){
+  const z = document.getElementById('err-connexion');
+  const email = document.getElementById('email').value.trim().toLowerCase();
+  if(!email){ z.textContent = 'Tapez d\'abord votre adresse e-mail, puis touchez « Mot de passe oublié ? ».'; z.hidden = false; return; }
+  const { error } = await db.auth.resetPasswordForEmail(email, { redirectTo: location.origin + '/admin.html' });
+  z.textContent = error ? 'Envoi impossible : ' + error.message
+    : 'Si cette adresse a un accès, un lien vient de lui être envoyé. Ouvrez-le sur cet appareil pour choisir un nouveau mot de passe.';
+  z.hidden = false;
+}
+function formulaireNouveauMotDePasse(){
+  const carte = document.querySelector('.carte-portail');
+  if(!carte) return;
+  document.getElementById('portail').hidden = false;
+  document.getElementById('admin').hidden = true;
+  carte.innerHTML = `<h1>Nouveau mot de passe</h1>
+    <p class="aide">Choisissez votre nouveau mot de passe d'administration.</p>
+    <div class="alerte" id="err-nouveau" hidden></div>
+    <label for="nv1">Nouveau mot de passe</label><input id="nv1" type="password" autocomplete="new-password" placeholder="10 caractères au moins">
+    <label for="nv2">Encore une fois</label><input id="nv2" type="password" autocomplete="new-password">
+    <button class="cta" id="btn-nouveau">Enregistrer et entrer</button>`;
+  document.getElementById('btn-nouveau').onclick = async () => {
+    const a = document.getElementById('nv1').value, b = document.getElementById('nv2').value;
+    const z = document.getElementById('err-nouveau');
+    if(a.length < 10 || a !== b){ z.textContent = a.length < 10 ? '10 caractères au moins.' : 'Les deux mots de passe ne sont pas identiques.'; z.hidden = false; return; }
+    const { error } = await db.auth.updateUser({ password: a });
+    if(error){ z.textContent = error.message; z.hidden = false; return; }
+    location.replace('/admin.html');
+  };
+}
+
 /* ============================================================
    ÉVÉNEMENTS
    ============================================================ */
 document.getElementById('btn-connexion').onclick = connexion;
+document.getElementById('btn-oubli').onclick = motDePasseOublie;
 document.getElementById('motdepasse').addEventListener('keydown',
   e => { if(e.key === 'Enter') connexion(); });
 

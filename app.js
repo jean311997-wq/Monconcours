@@ -981,6 +981,7 @@ async function chargerCahier(){
 /* Les messages du serveur arrivent en anglais : on les dit en français.
    Un message inconnu n'est jamais montré tel quel. */
 const MESSAGES_FR = [
+  [/banned|suspendu/i, "Ce compte est suspendu. Pour en savoir plus, écrivez à l'administrateur sur WhatsApp."],
   [/rate limit|too many requests|429/i, "Trop d'essais en peu de temps. Attendez quelques minutes, puis réessayez."],
   [/already registered|already been registered|already exists|duplicate key/i, "Ce numéro a déjà un compte. Choisissez « J'ai déjà un compte »."],
   [/invalid login|invalid credentials|invalid grant/i, "Numéro ou code secret incorrect."],
@@ -1107,7 +1108,7 @@ function brancherBase(){
    OBSERVATION — collecte des événements
    Rien de personnel : ni saisie, ni mot de passe, ni position.
    ===================================================================== */
-const VERSION_APP = 'v22';
+const VERSION_APP = 'v23';
 
 const O = {
   session: null, precedent: null, dernierTemps: Date.now(), entreeEcran: Date.now(),
@@ -5860,6 +5861,13 @@ document.addEventListener('click', ev => {
    RENDU + ÉVÉNEMENTS
    ===================================================================== */
 const SANS_TETE = ['test','grille','engagement','testIntro','resultat'];
+/* raccourci caché vers l'administration : cinq touchers rapides sur le logo */
+let touchesLogo = [];
+document.addEventListener('click', ev => {
+  if(!ev.target.closest('#apptete svg, #apptete .mot')) return;
+  const t = Date.now(); touchesLogo = touchesLogo.filter(x => t - x < 2500); touchesLogo.push(t);
+  if(touchesLogo.length >= 5){ touchesLogo = []; location.href = '/admin.html'; }
+});
 function apptete(){
   const t = document.getElementById('apptete');
   if(SANS_TETE.includes(S.ecran)){ t.style.display='none'; return; }

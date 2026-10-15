@@ -2,6 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
+<script>/* lien « mot de passe oublié » de l'administration : il doit s'ouvrir dans l'administration */if(/type=recovery/.test(location.hash))location.replace('/admin.html'+location.hash);</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0C1512">
 <title>Mon Concours — préparation aux concours directs du Burkina Faso</title>
@@ -18,7 +19,7 @@
 <meta name="twitter:card" content="summary">
 
 <!-- la mise en forme d'abord : c'est elle qui décide de la vitesse perçue -->
-<link rel="stylesheet" href="styles.css?v=25">
+<link rel="stylesheet" href="styles.css?v=26">
 <style>
   #facade{position:fixed;inset:0;z-index:900;background:#0C1512;display:flex;
     flex-direction:column;align-items:center;justify-content:center;gap:10px;
@@ -125,7 +126,7 @@ function reparerEtRecharger(){
 <div class="sr" id="annonce" aria-live="polite" role="status"></div>
 
 <!-- l'application s'affiche immédiatement, sans attendre le réseau -->
-<script src="app.js?v=25" onerror="facadePerdue()"></script>
+<script src="app.js?v=26" onerror="facadePerdue()"></script>
 
 <!-- la base est servie par le site : un domaine de moins à joindre en 2G -->
 <script>
