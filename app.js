@@ -322,6 +322,80 @@ window.addEventListener('beforeunload', e => {
 })();
 
 /* =====================================================================
+   REPRENDRE OÙ L'ON S'EST ARRÊTÉ
+   Une leçon se rouvre à l'endroit exact où l'on a quitté ; un QCM, à la
+   question suivante. Le serveur est prévenu (au plus une fois par
+   45 secondes) : si le candidat part en plein milieu et ne revient pas,
+   une notification lui demande s'il veut reprendre, et un toucher le
+   ramène au bon endroit. Un cours lu jusqu'au bout n'est plus proposé.
+   ===================================================================== */
+const REPRISE_VALIDE_MS = 60 * 86400000;           // au-delà de deux mois, on repart du début
+const lecturePos = () => { const p = lireReglages().lecturePos; return p && typeof p === 'object' ? p : {}; };
+
+const repriseEnvoi = { dernier: 0, tampon: null, minuteur: null };
+function envoyerReprise(x){
+  if(!base || !S.util.connecte) return;
+  repriseEnvoi.tampon = x;
+  clearTimeout(repriseEnvoi.minuteur);
+  repriseEnvoi.minuteur = setTimeout(viderReprise, Math.max(0, 45000 - (Date.now() - repriseEnvoi.dernier)));
+}
+function viderReprise(){
+  const x = repriseEnvoi.tampon;
+  if(!x || !base || !S.util.connecte) return;
+  repriseEnvoi.tampon = null; repriseEnvoi.dernier = Date.now();
+  base.rpc('noter_reprise', { p_type:x.type, p_matiere:x.matiere, p_position:x.position, p_total:x.total, p_titre:x.titre || '' }).then(() => {}, () => {});
+}
+document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'hidden') viderReprise(); });
+
+function noterReprise(type, matiere, position, total, titre){
+  const r = Object.assign({}, lireReglages().reprise);
+  r[type] = { matiere, niveau: S.niveau, le: Date.now() };
+  ecrireReglage('reprise', r);
+  envoyerReprise({ type, matiere, position, total, titre });
+}
+function retirerReprise(type, matiere){
+  const r = Object.assign({}, lireReglages().reprise);
+  if(r[type] && r[type].matiere === matiere){ delete r[type]; ecrireReglage('reprise', r); }
+  if(repriseEnvoi.tampon && repriseEnvoi.tampon.type === type){ repriseEnvoi.tampon = null; clearTimeout(repriseEnvoi.minuteur); }
+  if(base && S.util.connecte) base.rpc('clore_reprise', { p_type:type }).then(() => {}, () => {});
+}
+
+/* leçon : le chapitre, et l'endroit exact dans ce chapitre */
+function noterLecture(matiere, chap, n, titre, off){
+  const p = lecturePos();
+  p[matiere] = { chap, n, off: Math.round(off * 1000) / 1000, niveau: S.niveau, le: Date.now() };
+  ecrireReglage('lecturePos', p);
+  noterReprise('cours', matiere, chap, n, titre);
+}
+function lectureTerminee(matiere){
+  const p = lecturePos();
+  if(p[matiere]){ delete p[matiere]; ecrireReglage('lecturePos', p); }
+  retirerReprise('cours', matiere);
+}
+/* QCM : la position est dans qcmPos ; ici on prévient le serveur */
+function retenirQcm(){
+  const m = banqueDe(S.matiere);
+  if(!m || !m.questions.length) return;
+  const total = m.questions.length, pos = (S.qcmPos && S.qcmPos[S.matiere]) || 0;
+  if(pos >= total) retirerReprise('qcm', S.matiere);      // toute la matière est faite
+  else noterReprise('qcm', S.matiere, pos, total, '');
+}
+
+/* ouverture par la notification « Voulez-vous reprendre ? » */
+function repriseCible(type){
+  const r = (lireReglages().reprise || {})[type];
+  if(!r || Date.now() - (r.le || 0) > REPRISE_VALIDE_MS) return 'revisions';
+  if(r.niveau && r.niveau !== S.niveau){
+    S.niveau = r.niveau; S.ressources = null; S.banque = null; S.progression = null;
+    chargerRessources(); chargerQuestions(true);
+  }
+  if(type === 'cours'){ S.matiereOuverte = r.matiere; S.ressourceOuverte = null; return 'lecture'; }
+  S.matiere = r.matiere; S.qcmIdx = (S.qcmPos && S.qcmPos[r.matiere]) || 0;
+  S.qcmRep = undefined; S.qcmCorrection = null; S.qcmSerie = 0; S.qcmDebut = Date.now();
+  return 'qcm';
+}
+
+/* =====================================================================
    MÉMOIRE DU TÉLÉPHONE
    Ce que l'application a déjà reçu s'affiche tout de suite à la
    prochaine ouverture ; le réseau met ensuite les chiffres à jour.
@@ -400,7 +474,7 @@ function aller(e){
   if(e === 'grille' && S.compoEtat === 'erreur' && !ouvertureEnCours) S.compoEtat = null;
   if(S.gratuit && (e === 'abonnement' || e === 'paiement')) e = 'compte';   // pas de formules pendant la phase gratuite
   if(['revisions','qcm'].includes(e)){ progressionMemo(); chargerQuestions(); }
-  if(e !== 'lecture') S.matiereOuverte = null;
+  if(e !== 'lecture'){ S.matiereOuverte = null; S.lectureReprise = null; }
   if(S.timer && e!=='grille'){clearInterval(S.timer);S.timer=null;}
   if(S.testTimer && e!=='test'){clearInterval(S.testTimer);S.testTimer=null;}
   /* chaque écran entre dans l'historique : le bouton retour du téléphone
@@ -1975,7 +2049,7 @@ function ecranRevisions(){
           </div>
         </div>
         <div class="mr-actions">
-          ${chap.length ? `<button data-matiere="${encodeURIComponent(nom)}">${ico('lire',16)}<span>Lire le cours</span></button>` : ''}
+          ${chap.length ? `<button data-matiere="${encodeURIComponent(nom)}">${ico('lire',16)}<span>${lecturePos()[nom] ? 'Reprendre le cours' : 'Lire le cours'}</span></button>` : ''}
           ${chap.length || fich.length ? `<button data-telecharger-mat="${encodeURIComponent(nom)}">${ico('telecharger',16)}<span>Télécharger</span></button>` : ''}
           ${nb ? `<button class="plein" data-mat="${E(nom)}">${ico('revisions',16)}<span>${faites > 0 ? 'Continuer' : 'Faire les QCM'}</span></button>` : ''}
         </div>
@@ -2765,15 +2839,34 @@ async function chargerLectures(){
   if(!base || !S.util.connecte || S.lusCharges) return;
   try{ const { data } = await base.rpc('mes_lectures'); S.lus = data || []; memoEcrire('lus', S.lus, true); S.lusCharges = true; if(S.ecran === 'revisions') rendre(); }catch(e){}
 }
-function suivreLecture(ids){
+function suivreLecture(ids, suivi){
   const zone = vue(), barre = document.getElementById('jauge-lecture-barre');
   if(!zone) return;
-  let fait = false;
+  let fait = false, termine = false, minuteur = null;
+  /* on retient le chapitre et l'endroit exact où le candidat lit, pour qu'il
+     retrouve sa place à son retour (sans bruit : une fois la lecture posée) */
+  const retenir = () => {
+    if(!suivi || S.ecran !== 'lecture') return;
+    const chs = zone.querySelectorAll('.chapitre');
+    if(!chs.length) return;
+    const h = zone.scrollHeight - zone.clientHeight;
+    const f = h <= 0 ? 1 : zone.scrollTop / h;
+    if(f >= 0.92){ if(!termine){ termine = true; lectureTerminee(suivi.matiere); } return; }
+    termine = false;
+    if(f < 0.02) return;                               // à peine commencé : on ne retient rien
+    const ligne = zone.getBoundingClientRect().top + zone.clientHeight * 0.3;
+    let cur = 0;
+    chs.forEach((c, i) => { if(c.getBoundingClientRect().top <= ligne) cur = i; });
+    const r = chs[cur].getBoundingClientRect();
+    noterLecture(suivi.matiere, cur, chs.length, (suivi.titres || [])[cur] || '',
+      Math.min(1, Math.max(0, (ligne - r.top) / Math.max(1, r.height))));
+  };
   const maj = () => {
     const h = zone.scrollHeight - zone.clientHeight;
     const f = h <= 0 ? 1 : Math.min(1, Math.max(0, zone.scrollTop / h));
     if(barre) barre.style.width = f * 100 + '%';
     if(!fait && f >= 0.92 && ids){ fait = true; marquerLus(ids); }
+    if(suivi){ clearTimeout(minuteur); minuteur = setTimeout(retenir, 600); }
   };
   zone.removeEventListener('scroll', zone._suivi || (()=>{}));
   zone._suivi = maj;
@@ -2781,10 +2874,33 @@ function suivreLecture(ids){
   maj();
 }
 
+/* À l'ouverture d'un cours déjà commencé, on revient à l'endroit où l'on avait
+   quitté. Une seule fois par ouverture : ensuite, le candidat lit où il veut. */
+function reprendreLecture(){
+  const m = S.matiereOuverte, pos = m && lecturePos()[m];
+  if(!pos || S.lectureReprise === m || Date.now() - (pos.le || 0) > REPRISE_VALIDE_MS) return;
+  setTimeout(() => {
+    if(S.ecran !== 'lecture' || S.matiereOuverte !== m || S.lectureReprise === m) return;
+    const zone = vue(), el = document.getElementById('chap-' + pos.chap);
+    if(!zone || !el) return;
+    S.lectureReprise = m;
+    const z = zone.getBoundingClientRect(), r = el.getBoundingClientRect();
+    zone.scrollTop = Math.max(0, (r.top - z.top) + zone.scrollTop + (pos.off || 0) * r.height - zone.clientHeight * 0.3);
+    if(pos.chap >= 1 || pos.off > 0.1) toast('Vous reprenez là où vous vous étiez arrêté : chapitre ' + (pos.chap + 1) + ' sur ' + pos.n + '.', 4000);
+  }, 80);
+}
+
 function ecranLecture(){
   /* U3 — on lit une matière entière d'un seul tenant. Le candidat déroule,
      il ne revient pas en arrière entre chaque chapitre. */
   if(S.matiereOuverte){
+    /* ouvert depuis une notification, les cours peuvent ne pas être encore arrivés */
+    if(S.ressources === null || S.ressources === undefined){
+      if(!S.ressourcesEnCours) chargerRessources();
+      vue().innerHTML = `<div class="pad"><button class="retourhaut" data-go="revisions">Mes cours</button>
+        <div class="squelette large" style="margin-top:16px"></div><p class="sous" style="margin-top:12px">Chargement du cours…</p></div>`;
+      return;
+    }
     const lot = (S.ressources || []).filter(x => x.matiere === S.matiereOuverte && x.texte);
     if(!lot.length){ S.matiereOuverte = null; return ecranCours(); }
     const commun = lot.every(x => x.commun);
@@ -2817,7 +2933,8 @@ function ecranLecture(){
       </div>
       <button class="cta creux" style="margin-top:12px" data-go="revisions">Retour aux révisions</button>
     </div>`;
-    suivreLecture(lot.map(x => x.id));
+    suivreLecture(lot.map(x => x.id), { matiere: S.matiereOuverte, titres: lot.map(x => x.titre) });
+    reprendreLecture();
     return;
   }
 
@@ -2973,6 +3090,12 @@ async function repondreQcm(i){
     compterReponse();
     pister('QUESTION_ANSWERED', { juste: !!r.correcte });
     chargerCahier();
+    /* une question corrigée ne revient pas : au retour, on reprend à la suivante */
+    if(S.matiere === m.nom){
+      S.qcmPos = Object.assign({}, S.qcmPos, { [m.nom]: S.qcmIdx + 1 });
+      ecrireReglage('qcmPos', S.qcmPos);
+      retenirQcm();
+    }
   }
   if(S.ecran === 'qcm') ecranQcm();
 }
@@ -4727,6 +4850,7 @@ function ouvrirLienDirect(){
   else if(/^[0-9a-f-]{36}$/i.test(p.get('epreuve') || '')){ cible = 'gagnants'; S.lienEpreuve = p.get('epreuve'); S.classementEp = null; }
   else if(/^[0-9a-f-]{36}$/i.test(p.get('defi') || '')){ cible = 'defi'; S.lienDefi = p.get('defi'); S.defi = { etat:'chargement', id:p.get('defi') }; }
   else if(/^[0-9a-f-]{36}$/i.test(p.get('copie') || '')){ const id = p.get('copie'); setTimeout(() => feuilleArchive(id), 1500); }
+  else if(p.get('reprendre') === 'cours' || p.get('reprendre') === 'qcm') cible = repriseCible(p.get('reprendre'));
   else if(p.has('compte')) cible = 'compte';
   else if(p.has('parcours')) cible = 'parcours';
   if(p.toString()) try{ history.replaceState({ ecran: cible || S.ecran }, '', location.pathname); }catch(e){}
@@ -6295,6 +6419,7 @@ document.addEventListener('click', ev=>{
   if(d.matiere){
     S.matiereOuverte = decodeURIComponent(d.matiere);
     S.ressourceOuverte = null;
+    if(d.chapitre !== undefined) S.lectureReprise = S.matiereOuverte;     // un chapitre précis est demandé : on ne rejoue pas la reprise
     pister('COURSE_OPENED', { matiere: S.matiereOuverte });
     aller('lecture');
     if(d.chapitre !== undefined){
@@ -6382,6 +6507,7 @@ document.addEventListener('click', ev=>{
     S.qcmIdx++; S.qcmRep=undefined; S.qcmCorrection=null; S.qcmDebut=Date.now();
     S.qcmPos = Object.assign({}, S.qcmPos, { [S.matiere]: S.qcmIdx });
     ecrireReglage('qcmPos', S.qcmPos);
+    retenirQcm();
     return ecranQcm();
   }
   if(d.cahierfreq){ S.cahierFiltre=true; S.taches[2]=true; sauverTaches(); return aller('cahier'); }
