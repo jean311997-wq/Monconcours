@@ -1,4 +1,4 @@
-// Bannir ou réintégrer un candidat. Réservé aux administrateurs.
+// Bannir ou réintégrer un candidat. Réservé aux administrateurs et à l'investisseur.
 // Le bannissement bloque la connexion (service d'authentification) et
 // est inscrit dans la table « bannissements » avec son motif.
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -7,7 +7,7 @@ const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
-const ORIGINES = ["https://monconcours.vercel.app"];
+const ORIGINES = ["https://monconcoursbf.com", "https://www.monconcoursbf.com", "https://monconcours.vercel.app"];
 function entetes(req: Request) {
   const o = req.headers.get("origin") || "";
   return {
@@ -25,13 +25,13 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: entetes(req) });
   if (req.method !== "POST") return reponse(req, { ok: false }, 405);
 
-  // 1. l'appelant doit être administrateur
+  // 1. l'appelant doit être administrateur ou investisseur
   const jeton = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
   const { data: qui } = await admin.auth.getUser(jeton);
   const moi = qui?.user?.id;
   if (!moi) return reponse(req, { ok: false, message: "Connectez-vous d'abord." }, 401);
   const { data: roles } = await admin.from("roles_utilisateur").select("role").eq("user_id", moi);
-  if (!(roles || []).some((r: { role: string }) => r.role === "admin")) {
+  if (!(roles || []).some((r: { role: string }) => r.role === "admin" || r.role === "investisseur")) {
     return reponse(req, { ok: false, message: "Réservé aux administrateurs." }, 403);
   }
 
@@ -41,7 +41,7 @@ Deno.serve(async (req: Request) => {
   if (!/^[0-9a-f-]{36}$/i.test(cible)) return reponse(req, { ok: false, message: "Candidat introuvable." });
   if (cible === moi) return reponse(req, { ok: false, message: "Vous ne pouvez pas vous bannir vous-même." });
   const { data: rolesCible } = await admin.from("roles_utilisateur").select("role").eq("user_id", cible);
-  if ((rolesCible || []).some((r: { role: string }) => r.role === "admin" || r.role === "correcteur")) {
+  if ((rolesCible || []).some((r: { role: string }) => r.role === "admin" || r.role === "correcteur" || r.role === "investisseur")) {
     return reponse(req, { ok: false, message: "Un membre de l'équipe ne peut pas être banni ici." });
   }
 

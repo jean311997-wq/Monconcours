@@ -57,7 +57,7 @@ echo
 echo "  ================================================"
 echo "    [OK] Envoyé. Vercel met le site à jour."
 echo "    Comptez une minute, puis ouvrez :"
-echo "    https://monconcours.vercel.app"
+echo "    https://monconcoursbf.com"
 echo "  ================================================"
 echo
 read -n 1 -s -r -p "  Appuyez sur une touche pour fermer."

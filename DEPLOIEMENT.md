@@ -46,7 +46,7 @@ chmod +x deployer.command
 1. Vous remplacez les fichiers modifiés dans le dossier.
 2. Vous double-cliquez sur **`deployer.bat`** (Windows) ou **`deployer.command`** (Mac).
 3. Une fenêtre noire s'ouvre, vous montre ce qui a changé, et envoie.
-4. Une minute plus tard, `monconcours.vercel.app` est à jour.
+4. Une minute plus tard, `monconcoursbf.com` est à jour.
 
 C'est tout.
 
@@ -80,6 +80,6 @@ l'étape 3.
 
 ## Une habitude à prendre
 
-Avant de double-cliquer, ouvrez `monconcours.vercel.app` et vérifiez que le site
+Avant de double-cliquer, ouvrez `monconcoursbf.com` et vérifiez que le site
 en ligne fonctionne encore. Comme ça, si quelque chose casse après l'envoi, vous
 savez que ça vient de votre modification — et pas d'autre chose.

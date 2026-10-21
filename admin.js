@@ -89,9 +89,6 @@ function signal(texte, type){
 /* toute erreur remontée par la base passe par ici */
 function erreur(e, contexte){
   console.error(contexte || '', e);
-  if(A.investisseur && /permission|denied|policy|security|réservé|interdit/i.test(e?.message || '')){
-    return signal('Compte investisseur : consultation seulement.', 'info');
-  }
   signal((contexte ? contexte + ' : ' : '') + (e?.message || 'erreur inconnue'), 'mal');
 }
 
@@ -155,11 +152,12 @@ async function entrer(session){
   document.getElementById('admin').hidden = false;
   window.scrollTo(0, 0);
   document.getElementById('qui').textContent =
-    A.investisseur ? 'Investisseur · consultation' : (profil?.nom || session.user.email) + ' · équipe';   // textContent : pas d'interprétation HTML
+    (profil?.nom || (A.investisseur ? 'Investisseur' : session.user.email)) + (A.investisseur ? ' · investisseur' : ' · équipe');   // textContent : pas d'interprétation HTML
 
   if(A.investisseur){
     document.body.classList.add('mode-investisseur');
-    $$('#menu [data-vue="acces"], #menu [data-vue="musique"]').forEach(b => b.remove());
+    /* l'investisseur a tout l'espace d'administration, sauf « Mon accès » */
+    $$('#menu [data-vue="acces"]').forEach(b => b.remove());
     const bienvenue = document.getElementById('bienvenue');
     if(bienvenue) bienvenue.hidden = false;
   }
@@ -1935,12 +1933,12 @@ async function vueCandidats(pageC){
         ${gens.map(p => `<tr>
           <td><b>${E(p.nom)}</b><br><span class="num" style="font-size:11px;color:var(--craie2)">
             ${p.telephone ? '+226 ' + E(p.telephone) : '—'} · ${E(p.niveau || '—')} · ${dateCourte(p.cree_le)}</span></td>
-          <td style="text-align:right">${A.investisseur ? '' : `<button class="lien" data-chrono="${E(p.id)}">voir son parcours</button>`}</td>
+          <td style="text-align:right"><button class="lien" data-chrono="${E(p.id)}">voir son parcours</button></td>
         </tr>`).join('')}</tbody></table>${barrePagination(pageC, parPage, totalC || 0)}`}
       </div>
     </div>
 
-    <div class="bloc" ${A.investisseur ? 'hidden' : ''}>
+    <div class="bloc">
       <div class="libelle">Changer le code d'un candidat<span>après vérification sur WhatsApp</span></div>
       <div class="carte">
         <p class="sous" style="font-size:12.5px;margin-top:0">À faire seulement quand le candidat vous a écrit depuis son propre numéro et que vous êtes sûr de son identité. Le numéro est aussi débloqué s'il avait épuisé ses essais.</p>
@@ -2710,7 +2708,7 @@ async function vueBannissement(){
   $('#vue').innerHTML = `
     <h2 class="titre">Bannissement</h2>
     <p class="sous">Les comptes au comportement anormal sont repérés automatiquement. Un compte banni ne peut plus se connecter ; ses rappels sont coupés. Tout est inscrit au journal.</p>
-    <div class="bloc" ${A.investisseur ? 'hidden' : ''}>
+    <div class="bloc">
       <div class="libelle">Chercher un candidat</div>
       <div class="carte">
         <div class="rangee"><input id="b-cherche" placeholder="Numéro, nom ou pseudo" style="flex:1;min-width:200px"><button class="cta petit" id="b-go">Chercher</button></div>
@@ -2724,7 +2722,7 @@ async function vueBannissement(){
   const ligneCompte = (p, extra) => `<tr>
     <td><b>${E(p.nom || '—')}</b>${p.pseudo ? ` <span style="color:var(--craie2)">· ${E(p.pseudo)}</span>` : ''}<br>
       <span class="num" style="font-size:11px;color:var(--craie2)">${p.telephone ? '+226 ' + E(p.telephone) : 'sans numéro'} · inscrit le ${dateCourte(p.cree_le)}</span>${extra || ''}</td>
-    <td style="text-align:right;white-space:nowrap">${A.investisseur ? (p.banni ? '<span style="color:var(--craie2)">banni</span>' : '') : p.banni
+    <td style="text-align:right;white-space:nowrap">${p.banni
       ? `<button class="lien" data-lever="${E(p.id)}">réintégrer</button>`
       : `<button class="lien danger" data-bannir="${E(p.id)}" data-qui="${E(p.nom || p.telephone || '')}">bannir</button>`}</td></tr>`;
 
@@ -2742,7 +2740,7 @@ async function vueBannissement(){
     : `<table><thead><tr><th>Candidat</th><th>Motif</th><th>Jusqu'au</th><th></th></tr></thead><tbody>${actifs.map(b => `<tr>
         <td><b>${E(b.nom || '—')}</b></td>
         <td>${E(b.motif)}</td><td class="num">${b.jusqu_au ? dateCourte(b.jusqu_au) : 'définitif'}</td>
-        <td style="text-align:right">${A.investisseur ? '' : `<button class="lien" data-lever="${E(b.user_id)}">réintégrer</button>`}</td></tr>`).join('')}</tbody></table>`;
+        <td style="text-align:right"><button class="lien" data-lever="${E(b.user_id)}">réintégrer</button></td></tr>`).join('')}</tbody></table>`;
   document.getElementById('b-histo').innerHTML = !(bans || []).length ? '<div class="vide">Aucun bannissement pour l\'instant.</div>'
     : `<table><thead><tr><th>Date</th><th>Candidat</th><th>Motif</th><th>État</th></tr></thead><tbody>${bans.slice(0, 50).map(b => `<tr>
         <td class="num">${dateCourte(b.cree_le)}</td><td>${E(b.nom || '—')}</td><td>${E(b.motif)}</td>
@@ -2876,19 +2874,6 @@ function formulaireNouveauMotDePasse(){
    ÉVÉNEMENTS
    ============================================================ */
 document.getElementById('btn-connexion').onclick = connexion;
-/* investisseur : consultation seulement, les boutons qui modifient sont bloqués avant d'agir */
-const VERBES_ECRITURE = /publier|enregistrer|supprimer|valider|rejeter|bannir|réintégrer|changer|importer|programmer|ajouter|créer|modifier|confirmer|envoyer|ranger|archiver|retirer|déposer|téléverser|générer|corriger|lancer|dépublier|traiter|attribuer|remplacer|effacer/i;
-document.addEventListener('click', ev => {
-  if(!A.investisseur) return;
-  const b = ev.target.closest('#vue button, #vue input[type="file"], #vue label[for], .fenetre button');
-  if(!b || b.closest('#menu')) return;
-  if(b.matches('[data-periode],[data-aller],[data-page-vers],[data-fermer]')) return;
-  const texte = (b.textContent || b.value || b.getAttribute('aria-label') || '') + ' ' + (b.title || '');
-  if(b.matches('input[type="file"], label[for]') || VERBES_ECRITURE.test(texte)){
-    ev.preventDefault(); ev.stopImmediatePropagation();
-    signal('Compte investisseur : consultation seulement.', 'info');
-  }
-}, true);
 document.getElementById('btn-oubli').onclick = motDePasseOublie;
 document.getElementById('motdepasse').addEventListener('keydown',
   e => { if(e.key === 'Enter') connexion(); });

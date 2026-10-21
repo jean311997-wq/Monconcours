@@ -19,7 +19,7 @@ const CONTACT = {
   canal:    'https://whatsapp.com/channel/0029Vb9boQ990x32o1rJTm07',
   facebook: 'https://www.facebook.com/share/18zvk8fdA3/',
   adminTel: '77959848',
-  site:     'https://monconcours.vercel.app',
+  site:     'https://monconcoursbf.com',
   playStore: ''              /* le lien Play Store de Mon Concours, dès qu'il est publié */
 };
 
@@ -227,13 +227,15 @@ function joursRestants(e){
   if(e.revoirLe === undefined) return 0;
   return Math.max(0, Math.round((e.revoirLe - aujourdhuiZero())/JOUR));
 }
-const DELAI_SORTIE_MS = 5 * 60 * 1000;   // une erreur validée reste visible 5 minutes, comme confirmation
+const DELAI_SORTIE_MS = 0;   // une erreur retrouvée quitte la liste tout de suite
 
+/* « Reprendre » une erreur : la bonne réponse la referme aussitôt (le
+   serveur applique la même règle), une mauvaise la garde à reprendre. */
 function programmer(e, juste){
   if(juste){
-    e.suite++;
-    e.revoirLe = aujourdhuiZero() + (PALIERS[Math.min(e.suite-1, PALIERS.length-1)] * JOUR);
-    if(e.suite >= 3 && !e.valideLe) e.valideLe = Date.now();   // horodate le moment de la maîtrise
+    e.suite = Math.max(3, e.suite + 1);
+    e.revoirLe = aujourdhuiZero() + (PALIERS[PALIERS.length-1] * JOUR);
+    if(!e.valideLe) e.valideLe = Date.now();   // horodate le moment de la maîtrise
   } else {
     e.suite = 0; e.rate++; e.valideLe = null;
     e.revoirLe = aujourdhuiZero();       // à reprendre aujourd'hui même
@@ -386,6 +388,16 @@ function prechargerOutilsPdf(){
   });
 }
 function aller(e){
+  /* Une copie remise ne se noircit plus. Revenir sur « Composition »
+     après avoir quitté ou terminé ouvre donc un nouveau sujet, au lieu de
+     rouvrir la feuille corrigée. Si la copie n'est pas encore partie
+     (envoi en cours ou en échec), on reste sur son écran : rien ne se perd. */
+  if(e === 'grille' && S.corrige){
+    if(S.remiseEtat === 'ok') reinitialiserComposition();
+    else return aller('copie');
+  }
+  /* un nouvel appui sur « Composition » après un échec retente une fois */
+  if(e === 'grille' && S.compoEtat === 'erreur' && !ouvertureEnCours) S.compoEtat = null;
   if(S.gratuit && (e === 'abonnement' || e === 'paiement')) e = 'compte';   // pas de formules pendant la phase gratuite
   if(['revisions','qcm'].includes(e)){ progressionMemo(); chargerQuestions(); }
   if(e !== 'lecture') S.matiereOuverte = null;
@@ -1265,18 +1277,56 @@ async function corrigerAuServeur(questionId, choix, contexte, tempsMs){
 /* Ouvrir une composition : le serveur choisit un sujet du niveau, le
    moins composé par ce candidat, et reprend celle qui serait en cours. */
 let ouvertureEnCours = false;
+
+/* Repart d'une feuille vierge : plus de copie corrigée, plus de sujet
+   gardé, le prochain affichage de la grille demande un nouveau sujet. */
+function reinitialiserComposition(){
+  if(S.sync){ clearInterval(S.sync); S.sync = null; }
+  S.reponses = {}; S.corrige = false; S.grilleNote = null; S.corrigeServeur = null; effacerEpreuve();
+  S.compoTab = 'feuille'; S.sujetVu = false; S.apercu = null; S.compositionId = null; S.remiseEtat = null;
+  S.grille.length = 0; S.compoEtat = null; S.epreuveCompo = null; S.correctionLe = null; S.compoLent = false;
+}
+
+/* Une requête qui ne répond pas ne doit jamais figer l'écran : sur un
+   réseau qui coupe, elle restait en attente sans fin et le bouton
+   « Réessayer » ne servait à rien. Chaque essai a donc un délai, et le
+   serveur reprend la composition déjà ouverte si le premier essai avait
+   abouti sans que la réponse n'arrive. */
+async function appelerAvecDelai(construire, delaiMs){
+  const ctl = new AbortController();
+  const minuteur = setTimeout(() => ctl.abort(), delaiMs);
+  try{
+    return await construire().abortSignal(ctl.signal);
+  }finally{ clearTimeout(minuteur); }
+}
+
 async function ouvrirComposition(){
   if(ouvertureEnCours) return;
   if(!base){ S.compoEtat = 'erreur'; S.compoMessage = "Pas de connexion au serveur pour l'instant."; return rendre(); }
   ouvertureEnCours = true;
-  S.compoEtat = 'chargement'; rendre();
+  S.compoEtat = 'chargement'; S.compoLent = false; rendre();
+  /* au bout de quelques secondes, on dit au candidat que ça continue */
+  const lent = setTimeout(() => {
+    if(S.compoEtat === 'chargement'){ S.compoLent = true; if(S.ecran === 'grille') ecranCompoAttente(); }
+  }, 6000);
   try{
     /* une composition nationale se rejoint par son identifiant ;
        sinon le serveur choisit le sujet, ou reprend celui en cours */
-    const { data, error } = S.rejoindre
-      ? await base.rpc('rejoindre_epreuve', { p_epreuve: S.rejoindre })
-      : await base.rpc('ouvrir_composition', { p_niveau: niveauCand() });
-    S.rejoindre = null;
+    const rejoindre = S.rejoindre;
+    const construire = () => rejoindre
+      ? base.rpc('rejoindre_epreuve', { p_epreuve: rejoindre })
+      : base.rpc('ouvrir_composition', { p_niveau: niveauCand() });
+    let data = null, error = null;
+    for(let essai = 0; essai < 2; essai++){
+      try{
+        const r = await appelerAvecDelai(construire, essai === 0 ? 12000 : 20000);
+        data = r.data; error = r.error;
+      }catch(e){ data = null; error = e || { message:'réseau' }; }
+      /* une réponse du serveur (même un refus) n'est pas rejouée ;
+         seul un silence ou une coupure de réseau l'est */
+      if(!error || error.code) break;
+    }
+    if(!error) S.rejoindre = null;       // gardé tant que le serveur n'a pas répondu
     if(error) throw error;
     if(!data || !data.ok){
       S.compoEtat = data && data.connexion ? 'connexion' : data && data.abonnement ? 'abonnement' : 'erreur';
@@ -1297,8 +1347,10 @@ async function ouvrirComposition(){
     }
   }catch(e){
     S.compoEtat = 'erreur';
-    S.compoMessage = "La composition n'a pas pu être chargée. Vérifiez votre connexion.";
+    S.compoMessage = "La composition n'a pas pu être chargée. Vérifiez votre connexion, puis appuyez sur « Réessayer ».";
   }
+  clearTimeout(lent);
+  S.compoLent = false;
   ouvertureEnCours = false;
   if(S.ecran === 'grille') rendre();
 }
@@ -1490,10 +1542,19 @@ function ecranAujourdhui(){
   </div>`;
 }
 
+/* Au bas de la liste, une petite flèche replie l'actualité sur les trois
+   premières informations, puis la redéploie. Rien n'est supprimé : la liste
+   est seulement masquée, pour ne pas saturer l'écran quand on a fini de lire. */
+const ACTU_VISIBLES_REPLIEES = 3;
+const chevronActu = replie => `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${replie ? 'M6 9l6 6 6-6' : 'M6 15l6-6 6 6'}"/></svg>`;
+
 function ecranActualite(){
   S.taches[0] = true; sauverTaches();
   pister('NEWS_LIST_VIEWED', { onglet: S.actuOnglet });
   const liste = ACTU.filter(a=>a.c===S.actuOnglet);
+  const peutReplier = liste.length > ACTU_VISIBLES_REPLIEES;
+  const replie = peutReplier && !!(S.actuRepli && S.actuRepli[S.actuOnglet]);
+  const montrees = replie ? liste.slice(0, ACTU_VISIBLES_REPLIEES) : liste;
   vue().innerHTML = `
   <div class="pad">
     <button class="retourhaut" data-go="aujourdhui">Actualité</button>
@@ -1507,7 +1568,12 @@ function ecranActualite(){
 
     <div class="bloc" style="margin-top:12px">
       <div class="libelle">${S.actuOnglet==='national'?'Burkina Faso':'Monde et organisations'}<span class="num">${liste.length}</span></div>
-      <div class="carte">${liste.length ? liste.map(a => carteActu(a)).join('') : blocActuVide()}</div>
+      <div class="carte" id="liste-actu">${liste.length ? montrees.map(a => carteActu(a)).join('') : blocActuVide()}</div>
+      ${peutReplier ? `<div class="actu-bascule">
+        <button class="actu-chevron" data-actu-repli="1" aria-expanded="${replie ? 'false' : 'true'}"
+          aria-label="${replie ? 'Afficher les ' + (liste.length - ACTU_VISIBLES_REPLIEES) + ' autres informations' : 'Réduire la liste des informations'}">
+          ${replie ? `<span>+${liste.length - ACTU_VISIBLES_REPLIEES}</span>` : ''}${chevronActu(replie)}
+        </button></div>` : ''}
     </div>
 
     <button class="cta" style="margin-top:16px" data-go="aujourdhui">J'ai lu · valider ma tâche</button>
@@ -1624,7 +1690,7 @@ function ecranInscription(){
 
     <div class="champ">
       <label for="f-nom">Nom et prénom</label>
-      <input id="f-nom" type="text" value="${E(S.form.nom)}" placeholder="Kantagba Jean" oninput="maj('nom',this.value)" autocomplete="name">
+      <input id="f-nom" type="text" value="${E(S.form.nom)}" placeholder="Ouedraogo Franck" oninput="maj('nom',this.value)" autocomplete="name">
     </div>
     <div class="champ">
       <label for="f-tel">Numéro de téléphone</label>
@@ -2182,7 +2248,7 @@ async function partager(quoi){
    ===================================================================== */
 /* QR code vers le site, calculé une fois pour toutes (rien à charger) :
    une feuille imprimée ou partagée amène directement sur Mon Concours. */
-const QR_FEUILLE = '<svg width="78" height="78" aria-label="QR code vers monconcours.vercel.app" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 35 35" shape-rendering="crispEdges"><path fill="#ffffff" d="M0 0h35v35H0z"/><path stroke="#111111" d="M1 1.5h7m3 0h1m2 0h2m1 0h5m2 0h1m2 0h7M1 2.5h1m5 0h1m3 0h1m1 0h4m1 0h1m3 0h2m3 0h1m5 0h1M1 3.5h1m1 0h3m1 0h1m1 0h2m1 0h3m1 0h1m1 0h5m1 0h1m2 0h1m1 0h3m1 0h1M1 4.5h1m1 0h3m1 0h1m1 0h4m2 0h3m3 0h1m1 0h3m1 0h1m1 0h3m1 0h1M1 5.5h1m1 0h3m1 0h1m1 0h1m2 0h1m3 0h1m2 0h1m4 0h1m2 0h1m1 0h3m1 0h1M1 6.5h1m5 0h1m1 0h1m1 0h3m2 0h2m3 0h1m1 0h1m1 0h1m1 0h1m5 0h1M1 7.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M9 8.5h1m1 0h1m1 0h1m2 0h1m5 0h1M1 9.5h1m1 0h5m2 0h2m2 0h1m1 0h3m2 0h1m1 0h3m1 0h5M3 10.5h1m1 0h1m3 0h5m3 0h1m2 0h3m1 0h1m2 0h2m1 0h2m1 0h1M1 11.5h1m2 0h1m1 0h2m3 0h1m1 0h1m2 0h2m1 0h1m2 0h2m2 0h2m1 0h1m1 0h2M1 12.5h1m1 0h1m1 0h1m2 0h2m1 0h2m2 0h2m3 0h7m2 0h3M1 13.5h2m1 0h7m5 0h1m2 0h2m1 0h1m2 0h2m2 0h2m1 0h1M2 14.5h1m1 0h1m6 0h7m3 0h2m1 0h1m2 0h2m1 0h4M2 15.5h1m1 0h1m2 0h2m1 0h1m1 0h4m2 0h3m5 0h2m1 0h4M2 16.5h2m1 0h1m3 0h1m1 0h1m1 0h3m1 0h1m1 0h5m1 0h4m1 0h2M1 17.5h1m2 0h1m1 0h2m1 0h2m2 0h2m3 0h1m1 0h1m2 0h4m1 0h3m2 0h1M3 18.5h1m6 0h1m2 0h3m1 0h4m3 0h1m2 0h2m1 0h2m1 0h1M2 19.5h3m1 0h3m3 0h1m3 0h1m1 0h1m2 0h1m1 0h1m1 0h2m1 0h2m1 0h2M2 20.5h1m3 0h1m1 0h1m2 0h3m1 0h1m1 0h4m3 0h1m2 0h7M1 21.5h10m1 0h3m2 0h1m3 0h6m2 0h2m1 0h2M1 22.5h1m1 0h2m3 0h3m3 0h3m2 0h1m4 0h1m2 0h1m3 0h1m1 0h1M1 23.5h1m1 0h1m1 0h1m1 0h2m3 0h8m1 0h1m1 0h1m2 0h2m3 0h2M1 24.5h1m2 0h3m4 0h2m2 0h2m5 0h2m2 0h1m1 0h4m1 0h1M1 25.5h1m2 0h2m1 0h1m1 0h1m2 0h3m1 0h1m1 0h1m2 0h1m1 0h1m1 0h6m1 0h2M9 26.5h1m1 0h1m2 0h1m4 0h5m1 0h1m3 0h1m1 0h3M1 27.5h7m3 0h1m1 0h1m2 0h1m2 0h1m2 0h1m1 0h2m1 0h1m1 0h1m1 0h1M1 28.5h1m5 0h1m1 0h9m2 0h1m1 0h4m3 0h5M1 29.5h1m1 0h3m1 0h1m1 0h4m1 0h2m3 0h1m2 0h1m2 0h6m1 0h2M1 30.5h1m1 0h3m1 0h1m1 0h2m1 0h1m1 0h1m1 0h2m3 0h4m1 0h1m2 0h3m1 0h1M1 31.5h1m1 0h3m1 0h1m1 0h1m2 0h1m1 0h2m4 0h1m1 0h3m2 0h2m1 0h2M1 32.5h1m5 0h1m2 0h3m4 0h1m2 0h5m1 0h1m2 0h3M1 33.5h7m1 0h2m1 0h1m1 0h1m3 0h1m1 0h2m1 0h4m1 0h1m3 0h1"/></svg>';
+const QR_FEUILLE = '<svg width="78" height="78" aria-label="QR code vers monconcoursbf.com" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 31 31" shape-rendering="crispEdges"><path fill="#ffffff" d="M0 0h31v31H0z"/><path stroke="#111111" d="M1 1.5h7M12 1.5h1M17 1.5h4M23 1.5h7M1 2.5h1M7 2.5h1M10 2.5h1M14 2.5h1M16 2.5h1M18 2.5h1M21 2.5h1M23 2.5h1M29 2.5h1M1 3.5h1M3 3.5h3M7 3.5h1M9 3.5h3M17 3.5h2M20 3.5h2M23 3.5h1M25 3.5h3M29 3.5h1M1 4.5h1M3 4.5h3M7 4.5h1M13 4.5h3M17 4.5h1M19 4.5h2M23 4.5h1M25 4.5h3M29 4.5h1M1 5.5h1M3 5.5h3M7 5.5h1M9 5.5h2M12 5.5h1M15 5.5h1M19 5.5h1M23 5.5h1M25 5.5h3M29 5.5h1M1 6.5h1M7 6.5h1M9 6.5h2M14 6.5h2M19 6.5h2M23 6.5h1M29 6.5h1M1 7.5h7M9 7.5h1M11 7.5h1M13 7.5h1M15 7.5h1M17 7.5h1M19 7.5h1M21 7.5h1M23 7.5h7M11 8.5h1M13 8.5h1M18 8.5h4M2 9.5h1M5 9.5h1M7 9.5h1M9 9.5h1M12 9.5h1M15 9.5h1M17 9.5h1M19 9.5h1M21 9.5h2M24 9.5h2M27 9.5h1M1 10.5h1M3 10.5h3M9 10.5h2M12 10.5h1M16 10.5h2M20 10.5h2M23 10.5h7M4 11.5h1M6 11.5h2M9 11.5h4M14 11.5h1M16 11.5h1M22 11.5h1M24 11.5h2M27 11.5h1M29 11.5h1M2 12.5h4M14 12.5h1M16 12.5h1M18 12.5h2M22 12.5h1M25 12.5h2M28 12.5h2M1 13.5h3M6 13.5h2M10 13.5h1M12 13.5h1M14 13.5h5M20 13.5h2M24 13.5h1M29 13.5h1M2 14.5h3M10 14.5h1M13 14.5h2M16 14.5h4M23 14.5h1M25 14.5h1M27 14.5h3M1 15.5h1M3 15.5h2M7 15.5h9M17 15.5h1M19 15.5h1M21 15.5h3M25 15.5h1M29 15.5h1M2 16.5h2M8 16.5h2M11 16.5h2M14 16.5h1M16 16.5h1M21 16.5h1M24 16.5h1M26 16.5h1M29 16.5h1M1 17.5h2M4 17.5h2M7 17.5h1M11 17.5h1M13 17.5h3M17 17.5h1M21 17.5h2M28 17.5h1M1 18.5h1M3 18.5h1M6 18.5h1M10 18.5h2M14 18.5h1M18 18.5h4M23 18.5h1M25 18.5h3M29 18.5h1M3 19.5h1M5 19.5h3M11 19.5h1M13 19.5h4M19 19.5h1M21 19.5h1M24 19.5h4M29 19.5h1M3 20.5h4M8 20.5h2M11 20.5h3M16 20.5h4M21 20.5h1M26 20.5h1M29 20.5h1M1 21.5h3M7 21.5h1M9 21.5h1M13 21.5h1M18 21.5h1M21 21.5h6M29 21.5h1M9 22.5h1M13 22.5h1M16 22.5h2M19 22.5h3M25 22.5h1M27 22.5h3M1 23.5h7M10 23.5h1M14 23.5h1M16 23.5h1M18 23.5h1M20 23.5h2M23 23.5h1M25 23.5h1M29 23.5h1M1 24.5h1M7 24.5h1M11 24.5h2M15 24.5h1M17 24.5h5M25 24.5h2M1 25.5h1M3 25.5h3M7 25.5h1M9 25.5h3M13 25.5h3M19 25.5h7M28 25.5h2M1 26.5h1M3 26.5h3M7 26.5h1M10 26.5h1M12 26.5h2M17 26.5h2M24 26.5h1M26 26.5h3M1 27.5h1M3 27.5h3M7 27.5h1M10 27.5h2M13 27.5h3M17 27.5h1M19 27.5h4M27 27.5h3M1 28.5h1M7 28.5h1M9 28.5h7M18 28.5h1M21 28.5h1M24 28.5h1M26 28.5h1M28 28.5h2M1 29.5h7M10 29.5h1M13 29.5h2M16 29.5h1M18 29.5h1M21 29.5h3M25 29.5h2M28 29.5h1"/></svg>';
 
 /* =====================================================================
    ANIMATIONS
@@ -2280,10 +2346,10 @@ function docEntete(phraseQr){
     '<div class="tete"><div class="sceau"><i></i><i></i><i></i><i></i></div>' +
     '<div class="marque"><div class="n">MON CONCOURS</div><div class="d">Préparation aux concours directs du Burkina Faso</div>' +
     '<div class="w">WhatsApp ' + telAffiche() + ' · difficulté, urgence ou recommandation</div></div>' +
-    '<div class="site"><div><div class="adr">monconcours.vercel.app</div><div class="sc">' + E(phraseQr || 'Scannez pour réviser gratuitement') + '</div></div>' + QR_FEUILLE + '</div></div>';
+    '<div class="site"><div><div class="adr">monconcoursbf.com</div><div class="sc">' + E(phraseQr || 'Scannez pour réviser gratuitement') + '</div></div>' + QR_FEUILLE + '</div></div>';
 }
 function docPied(){
-  return '<div class="pied"><span><b>monconcours.vercel.app</b> · WhatsApp <b>' + telAffiche() + '</b></span><span>Document établi le ' +
+  return '<div class="pied"><span><b>monconcoursbf.com</b> · WhatsApp <b>' + telAffiche() + '</b></span><span>Document établi le ' +
     new Date().toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' }) + '</span></div>';
 }
 function docComplet(titre, css, corps){
@@ -2371,7 +2437,7 @@ async function htmlVersPdf(html){
       }catch(e){}
       pdf.setDrawColor(17); pdf.setLineWidth(0.3); pdf.line(12, 297 - bas + 3, 198, 297 - bas + 3);
       pdf.setTextColor(17); pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8.5);
-      pdf.text('Mon Concours · monconcours.vercel.app · WhatsApp ' + telAffiche(), 12, 297 - bas + 8);
+      pdf.text('Mon Concours · monconcoursbf.com · WhatsApp ' + telAffiche(), 12, 297 - bas + 8);
       pdf.text('Page ' + (i + 1) + ' sur ' + total, 198, 297 - bas + 8, { align:'right' });
     });
     return pdf.output('blob');
@@ -2527,7 +2593,7 @@ function htmlFeuilleComposition(source){
 '<div class="filigrane" aria-hidden="true"><i></i><i></i><i></i><i></i><b>MON CONCOURS</b></div>' +
 '<div class="tete"><div class="sceau"><i></i><i></i><i></i><i></i></div>' +
   '<div class="marque"><div class="n">MON CONCOURS</div><div class="d">Préparation aux concours directs du Burkina Faso</div></div>' +
-  '<div class="site"><div><div class="adr">monconcours.vercel.app</div><div class="sc">Scannez pour réviser gratuitement</div></div>' + QR_FEUILLE + '</div></div>' +
+  '<div class="site"><div><div class="adr">monconcoursbf.com</div><div class="sc">Scannez pour réviser gratuitement</div></div>' + QR_FEUILLE + '</div></div>' +
 
 '<h1>Analyse de la copie</h1>' +
 '<div class="ident">' +
@@ -2564,7 +2630,7 @@ function htmlFeuilleComposition(source){
   '<span><i style="border:2px solid #B4231C"></i> Noirci à tort</span>' +
   '<span><i style="border:1px solid #ccc"></i> Non noirci</span>' +
 '</div>' +
-'<div class="pied"><span><b>monconcours.vercel.app</b> · WhatsApp <b>+226 ' + CONTACT.adminTel.replace(/(\d{2})(?=\d)/g, '$1 ') + '</b></span><span>Document remis le ' + quand + '</span></div>' +
+'<div class="pied"><span><b>monconcoursbf.com</b> · WhatsApp <b>+226 ' + CONTACT.adminTel.replace(/(\d{2})(?=\d)/g, '$1 ') + '</b></span><span>Document remis le ' + quand + '</span></div>' +
 '<div class="noimp"><button onclick="window.print()">Enregistrer en PDF ou imprimer</button></div>' +
 '<scr' + 'ipt>setTimeout(function(){window.print();},600);<\/scr' + 'ipt>' +
 '</body></html>';
@@ -2919,7 +2985,9 @@ function ecranCompoAttente(){
   const titres = { chargement:'Préparation du sujet…', connexion:'Un compte est nécessaire',
     abonnement:'La composition fait partie de l\'abonnement', erreur:'Composition indisponible' };
   const textes = {
-    chargement: 'Le sujet arrive. Le chronomètre ne démarre qu\'une fois la feuille affichée.',
+    chargement: S.compoLent
+      ? 'La connexion est lente, on insiste. Ne quittez pas cette page : le sujet arrive.'
+      : 'Le sujet arrive. Le chronomètre ne démarre qu\'une fois la feuille affichée.',
     connexion: 'Crée ton compte gratuit : tu as droit à 7 jours d\'essai avec les compositions comprises.',
     abonnement: 'Chaque composition est un sujet de 50 questions en 25 minutes, sur la feuille à noircir, corrigé par le serveur. Ta période d\'essai est terminée : l\'abonnement l\'ouvre à nouveau.',
     erreur: S.compoMessage || 'Le sujet n\'a pas pu être chargé.'
@@ -2956,13 +3024,16 @@ function decompteDepart(){
     d.innerHTML = `<span class="${i === 3 ? 'parti' : ''}">${etapes[i]}</span>`;
     if(i < 3) bip(1); else { sonDepart(); annonceTemps('L\'épreuve commence. Bon courage.'); }
     i++;
-    setTimeout(suivant, i === 4 ? 1000 : 800);
+    setTimeout(suivant, i === 4 ? 700 : 500);
   };
   suivant();
 }
 function ecranGrille(){
   if(S.compoEtat !== 'pret' || !S.grille.length){
-    if(S.compoEtat !== 'chargement' && S.compoEtat !== 'abonnement' && S.compoEtat !== 'connexion') ouvrirComposition();
+    /* On n'ouvre le sujet qu'à la première demande. Après un échec ('erreur'),
+       l'écran attend le bouton « Réessayer » : avant, chaque échec redessinait
+       l'écran, qui relançait aussitôt la requête, sans fin ni pause. */
+    if(!S.compoEtat || S.compoEtat === 'pret') ouvrirComposition();
     return ecranCompoAttente();
   }
   const rep = Object.keys(S.reponses).length;
@@ -5574,7 +5645,7 @@ async function carteProgression(){
     x.fillStyle = '#E9EEEA'; x.font = '800 76px Helvetica, Arial, sans-serif'; x.fillText(v, cx + 36, cy + 105);
     x.fillStyle = '#A2B2AA'; x.font = '34px Helvetica, Arial, sans-serif'; x.fillText(l, cx + 36, cy + 160);
   });
-  x.fillStyle = '#E3A82B'; x.font = '700 44px Helvetica, Arial, sans-serif'; x.fillText('monconcours.vercel.app', 80, 1010);
+  x.fillStyle = '#E3A82B'; x.font = '700 44px Helvetica, Arial, sans-serif'; x.fillText('monconcoursbf.com', 80, 1010);
   const blob = await new Promise(r => c.toBlob(r, 'image/png'));
   const fichier = new File([blob], 'ma-progression-mon-concours.png', { type:'image/png' });
   pister('PROGRESS_CARD_SHARED');
@@ -5678,7 +5749,7 @@ async function carteResultat(type){
     x.drawImage(qr, W - 80 - 228, H - 80 - 228, 220, 220);
   }catch(e){}
   x.fillStyle = '#E3A82B'; texteAjuste(x, k.appel, 40, 700, W - 160 - 270); x.fillText(k.appel, 80, H - 200);
-  x.fillStyle = '#E9EEEA'; x.font = '600 36px Helvetica, Arial, sans-serif'; x.fillText('monconcours.vercel.app', 80, H - 145);
+  x.fillStyle = '#E9EEEA'; x.font = '600 36px Helvetica, Arial, sans-serif'; x.fillText('monconcoursbf.com', 80, H - 145);
   x.fillStyle = '#7F918A'; x.font = '28px Helvetica, Arial, sans-serif'; x.fillText('Gratuit · scannez le code', 80, H - 98);
   const blob = await new Promise(r => c.toBlob(r, 'image/png'));
   const fichier = new File([blob], 'mon-resultat-mon-concours.png', { type:'image/png' });
@@ -5945,7 +6016,7 @@ function surcouche(){
 
     ${mode === 'inscription' ? `
       <div class="champ"><label for="m-nom">Nom et prénom</label>
-        <input id="m-nom" type="text" value="${E(S.form.nom)}" placeholder="Kantagba Jean" oninput="maj('nom',this.value)" autocomplete="name"></div>` : ''}
+        <input id="m-nom" type="text" value="${E(S.form.nom)}" placeholder="Ouedraogo Franck" oninput="maj('nom',this.value)" autocomplete="name"></div>` : ''}
 
     <div class="champ"><label for="m-tel">Numéro de téléphone</label>
       <div class="prefixe"><span class="ind">+226</span>
@@ -6074,7 +6145,7 @@ function rendre(){
 }
 
 document.addEventListener('click', ev=>{
-  const t = ev.target.closest('[data-matiere],[data-vers],[data-musique],[data-notifs],[data-notifs-tout],[data-notif-lire],[data-copier],[data-partage-natif],[data-fermer-partage],[data-paieretour],[data-preuve-modifier],[data-preuve-envoyer],[data-feuille],[data-archive],[data-partage],[data-oeil],[data-reinitialiser],[data-lire],[data-telecharger],[data-apercu],[data-saut],[data-compotab],[data-bascule-theme],[data-modal],[data-entrer],[data-bascule],[data-plustard],[data-deconnecter],[data-theme-choix],[data-erreursdusoir],[data-cible],[data-cours],[data-inscrire],[data-connecter],[data-oubli],[data-formule],[data-operateur],[data-payer],[data-paiefin],[data-paieannul],[data-go],[data-toutcahier],[data-actu],[data-niv],[data-mat],[data-qcm],[data-qsuiv],[data-cahierfreq],[data-classement],[data-diagnostic],[data-defi],[data-duel],[data-badges],[data-phase],[data-conc],[data-dep],[data-test],[data-tb],[data-tremettre],[data-retest],[data-seance],[data-rep],[data-suivante],[data-b],[data-remettre],[data-recommencer],[data-reprise],[data-rr],[data-fin-reprise],[data-qcm-relancer],[data-compo-relancer],[data-remise-relancer],[data-recu]');
+  const t = ev.target.closest('[data-matiere],[data-vers],[data-musique],[data-notifs],[data-notifs-tout],[data-notif-lire],[data-copier],[data-partage-natif],[data-fermer-partage],[data-paieretour],[data-preuve-modifier],[data-preuve-envoyer],[data-feuille],[data-archive],[data-partage],[data-oeil],[data-reinitialiser],[data-lire],[data-telecharger],[data-apercu],[data-saut],[data-compotab],[data-bascule-theme],[data-modal],[data-entrer],[data-bascule],[data-plustard],[data-deconnecter],[data-theme-choix],[data-erreursdusoir],[data-cible],[data-cours],[data-inscrire],[data-connecter],[data-oubli],[data-formule],[data-operateur],[data-payer],[data-paiefin],[data-paieannul],[data-go],[data-toutcahier],[data-actu],[data-actu-repli],[data-niv],[data-mat],[data-qcm],[data-qsuiv],[data-cahierfreq],[data-classement],[data-diagnostic],[data-defi],[data-duel],[data-badges],[data-phase],[data-conc],[data-dep],[data-test],[data-tb],[data-tremettre],[data-retest],[data-seance],[data-rep],[data-suivante],[data-b],[data-remettre],[data-recommencer],[data-reprise],[data-rr],[data-fin-reprise],[data-qcm-relancer],[data-compo-relancer],[data-remise-relancer],[data-recu]');
   if(!t) return;
   const d = t.dataset;
 
@@ -6278,6 +6349,17 @@ document.addEventListener('click', ev=>{
   }
   if(d.toutcahier){ S.cahierFiltre=false; S.cahierDepuisGrille=false; return rendre(); }
   if(d.actu){ S.actuOnglet = d.actu; return rendre(); }
+  if(d.actuRepli){
+    S.actuRepli = S.actuRepli || {};
+    S.actuRepli[S.actuOnglet] = !S.actuRepli[S.actuOnglet];
+    rendre();
+    /* en repliant, on remonte au début de la liste */
+    if(S.actuRepli[S.actuOnglet]){
+      const tete = document.getElementById('liste-actu');
+      if(tete) tete.scrollIntoView({ block:'start' });
+    }
+    return;
+  }
   if(d.niv){
     S.niveau = d.niv; S.ressources = null; S.banque = null; S.progression = null;
     chargerRessources(); chargerQuestions(true);
@@ -6381,9 +6463,7 @@ document.addEventListener('click', ev=>{
   if(d.remettre) return remettre();
 
   if(d.recommencer){
-    S.reponses={}; S.corrige=false; S.grilleNote=null; S.corrigeServeur=null; effacerEpreuve();
-    S.compoTab='feuille'; S.sujetVu=false; S.apercu=null; S.compositionId=null; S.remiseEtat=null;
-    S.grille.length = 0; S.compoEtat = null; S.epreuveCompo = null; S.correctionLe = null;
+    reinitialiserComposition();
     pister('COMPOSITION_RESTARTED', { type: d.recommencer });
     return aller('grille');
   }

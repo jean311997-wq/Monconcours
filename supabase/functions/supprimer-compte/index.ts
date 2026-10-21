@@ -10,7 +10,7 @@ const admin = createClient(URL_BASE, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
-const ORIGINES = ["https://monconcours.vercel.app"];
+const ORIGINES = ["https://monconcoursbf.com", "https://www.monconcoursbf.com", "https://monconcours.vercel.app"];
 function entetes(req: Request) {
   const o = req.headers.get("origin") || "";
   return {

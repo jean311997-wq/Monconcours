@@ -522,6 +522,15 @@ body{background:var(--encre);padding:0;overflow:hidden}
 .voirplus{width:100%;margin-top:10px;padding:10px;border:1px dashed var(--trait);border-radius:10px;
   font-size:12px;font-family:var(--m);letter-spacing:.08em;color:var(--craie2)}
 .voirplus:hover{border-color:var(--survol);color:var(--craie)}
+/* flèche au bas de l'actualité : replie la liste, puis la redéploie */
+.actu-bascule{display:flex;justify-content:flex-end;margin-top:10px}
+.actu-chevron{display:inline-flex;align-items:center;gap:6px;min-height:44px;min-width:44px;
+  padding:0 14px;justify-content:center;border:1px solid var(--trait);border-radius:999px;
+  background:var(--ardoise2);color:var(--craie2);font-family:var(--m);font-size:12px;letter-spacing:.06em;
+  transition:background .16s ease,border-color .16s ease,transform .12s ease}
+.actu-chevron:hover{border-color:var(--survol);color:var(--craie)}
+.actu-chevron:active{transform:scale(.96)}
+.actu-chevron:focus-visible{outline:2px solid var(--or);outline-offset:2px}
 /* Le retour doit se voir et se toucher sans viser : cible de 44 px,
    contour visible, position constante en haut à gauche de chaque écran. */
 .retourhaut{display:inline-flex;align-items:center;gap:9px;
