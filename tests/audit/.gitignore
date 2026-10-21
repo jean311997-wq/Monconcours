@@ -1,0 +1,4 @@
+node_modules/
+lab*.json
+ecran_*.png
+__pycache__/

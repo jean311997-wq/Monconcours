@@ -876,6 +876,56 @@ function sonNotif(){
     o.connect(g); g.connect(a.destination); o.start(t + d); o.stop(t + d + 0.4);
   });
 }
+/* écarter d'un geste : glisser du doigt vers le haut (ou le bas), la gauche ou la droite
+   fait partir l'élément ; un simple toucher reste un toucher.
+   o.sens : -1 part vers le haut, 1 vers le bas · o.pose(dx, dy) donne la position
+   o.toucher() / o.relacher(ecarte) : pour mettre un minuteur en pause · o.apres() après le départ
+   o.zone : parties qui bloquent le défilement du navigateur (toute la fenêtre si absent)
+   o.ignore : parties où le geste ne doit pas partir (champ de saisie, boutons) */
+function glisserPourEcarter(el, o){
+  const sens = o.sens || -1;
+  let x0 = 0, y0 = 0, dx = 0, dy = 0, tire = false, depart = 0;
+  (o.zone ? Array.from(el.querySelectorAll(o.zone)) : [el]).forEach(z => { z.style.touchAction = 'none'; });
+  el.addEventListener('pointerdown', e => {
+    if(e.button > 0) return;
+    if(o.ignore && e.target.closest && e.target.closest(o.ignore)) return;
+    x0 = e.clientX; y0 = e.clientY; dx = 0; dy = 0; tire = false; depart = Date.now(); el._glisse = false;
+    try{ el.setPointerCapture(e.pointerId); }catch(_){}
+    if(o.toucher) o.toucher();
+  });
+  el.addEventListener('pointermove', e => {
+    if(!el.hasPointerCapture || !el.hasPointerCapture(e.pointerId)) return;
+    dx = e.clientX - x0; dy = e.clientY - y0;
+    if(!tire && Math.hypot(dx, dy) < 8) return;
+    tire = true; el._glisse = true;
+    const v = sens < 0 ? Math.min(0, dy) : Math.max(0, dy);
+    el.style.transition = 'none';
+    el.style.transform = o.pose(dx, v);
+    el.style.opacity = String(Math.max(0.25, 1 - Math.max(Math.abs(dx) / 240, Math.abs(v) / 120)));
+  });
+  const fin = () => {
+    if(!tire){ if(o.relacher) o.relacher(false); return; }
+    const v = sens < 0 ? -dy : dy;
+    const vite = Math.hypot(dx, dy) / Math.max(1, Date.now() - depart) > 0.5 && Math.hypot(dx, dy) > 24;
+    const part = Math.abs(dx) > 70 || v > 40 || vite;
+    el.style.transition = 'transform .22s ease-out, opacity .22s ease-out';
+    if(part){
+      if(Math.abs(dx) >= Math.max(v, 0)) el.style.transform = o.pose(Math.sign(dx || 1) * window.innerWidth, 0);
+      else el.style.transform = o.pose(0, sens * 220);
+      el.style.opacity = '0';
+      setTimeout(() => { el.remove(); if(o.apres) o.apres(); }, 230);
+      if(o.relacher) o.relacher(true);
+    } else {
+      el.style.transform = o.pose(0, 0); el.style.opacity = '1';
+      setTimeout(() => { el.style.transition = ''; el.style.transform = ''; el.style.opacity = ''; }, 240);
+      if(o.relacher) o.relacher(false);
+    }
+  };
+  el.addEventListener('pointerup', fin);
+  el.addEventListener('pointercancel', fin);
+  /* après un glissement, le « clic » qui suit ne doit rien ouvrir */
+  el.addEventListener('click', e => { if(el._glisse){ e.stopImmediatePropagation(); e.preventDefault(); el._glisse = false; } }, true);
+}
 function bandeauNotif(n, combien){
   sonNotif();
   document.querySelectorAll('.bandeau-notif').forEach(x => x.remove());
@@ -883,10 +933,21 @@ function bandeauNotif(n, combien){
   b.className = 'bandeau-notif';
   b.setAttribute('role', 'status');
   b.innerHTML = `<span class="ic">${ico(ICONE_NOTIF[n.type] || 'cloche', 18)}</span><span class="co"><b>${E(n.titre)}</b><span>${E(n.message)}</span>${combien > 1 ? `<i>et ${combien - 1} autre${combien > 2 ? 's' : ''} notification${combien > 2 ? 's' : ''}</i>` : ''}</span>`;
-  b.onclick = () => { b.remove(); ouvrirNotif(n); };
+  let minuteur;
+  const partir = () => { b.classList.remove('vu'); setTimeout(() => b.remove(), 400); };
+  const armer = ms => { clearTimeout(minuteur); minuteur = setTimeout(partir, ms); };
+  b.onclick = () => { clearTimeout(minuteur); b.remove(); ouvrirNotif(n); };
+  b.addEventListener('keydown', e => { if(e.key === 'Escape'){ clearTimeout(minuteur); partir(); } });
+  /* on l'écarte du doigt vers le haut, la gauche ou la droite ; tant qu'on le touche, il reste */
+  glisserPourEcarter(b, {
+    sens: -1,
+    pose: (dx, dy) => `translate(calc(-50% + ${dx}px), ${dy}px)`,
+    toucher: () => clearTimeout(minuteur),
+    relacher: ecarte => { if(!ecarte) armer(3000); }
+  });
   document.body.appendChild(b);
   setTimeout(() => b.classList.add('vu'), 30);
-  setTimeout(() => { b.classList.remove('vu'); setTimeout(() => b.remove(), 400); }, 9000);
+  armer(7000);
 }
 /* toucher une notification mène à ce dont elle parle */
 function ouvrirNotif(n){
@@ -1194,7 +1255,7 @@ function brancherBase(){
    OBSERVATION — collecte des événements
    Rien de personnel : ni saisie, ni mot de passe, ni position.
    ===================================================================== */
-const VERSION_APP = 'v23';
+const VERSION_APP = 'v24';
 
 const O = {
   session: null, precedent: null, dernierTemps: Date.now(), entreeEcran: Date.now(),
@@ -4705,6 +4766,71 @@ async function envoyerSignalement(){
   }catch(e){ toast('Envoi impossible. Vérifie ta connexion.'); }
 }
 
+/* ---------- « Donnez votre avis » : après environ trente minutes d'utilisation ---------- */
+const AVIS_SEUIL = 30 * 60;        /* secondes d'utilisation cumulées */
+const AVIS_PAUSE_JOURS = 21;       /* fermé sans envoyer : pas de nouvelle demande avant trois semaines */
+function etatAvis(){
+  /* gardé sur le téléphone, par personne (trois derniers chiffres seulement : on ne garde pas le numéro) */
+  const pour = String(S.util.tel || '').slice(-3);
+  const a = lireReglages().avis;
+  return (a && a.pour === pour) ? a : { pour: pour, s: 0, vu: 0, envoye: false };
+}
+function suiviAvis(){
+  if(document.visibilityState !== 'visible' || !S.util.connecte || !base) return;
+  const a = etatAvis();
+  if(a.envoye) return;
+  /* seul le temps où la personne agit compte : un téléphone posé sur une table ne compte pas */
+  if(Date.now() - O.dernierTemps < 60000){ a.s = (a.s || 0) + 15; ecrireReglage('avis', a); }
+  const carte = document.querySelector('.avis-carte');
+  const enEpreuve = enComposition() || SANS_TETE.includes(S.ecran);
+  if(enEpreuve){ if(carte) carte.remove(); return; }
+  if(carte || S.modal) return;
+  if(a.s >= AVIS_SEUIL && Date.now() - (a.vu || 0) > AVIS_PAUSE_JOURS * 86400000) proposerAvis(a);
+}
+setInterval(suiviAvis, 15000);
+function proposerAvis(a){
+  a.vu = Date.now(); ecrireReglage('avis', a);
+  const c = document.createElement('div');
+  c.className = 'avis-carte';
+  c.setAttribute('role', 'dialog');
+  c.setAttribute('aria-label', 'Donnez votre avis');
+  c.innerHTML = `<div class="avis-tete"><i class="avis-poignee"></i><b>Votre avis nous aide à progresser</b>
+    <span>Que pensez-vous du site ou des recommandations ? Quelques mots suffisent.</span></div>
+    <textarea id="avis-texte" maxlength="1000" rows="3" aria-label="Votre avis" placeholder="Ce qui vous plaît, ce qui manque, ce qui ne va pas…"></textarea>
+    <button class="cta" data-avis-envoi="1">Envoyer mon avis</button>
+    <small class="avis-aide">Pas maintenant ? Faites glisser cette fenêtre pour la fermer.</small>`;
+  c.querySelector('[data-avis-envoi]').onclick = () => envoyerAvis(c);
+  /* le clavier du téléphone couvre le bas de l'écran : pendant la saisie, la fenêtre passe en haut */
+  c.querySelector('#avis-texte').addEventListener('focus', () => c.classList.add('saisie'));
+  c.addEventListener('keydown', e => { if(e.key === 'Escape') c.remove(); });
+  glisserPourEcarter(c, {
+    sens: 1,
+    zone: '.avis-tete, .avis-aide',
+    ignore: 'textarea, button',
+    pose: (dx, dy) => `translate(calc(-50% + ${dx}px), ${dy}px)`
+  });
+  document.body.appendChild(c);
+  setTimeout(() => c.classList.add('vu'), 30);
+  pister('FEEDBACK_PROMPT_SHOWN');
+}
+async function envoyerAvis(c){
+  const champ = c.querySelector('#avis-texte');
+  const texte = ((champ && champ.value) || '').trim();
+  if(texte.length < 3){ toast('Écrivez quelques mots avant d\'envoyer.'); if(champ) champ.focus(); return; }
+  const bouton = c.querySelector('[data-avis-envoi]'); if(bouton) bouton.disabled = true;
+  try{
+    const { data } = await base.rpc('envoyer_avis', { p_message: texte });
+    if(data && data.ok){
+      const a = etatAvis(); a.envoye = true; ecrireReglage('avis', a);
+      c.remove(); toast('Merci ! Votre avis est bien arrivé.');
+      pister('FEEDBACK_SENT');
+    } else {
+      if(bouton) bouton.disabled = false;
+      toast((data && data.message) || 'Envoi impossible pour le moment.');
+    }
+  }catch(e){ if(bouton) bouton.disabled = false; toast('Envoi impossible. Vérifiez votre connexion.'); }
+}
+
 /* ---------- quitter une épreuve ---------- */
 function demanderQuitter(){
   S.modal = 'quitter';
@@ -5215,14 +5341,14 @@ async function creerDefi(parWhatsapp){
   try{
     const { data } = await base.rpc('creer_defi_matieres', { p_matieres: p.matieres, p_niveau: niveauCand() });
     if(!data || !data.ok){ S.defi = { etat:'erreur', message:(data && data.message) || 'Défi impossible.' }; return rendre(); }
-    let r = { ok:true, invites:0, introuvables:[] };
+    let r = { ok:true, invites:0 };
     if(valides.length || p.pseudo){
       const inv = await base.rpc('inviter_defi', { p_defi: data.id, p_telephones: valides, p_pseudos: p.pseudo ? [p.pseudo] : [] });
       r = inv.data || {};
     }
     if(!r.ok){ S.defi = { etat:'erreur', message: r.message || 'Invitation impossible.' }; return rendre(); }
     pister('CHALLENGE_CREATED', { matieres: p.matieres.length, invites: r.invites || 0 });
-    S.defi = { etat:'envoye', id:data.id, invites:r.invites || 0, introuvables:r.introuvables || [], matieres:p.matieres, parWhatsapp: !!parWhatsapp };
+    S.defi = { etat:'envoye', id:data.id, invites:r.invites || 0, matieres:p.matieres, parWhatsapp: !!parWhatsapp };
     S.defiPrep = null;
     rendre();
     if(parWhatsapp) partagerDefiWhatsapp(S.defi);
@@ -5360,9 +5486,8 @@ function ecranDefi(){
   if(d.etat === 'envoye'){
     vue().innerHTML = `<div class="pad">${tete}
       <div class="eyebrow">Défi envoyé</div>
-      <h1 class="titre">${d.invites ? (d.invites > 1 ? d.invites + ' invitations envoyées' : 'Invitation envoyée') : 'Votre défi est prêt'}</h1>
-      ${d.invites ? `<p class="sous" style="margin-top:6px">Vos amis reçoivent une notification. Vous verrez ici qui accepte, qui refuse, et le classement à la fin.</p>` : `<p class="sous" style="margin-top:6px">Envoyez-le sur WhatsApp : votre ami ouvre le lien, crée son compte gratuit et joue les mêmes 10 questions.</p>`}
-      ${d.introuvables.length ? `<div class="carte" style="margin-top:12px"><p class="sous">${d.introuvables.length > 1 ? 'Ces numéros ne sont' : 'Ce numéro n\'est'} pas encore inscrit${d.introuvables.length > 1 ? 's' : ''} sur Mon Concours : <b>${d.introuvables.map(n => E(n.replace(/(\d{2})(?=\d)/g, '$1 '))).join(', ')}</b>. Envoyez-lui le défi sur WhatsApp.</p></div>` : ''}
+      <h1 class="titre">${d.invites ? (d.invites > 1 ? 'Invitations transmises' : 'Invitation transmise') : 'Votre défi est prêt'}</h1>
+      ${d.invites ? `<p class="sous" style="margin-top:6px">Ceux qui ont un compte reçoivent une notification. Vous verrez ici qui accepte, qui refuse, et le classement à la fin. Pour un ami sans compte, envoyez-lui le défi sur WhatsApp.</p>` : `<p class="sous" style="margin-top:6px">Envoyez-le sur WhatsApp : votre ami ouvre le lien, crée son compte gratuit et joue les mêmes 10 questions.</p>`}
       <button class="cta wa-btn" style="margin-top:12px" data-partage-defi="${E(d.id)}">${logoReseau('whatsapp')} Envoyer le défi sur WhatsApp</button>
       <button class="cta" style="margin-top:14px" data-defi-ouvrir="${E(d.id)}">Commencer mon défi maintenant</button>
     </div>`;
@@ -6085,7 +6210,7 @@ function apptete(){
     <button class="bouton-tete" data-bascule-theme="1" aria-label="${S.theme==='sombre'?'Passer en mode clair':'Passer en mode sombre'}">
       ${S.theme==='sombre'?ico('soleil',17):ico('lune',17)}<span>${S.theme==='sombre'?'Mode clair':'Mode sombre'}</span></button>
     ${S.util.connecte
-      ? `<button class="bouton-tete" data-deconnecter="1" aria-label="Se déconnecter">${ico('sortie',17)}<span>Se déconnecter</span></button>`
+      ? ''
       : `<button class="bouton-tete" data-modal="inscription" aria-label="Se connecter">${ico('compte',17)}<span>Se connecter</span></button>`}`;
 }
 function annoncer(){

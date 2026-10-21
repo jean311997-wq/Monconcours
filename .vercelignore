@@ -5,3 +5,4 @@ deployer.command
 supabase/
 *.md
 .git/
+tests/

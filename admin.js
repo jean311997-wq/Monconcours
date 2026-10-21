@@ -167,13 +167,15 @@ async function entrer(session){
 }
 /* les pastilles du menu (à valider, au dépôt), quelle que soit la page ouverte */
 async function majPastilles(){
-  const [p, dep] = await Promise.all([
+  const [p, dep, av] = await Promise.all([
     db.from('propositions_ia').select('id', { count:'exact', head:true }).eq('statut','a_valider'),
-    db.from('depots').select('id', { count:'exact', head:true }).eq('statut','a_ranger')
+    db.from('depots').select('id', { count:'exact', head:true }).eq('statut','a_ranger'),
+    db.from('avis').select('id', { count:'exact', head:true }).eq('statut','nouveau')
   ]);
-  const pv = document.getElementById('pastille-validation'), pd = document.getElementById('pastille-depot');
+  const pv = document.getElementById('pastille-validation'), pd = document.getElementById('pastille-depot'), pa = document.getElementById('pastille-avis');
   if(pv){ pv.hidden = !p.count; pv.textContent = p.count || ''; }
   if(pd){ pd.hidden = !dep.count; pd.textContent = dep.count || ''; }
+  if(pa){ pa.hidden = !av.count; pa.textContent = av.count || ''; }
 }
 
 function refuser(message){
@@ -256,7 +258,7 @@ function rendre(){
      depot:vueDepot, import:vueImport, bibliotheque:vueBibliotheque,
      validation:vueValidation, questions:vueQuestions, sujets:vueSujets, actualites:vueActualites,
      referentiel:vueReferentiel, journal:vueJournal, musique:vueMusique, paiements:vuePaiements,
-     collectives:vueCollectives, signalements:vueSignalements, indicateurs:vueIndicateurs, propositions:vuePropositions }[A.vue] || vueTableau)();
+     collectives:vueCollectives, signalements:vueSignalements, avis:vueAvis, indicateurs:vueIndicateurs, propositions:vuePropositions }[A.vue] || vueTableau)();
   $('#vue').scrollTop = 0;
 }
 
@@ -2419,6 +2421,35 @@ async function vueSignalements(){
     const { error: e2 } = await db.from('signalements').update({ statut: st }).eq('id', +id);
     if(e2) return erreur(e2, 'Mise à jour impossible');
     signal(st === 'corrige' ? 'Marqué corrigé.' : 'Signalement rejeté.', 'info'); vueSignalements();
+  });
+}
+
+/* ============================================================
+   AVIS DES CANDIDATS (fenêtre « Donnez votre avis »)
+   ============================================================ */
+async function vueAvis(){
+  const { data, error } = await db.rpc('avis_liste', { p_limite: 200 });
+  if(error) return erreur(error, 'Lecture impossible');
+  const liste = data || [];
+  const nouveaux = liste.filter(a => a.statut === 'nouveau').length;
+  const niveau = v => (NIVEAUX.find(([k]) => k === v) || [])[1] || '';
+  $('#vue').innerHTML = `
+    <h2 class="titre">Avis des candidats</h2>
+    <p class="sous">Après une trentaine de minutes d'utilisation, l'application propose au candidat de donner son avis sur le site ou sur les recommandations. Les avis arrivent ici.</p>
+    <div class="bloc"><div class="libelle">${nouveaux} nouveau${nouveaux > 1 ? 'x' : ''} · ${liste.length} au total</div>
+      ${!liste.length ? '<div class="carte"><div class="vide">Aucun avis pour le moment.</div></div>' :
+      liste.map(a => `<div class="carte" style="margin-bottom:10px;${a.statut === 'nouveau' ? '' : 'opacity:.6'}">
+          <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap">
+            <b>${E(a.nom || 'Candidat')}${niveau(a.niveau) ? ' · ' + E(niveau(a.niveau)) : ''}</b><small>${E(dateHeure(a.cree_le))}</small></div>
+          <p style="margin:8px 0;white-space:pre-wrap">${E(a.message)}</p>
+          ${a.telephone ? `<small style="color:#888">${E(a.telephone)}</small>` : ''}
+          ${a.statut === 'nouveau' ? `<div style="margin-top:8px"><button class="lien" data-avis-lu="${a.id}">marquer comme lu</button></div>` : ''}
+        </div>`).join('')}
+    </div>`;
+  $$('[data-avis-lu]').forEach(b => b.onclick = async () => {
+    const { error: e2 } = await db.from('avis').update({ statut: 'lu' }).eq('id', +b.dataset.avisLu);
+    if(e2) return erreur(e2, 'Mise à jour impossible');
+    signal('Marqué comme lu.', 'info'); vueAvis(); majPastilles();
   });
 }
 

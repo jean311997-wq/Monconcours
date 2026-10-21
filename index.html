@@ -19,7 +19,7 @@
 <meta name="twitter:card" content="summary">
 
 <!-- la mise en forme d'abord : c'est elle qui décide de la vitesse perçue -->
-<link rel="stylesheet" href="styles.css?v=27">
+<link rel="stylesheet" href="styles.css?v=28">
 <style>
   #facade{position:fixed;inset:0;z-index:900;background:#0C1512;display:flex;
     flex-direction:column;align-items:center;justify-content:center;gap:10px;
@@ -46,7 +46,6 @@
 <link rel="preconnect" href="https://uonhpsumbfuahipbdjnu.supabase.co" crossorigin>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style"
   href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;600&display=swap"
   onload="this.onload=null;this.rel='stylesheet'">
@@ -77,9 +76,11 @@
 
 <script>
 /* FILET DE SÉCURITÉ — indépendant de app.js.
-   Si l'application n'a rien dessiné au bout de huit secondes, on ne
+   Si l'application n'a rien dessiné au bout de quinze secondes, on ne
    laisse jamais le candidat devant un logo figé : on lui donne une
-   sortie. Ce script ne dépend d'aucun autre fichier. */
+   sortie. Quinze et non six : sur un très petit réseau (2G), le site
+   met plus de six secondes à arriver, et lui montrer « réparer » alors
+   qu'il charge encore le pousserait à tout vider et à recommencer. Ce script ne dépend d'aucun autre fichier. */
 (function(){
   var f = document.getElementById('facade');
   if(!f) return;
@@ -88,7 +89,7 @@
     var vue = document.getElementById('vue');
     if(vue && vue.innerHTML.length > 80){ f.classList.add('parti'); return; }
     f.classList.add('perdu');
-  }, 6000);
+  }, 15000);
 })();
 
 function facadePerdue(){
@@ -126,7 +127,7 @@ function reparerEtRecharger(){
 <div class="sr" id="annonce" aria-live="polite" role="status"></div>
 
 <!-- l'application s'affiche immédiatement, sans attendre le réseau -->
-<script src="app.js?v=28" onerror="facadePerdue()"></script>
+<script src="app.js?v=29" onerror="facadePerdue()"></script>
 
 <!-- la base est servie par le site : un domaine de moins à joindre en 2G -->
 <script>

@@ -674,6 +674,9 @@ body{background:var(--encre);padding:0;overflow:hidden}
 .bouton-tete span{display:none}
 @media(min-width:700px){.bouton-tete span{display:inline}}
 @media(max-width:520px){.apptete .droite{display:none}}
+/* très petits écrans (320 px) : l'en-tête d'un visiteur (4 boutons) doit tenir sans déborder */
+@media(max-width:360px){.apptete{padding:8px;gap:4px}.apptete .mot{font-size:13px;margin-left:2px}}
+@media(max-width:340px){.apptete .mot{font-size:12px}.bouton-tete{min-width:36px;padding:6px 7px}}
 .logo{flex:none;display:block}
 
 /* ---------- SURCOUCHE ---------- */
@@ -1559,12 +1562,32 @@ body.concentration .app{grid-template-columns:minmax(0,1fr) !important;grid-temp
 .bandeau-notif{position:fixed;left:50%;top:10px;z-index:200;width:min(440px,calc(100% - 24px));transform:translate(-50%,-140%);transition:transform .35s cubic-bezier(.2,.8,.3,1);
   display:flex;gap:11px;align-items:flex-start;text-align:left;padding:12px 14px;border-radius:14px;border:1px solid var(--or-bord);background:var(--encre);color:var(--craie);box-shadow:0 12px 32px rgba(0,0,0,.35)}
 .bandeau-notif.vu{transform:translate(-50%,0)}
+.bandeau-notif{touch-action:none;-webkit-user-select:none;user-select:none;cursor:grab}
 .bandeau-notif .ic{flex:none;width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:var(--or-fond);color:var(--or)}
 .bandeau-notif .co{min-width:0}
 .bandeau-notif b{display:block;font-size:13.5px}
 .bandeau-notif span span,.bandeau-notif .co>span{display:block;font-size:12.5px;color:var(--craie2);margin-top:2px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .bandeau-notif i{display:block;font-style:normal;font-size:11px;color:var(--or);margin-top:4px}
 @media(prefers-reduced-motion:reduce){.bandeau-notif{transition:none}}
+
+/* fenêtre « Donnez votre avis » (après une trentaine de minutes d'utilisation) : légère, sans voile,
+   on la fait glisser pour la fermer */
+.avis-carte{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:190;width:min(440px,calc(100% - 24px));
+  transform:translate(-50%,140%);opacity:0;transition:transform .35s cubic-bezier(.2,.8,.3,1),opacity .35s;
+  padding:12px 14px;border-radius:16px;border:1px solid var(--or-bord);background:var(--encre);color:var(--craie);
+  box-shadow:0 14px 36px rgba(0,0,0,.4);text-align:left}
+.avis-carte.vu{transform:translate(-50%,0);opacity:1}
+.avis-carte.saisie{bottom:auto;top:10px}
+.avis-tete{display:block;cursor:grab;-webkit-user-select:none;user-select:none}
+.avis-poignee{display:block;width:38px;height:4px;border-radius:2px;background:var(--craie2);opacity:.5;margin:0 auto 8px}
+.avis-tete b{display:block;font-size:14px}
+.avis-tete span{display:block;font-size:12.5px;color:var(--craie2);margin-top:3px;line-height:1.4}
+.avis-carte textarea{display:block;width:100%;margin-top:10px;min-height:76px;resize:none;border-radius:10px;border:1px solid var(--trait);
+  background:var(--ardoise);color:var(--craie);padding:9px 10px;font:inherit;font-size:14px;line-height:1.4}
+.avis-carte .cta{margin-top:8px}
+.avis-aide{display:block;margin-top:8px;font-size:11px;color:var(--craie2);text-align:center;-webkit-user-select:none;user-select:none}
+@media(min-width:860px){.avis-carte{bottom:24px}}
+@media(prefers-reduced-motion:reduce){.avis-carte{transition:none}}
 
 /* défis */
 .choix-mat button.on{border-color:var(--cachet);background:var(--vert-fond);color:var(--vert-texte)}
