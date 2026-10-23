@@ -1924,7 +1924,7 @@ function peutProposer(point){
   if(S.propositionPoint !== point){ S.propositionPoint = point; pister('PAYWALL_VIEWED', { point }); }
   return true;
 }
-const peutFeuilleDetaillee = () => S.gratuit || estAbonne() || ((S.stats && S.stats.compositions) || 0) <= 1;
+const peutFeuilleDetaillee = () => S.gratuit || estAbonne() || ((S.stats && S.stats.compositions) || 0) <= 2;
 
 /* « Un proche paie pour moi » et « J'ai un code » : sous chaque écran de paiement */
 function blocAlternatives(cle){
