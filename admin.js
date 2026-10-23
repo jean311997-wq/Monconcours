@@ -343,6 +343,8 @@ async function vueMusique(){
 }
 
 /* ---------- paiements ---------- */
+const NOM_PASS = { semaine:'Pass Semaine', mensuelle:'Pass Mois', annuelle:'Pass Année' };
+const NOM_OPERATEUR = { orange_money:'Orange Money', moov_money:'Moov Money', wave:'Wave', code:'Code', admin:'Activé par l\'équipe' };
 async function vuePaiements(){
   $('#vue').innerHTML = `
   <div class="entete-vue">
@@ -351,7 +353,51 @@ async function vuePaiements(){
        le nom et le montant, puis confirmez ou refusez. La confirmation active
        immédiatement l'abonnement du candidat.</p>
   </div>
-  <div class="carte"><div id="pai-liste">Chargement…</div></div>`;
+  <div class="carte"><div id="pai-liste">Chargement…</div></div>
+  <div class="carte" style="margin-top:14px">
+    <h3 style="margin:0 0 6px">Activer un Pass par numéro</h3>
+    <p style="margin:0 0 10px;color:var(--craie2);font-size:13px">Quand un proche a payé pour le candidat : indiquez le numéro de son compte Mon Concours et le Pass payé.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <input id="act-tel" type="tel" inputmode="numeric" placeholder="Numéro du compte (8 chiffres)" maxlength="12" style="min-width:200px">
+      <select id="act-formule"><option value="semaine">Pass Semaine · 500 F</option><option value="mensuelle" selected>Pass Mois · 1 000 F</option><option value="annuelle">Pass Année · 4 000 F</option></select>
+      <input id="act-note" type="text" placeholder="Note (qui a payé ?)" style="min-width:180px">
+      <button class="mini" id="act-go">Activer</button>
+    </div>
+    <p id="act-msg" style="margin:8px 0 0;font-size:13px"></p>
+  </div>
+  <div class="carte" style="margin-top:14px">
+    <h3 style="margin:0 0 6px">Codes d'accès</h3>
+    <p style="margin:0 0 10px;color:var(--craie2);font-size:13px">Un code ouvre un Pass une seule fois. Pour les relais et les offres.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <select id="cod-formule"><option value="semaine">Pass Semaine</option><option value="mensuelle" selected>Pass Mois</option><option value="annuelle">Pass Année</option></select>
+      <input id="cod-nb" type="number" min="1" max="100" value="5" style="width:80px">
+      <input id="cod-note" type="text" placeholder="Note (relais, lot…)" style="min-width:180px">
+      <button class="mini" id="cod-go">Créer les codes</button>
+    </div>
+    <pre id="cod-sortie" style="margin:10px 0 0;white-space:pre-wrap;font-size:13px"></pre>
+    <div id="cod-liste" style="margin-top:10px"></div>
+  </div>`;
+
+  $('#act-go').onclick = async () => {
+    const msg = $('#act-msg'); msg.textContent = '…';
+    const { data, error } = await db.rpc('admin_activer_pass', { p_telephone: $('#act-tel').value, p_formule: $('#act-formule').value, p_note: $('#act-note').value });
+    msg.textContent = error ? error.message : (data && data.ok ? 'Pass activé pour ' + (data.nom || 'le candidat') + ', valable jusqu\'au ' + new Date(data.fin_le).toLocaleDateString('fr-FR') + '. Le candidat est prévenu.' : (data && data.message) || 'Échec.');
+    if(data && data.ok) vuePaiements();
+  };
+  $('#cod-go').onclick = async () => {
+    const { data, error } = await db.rpc('admin_creer_codes', { p_formule: $('#cod-formule').value, p_nombre: +$('#cod-nb').value || 1, p_note: $('#cod-note').value });
+    if(error || !data || !data.ok){ $('#cod-sortie').textContent = (data && data.message) || (error && error.message) || 'Échec.'; return; }
+    $('#cod-sortie').textContent = data.codes.join('\n');
+    chargerCodes();
+  };
+  async function chargerCodes(){
+    const { data } = await db.rpc('admin_liste_codes');
+    const l = data || [];
+    $('#cod-liste').innerHTML = l.length ? `<table class="tableau"><thead><tr><th>Code</th><th>Pass</th><th>Note</th><th>Créé le</th><th>Utilisé</th></tr></thead><tbody>${l.map(c => `<tr>
+      <td><code>${E(c.code)}</code></td><td>${E(NOM_PASS[c.formule] || c.formule)}</td><td>${E(c.note || '')}</td><td>${dateHeure(c.cree_le)}</td>
+      <td>${c.utilise_le ? E((c.utilise_par || 'oui') + ' · ' + dateHeure(c.utilise_le)) : '—'}</td></tr>`).join('')}</tbody></table>` : '';
+  }
+  chargerCodes();
 
   const { data, error } = await db.rpc('paiements_en_attente');
   const zone = $('#pai-liste');
@@ -364,12 +410,12 @@ async function vuePaiements(){
     confirme:'<span class="etat ok">Confirmé</span>', refuse:'<span class="etat danger">Refusé</span>' };
 
   zone.innerHTML = `<table class="tableau">
-    <thead><tr><th>Candidat</th><th>Numéro</th><th>Formule</th><th>Montant</th><th>Preuve</th><th>Statut</th><th>Reçu le</th><th></th></tr></thead>
+    <thead><tr><th>Candidat</th><th>Numéro</th><th>Pass · moyen</th><th>Montant</th><th>Capture</th><th>Statut</th><th>Reçu le</th><th></th></tr></thead>
     <tbody>${liste.map(p => `
       <tr>
         <td><b>${E(p.nom || '—')}</b><br><span style="color:var(--craie2);font-size:12px">${E(p.nom_compte||'')}</span></td>
         <td>${E(p.telephone || '—')}</td>
-        <td>${p.formule === 'annuelle' ? 'Annuelle' : 'Mensuelle'}</td>
+        <td>${E(NOM_PASS[p.formule] || 'Pass')}<br><span style="color:var(--craie2);font-size:12px">${E(NOM_OPERATEUR[p.operateur] || p.operateur || '')}</span></td>
         <td>${nombre(p.montant)} F</td>
         <td>${p.preuve_chemin ? `<button class="mini" data-pai-voir="${E(p.preuve_chemin)}">Voir</button>` : '—'}</td>
         <td>${statutLabel[p.statut] || E(p.statut)}</td>
@@ -383,8 +429,13 @@ async function vuePaiements(){
   $$('[data-pai-voir]').forEach(b => b.onclick = async () => {
     const { data: url } = await db.storage.from('preuves-paiement')
       .createSignedUrl(b.dataset.paiVoir, 300);
-    if(url && url.signedUrl) window.open(url.signedUrl, '_blank');
-    else alert("Impossible d'ouvrir cette preuve.");
+    if(!(url && url.signedUrl)){ alert("Impossible d'ouvrir cette capture."); return; }
+    /* la capture s'affiche sur la page, à côté des boutons de décision */
+    const v = document.createElement('div');
+    v.style.cssText = 'position:fixed;inset:0;z-index:99;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;padding:16px';
+    v.innerHTML = '<div style="max-width:560px;width:100%;max-height:92vh;overflow:auto;background:#fff;border-radius:12px;padding:10px"><img src="' + url.signedUrl + '" alt="Capture du paiement" style="width:100%;display:block"><button class="mini" style="margin-top:8px" id="fermer-capture">Fermer</button></div>';
+    document.body.appendChild(v);
+    v.onclick = e => { if(e.target === v || e.target.id === 'fermer-capture') v.remove(); };
   });
 
   $$('[data-pai-confirmer]').forEach(b => b.onclick = async () => {
@@ -2548,7 +2599,10 @@ const NOMS_ACTIONS = {
   ERROR_OCCURRED:'Erreurs techniques', SCREEN_ERROR:'Écrans en panne', ERROR_REATTEMPTED:'Nouvel essai après erreur',
   ARRIVED_FROM:'Arrivées par un lien', PAYMENT_STARTED:'Paiements commencés', PAYMENT_DECLARED:'Paiements déclarés',
   PAYMENT_ABANDONED:'Paiements abandonnés', PAYMENT_PROOF_SENT:'Preuves de paiement', SUBSCRIPTION_PAGE_VIEWED:'Page abonnement vue',
-  SUBSCRIPTION_PLAN_SELECTED:'Formule choisie'
+  SUBSCRIPTION_PLAN_SELECTED:'Formule choisie', PAYWALL_VIEWED:'Propositions de Pass vues', PAYWALL_CLICKED:'Propositions de Pass touchées',
+  PAYWALL_DISMISSED:'« À demain » touché', PAYMENT_SENT:'Captures envoyées', PROXY_PAY_SHARED:'« Un proche paie » partagé', CODE_REDEEMED:'Codes utilisés',
+  INVITATION_SHOWN:'Fenêtres d\'invitation vues', WEEK_PLAN_CREATED:'Plans de semaine créés', LAST_FAULTS_STARTED:'Séances « dernières fautes »',
+  ERRORS_READ_INLINE:'Cahier lu dans l\'application'
 };
 const nomAction = n => NOMS_ACTIONS[n] || String(n || '').replace(/_/g, ' ').toLowerCase();
 const nomEcran = e => NOMS_ECRANS[e] || e || '—';

@@ -19,6 +19,10 @@ const CONTACT = {
   canal:    'https://whatsapp.com/channel/0029Vb9boQ990x32o1rJTm07',
   facebook: 'https://www.facebook.com/share/18zvk8fdA3/',
   adminTel: '77959848',
+  adminTel2: '73767397',     /* deuxième numéro WhatsApp, affiché sur tous les documents */
+  /* Numéros qui reçoivent les paiements. À CONFIRMER avant l'ouverture du payant :
+     un seul endroit à changer. */
+  paiement: { orange:'77959848', moov:'73767397', wave:'77959848' },
   site:     'https://monconcoursbf.com',
   playStore: ''              /* le lien Play Store de Mon Concours, dès qu'il est publié */
 };
@@ -70,7 +74,7 @@ const S = {
   gratuit:true,             // phase de lancement : tout est gratuit (le serveur fait foi)
   theme:'sombre', sessionCounter:0, cahierDepuisGrille:false,
   modal:null, modalDejaVu:false, matiereOuverte:null, sync:null, bloque:false, qcmPos:{}, rechercheCours:'', compositions:[], niveauConnu:false, notifications:[], notifCharge:false, dateConcours:null, nomConcours:null, typeEpreuve:'Concours direct · épreuve écrite',
-  choixFormule:'annuelle', operateur:'orange', paieTel:'', paieEtape:0,
+  choixFormule:'mensuelle', operateur:'orange', paieTel:'', paieEtape:0,
   concours:'', sujetRef:'', seuil:null, compoEtat:null, compoMessage:'', corrigeServeur:null,
   qcmCorrection:null, qcmAttente:false, banque:null, progression:null, banqueEtat:'vide',
   repriseCorrection:null, paiementEtat:null,
@@ -484,7 +488,7 @@ function aller(e){
   }
   /* on rafraîchit en arrière-plan, au plus toutes les 20 secondes : l'écran s'affiche d'abord avec ce qu'on a */
   if(e === 'aujourdhui' && pasTropSouvent('accueil', 20000)){ chargerJournee(); chargerEpreuve(); chargerDetails(); }
-  if((e === 'compte' || e === 'parcours') && pasTropSouvent('compte', 20000)){ chargerJournee(); chargerRappel(); chargerDetails(); chargerProgression(); }
+  if((e === 'compte' || e === 'parcours') && pasTropSouvent('compte', 20000)){ chargerJournee(); chargerRappel(); chargerDetails(); chargerProgression(); chargerPlan(); }
   if(e === 'cahier' && pasTropSouvent('cahier', 20000)){ chargerDetails(); chargerCahier(); }
   if(['copie','gagnants','cahier','revisions','defi'].includes(e)) prechargerOutilsPdf();
   if(e === 'notion' && S.notion && S.notion.jour !== new Date().toDateString()) S.notion = null;
@@ -797,6 +801,15 @@ async function chargerQuestions(force){
       (parMatiere[m] = parMatiere[m] || { nom:m, ordre:q.matieres.ordre || 99, questions:[] })
         .questions.push({ id:q.id, q:q.enonce, o:o.map(x => x.texte) });
     });
+    /* Les questions ont été saisies par lots du même sujet : on les écarte les unes des autres (ordre fixe, pas aléatoire). */
+    Object.values(parMatiere).forEach(m => {
+      const n = m.questions.length;
+      if(n < 6) return;
+      let pas = Math.max(2, Math.round(n * 0.618));
+      const pgcd = (a, b) => b ? pgcd(b, a % b) : a;
+      while(pgcd(pas, n) !== 1) pas++;
+      m.questions = m.questions.map((_, i) => m.questions[(i * pas) % n]);
+    });
     S.banque = Object.values(parMatiere).sort((x,y) => x.ordre - y.ordre);
     S.banqueEtat = 'pret';
     memoEcrire('banque-' + niv, S.banque);
@@ -962,6 +975,8 @@ function ouvrirNotif(n){
   }
   if(genre === 'defi' && id) return ouvrirDefi(id);
   if(genre === 'compte') return aller('compte');
+  if(genre === 'fautes') return lancerFautes();
+  if(genre === 'reprendre') return aller(repriseCible(id) || 'aujourdhui');
   if(genre === 'parcours') return aller('parcours');
   if(genre === 'installer') return installerAppli();
   if(n.type === 'paiement' && !S.gratuit) return aller('abonnement');
@@ -1465,6 +1480,7 @@ async function ouvrirComposition(){
     if(error) throw error;
     if(!data || !data.ok){
       S.compoEtat = data && data.connexion ? 'connexion' : data && data.abonnement ? 'abonnement' : 'erreur';
+      if(S.compoEtat === 'abonnement' && base){ base.rpc('mes_sujets_restants').then(({ data: sr }) => { S.sujetsRestants = sr; if(S.ecran === 'grille') rendre(); }, () => {}); }
       S.compoMessage = (data && data.message) || 'Composition indisponible.';
     } else {
       if(S.compositionId && S.compositionId !== data.id){ S.reponses = {}; effacerEpreuve(); }
@@ -1692,7 +1708,7 @@ function ecranActualite(){
   const montrees = replie ? liste.slice(0, ACTU_VISIBLES_REPLIEES) : liste;
   vue().innerHTML = `
   <div class="pad">
-    <button class="retourhaut" data-go="aujourdhui">Actualité</button>
+    <button class="retourhaut" data-go="aujourdhui">Retour</button>
     <h1 class="titre">Actualité</h1>
     <p class="sous" style="margin-top:6px">Seules les informations utiles au concours entrent ici : grandes décisions nationales, organisations internationales, dates et chiffres. Un fait divers local n'y a pas sa place.</p>
 
@@ -1885,25 +1901,90 @@ function ecranConnexion(){
 /* =====================================================================
    ABONNEMENT ET PAIEMENT
    ===================================================================== */
-const nomFormule = f => f === 'annuelle' ? 'Formule annuelle' : f === 'essai' ? 'Essai gratuit' : 'Formule mensuelle';
+const nomFormule = f => ({ semaine:'Pass Semaine', mensuelle:'Pass Mois', annuelle:'Pass Année', essai:'Essai gratuit' })[f] || 'Pass';
+/* Trois Pass, jamais quatre. Aucun chiffre inventé : le prix par jour est un simple calcul. */
 const FORMULES = {
-  mensuelle:{n:'Formule 1', prix:'500 FCFA', per:'par mois', reco:false},
-  annuelle:{n:'Formule 2', prix:'5 000 FCFA', per:'par an', reco:true}
+  semaine:  { cle:'semaine',  n:'Pass Semaine', prix:'500 FCFA',   montant:500,  per:'7 jours',  jour:'71 F par jour', reco:false },
+  mensuelle:{ cle:'mensuelle', n:'Pass Mois',    prix:'1 000 FCFA', montant:1000, per:'30 jours', jour:'33 F par jour', reco:true },
+  annuelle: { cle:'annuelle', n:'Pass Année',   prix:'4 000 FCFA', montant:4000, per:'12 mois',  jour:'11 F par jour', reco:false }
 };
+const OPERATEURS = {
+  orange:{ nom:'Orange Money', pastille:'OM', cls:'om' },
+  moov:  { nom:'Moov Money',   pastille:'MM', cls:'mm' },
+  wave:  { nom:'Wave',         pastille:'W',  cls:'wv' }
+};
+const numPaie = op => (CONTACT.paiement && CONTACT.paiement[op]) || CONTACT.adminTel;
+const estAbonne = () => !!(S.abo && S.abo.actif);
+/* Une seule proposition de Pass par visite, et pas de nouvelle avant 3 jours après « À demain ». */
+function peutProposer(point){
+  if(S.gratuit || estAbonne()) return false;
+  const t = lireReglages().pass_demain;
+  if(t && Date.now() - t < 3 * 86400000) return false;
+  if(S.propositionPoint && S.propositionPoint !== point) return false;
+  if(S.propositionPoint !== point){ S.propositionPoint = point; pister('PAYWALL_VIEWED', { point }); }
+  return true;
+}
+const peutFeuilleDetaillee = () => S.gratuit || estAbonne() || ((S.stats && S.stats.compositions) || 0) <= 1;
+
+/* « Un proche paie pour moi » et « J'ai un code » : sous chaque écran de paiement */
+function blocAlternatives(cle){
+  const k = cle || S.choixFormule;
+  return `<div class="alt-paiement">
+    <button class="cta creux" data-proche="${E(k)}">${ico('partage',16)} Un proche paie pour moi<small>Un message WhatsApp prêt à envoyer</small></button>
+    <button class="cta creux" data-code-ouvrir="1" aria-expanded="${!!S.codeOuvert}">${ico('cadenas',16)} J'ai un code</button>
+    ${S.codeOuvert ? `<div class="champ" style="margin-top:10px">
+      <label for="code-acces">Votre code</label>
+      <input id="code-acces" type="text" maxlength="12" autocapitalize="characters" autocomplete="off" placeholder="XXXXX-XXXXX" value="${E(S.codeSaisi || '')}" oninput="majCode(this.value)">
+      ${S.codeErreur ? `<div class="alerte" role="alert" style="margin-top:8px">${E(S.codeErreur)}</div>` : ''}
+      <button class="cta vert" style="margin-top:10px" data-code-valider="1" ${S.codeEnvoi ? 'disabled' : ''}>${S.codeEnvoi ? 'Vérification…' : 'Valider mon code'}</button>
+    </div>` : ''}
+  </div>`;
+}
+window.majCode = v => { S.codeSaisi = v; };
+function messageProche(cle){
+  const f = FORMULES[cle] || FORMULES.mensuelle;
+  const tel = (S.util && S.util.tel) ? S.util.tel : '';
+  return 'Salut, je prépare mon concours sur Mon Concours (' + CONTACT.site.replace('https://', '') + '). ' +
+    'Tu peux m\'offrir le ' + f.n + ' (' + f.prix + ') ? ' +
+    'Paye par Orange Money au +226 ' + fmtTel(CONTACT.paiement.orange) + ', Moov Money au +226 ' + fmtTel(CONTACT.paiement.moov) + ' ou Wave au +226 ' + fmtTel(CONTACT.paiement.wave) +
+    ', puis envoie la capture sur WhatsApp au +226 ' + fmtTel(CONTACT.adminTel) + ' ' +
+    'en écrivant mon numéro de compte : ' + (tel || '(mon numéro)') + '. Mon compte sera activé. Merci !';
+}
+async function validerCode(){
+  const code = (S.codeSaisi || '').trim();
+  if(code.length < 8){ S.codeErreur = 'Entrez le code reçu.'; return rendre(); }
+  if(!S.util.connecte){ S.modal = 'inscription'; S.erreur = ''; return surcouche(); }
+  S.codeEnvoi = true; S.codeErreur = ''; rendre();
+  try{
+    const { data, error } = await base.rpc('utiliser_code', { p_code: code });
+    S.codeEnvoi = false;
+    if(error) throw error;
+    if(!data || !data.ok){ S.codeErreur = (data && data.message) || 'Code refusé.'; return rendre(); }
+    pister('CODE_REDEEMED', { formule: data.formule });
+    S.codeOuvert = false; S.codeSaisi = '';
+    await chargerAbonnement(); chargerNotifications();
+    signalCandidat((data.libelle || 'Votre Pass') + ' est actif. Bon courage !');
+    aller('abonnement');
+  }catch(e){ S.codeEnvoi = false; S.codeErreur = enFrancais(e, 'Vérifiez votre connexion et réessayez.'); rendre(); }
+}
+
+/* La page « Mon Pass » : trois cartes, deux boutons dessous */
 function ecranAbonnement(){
   const abo = S.abo;
+  const paiement = S.paieEnAttente;
   vue().innerHTML = `
   <div class="pad">
-    <button class="retourhaut" data-go="compte">Mon compte</button>
+    <button class="retourhaut" data-go="compte">Retour</button>
 
     ${abo && abo.actif ? `
     <div class="carte" style="text-align:center;padding:22px 16px">
-      <div class="eyebrow">Abonnement actif</div>
+      <div class="eyebrow">Mon Pass</div>
       <h1 class="titre" style="font-size:22px;margin:8px 0">${E(nomFormule(abo.formule))}</h1>
       <p class="sous">${abo.jours_restants} jour${abo.jours_restants>1?'s':''} restant${abo.jours_restants>1?'s':''}, jusqu'au ${new Date(abo.fin_le).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'})}</p>
-    </div>` : `
-    <h1 class="titre">Débloquez<br>tout Mon Concours</h1>
-    <p class="sous" style="margin:10px 0 18px">Les corrections de révision sans limite (20 par jour en formule gratuite) et les compositions chronométrées, corrigées par le serveur.</p>`}
+    </div>
+    <p class="sous" style="margin:14px 0 4px">Pour prolonger, choisissez un Pass : il s'ajoute à la fin du vôtre.</p>` : `
+    <h1 class="titre">Prépare ton concours<br>sans limite</h1>
+    <p class="sous" style="margin:10px 0 18px">Corrections illimitées, compositions illimitées, feuille corrigée détaillée, plan de révision et mode hors ligne.</p>`}
 
     ${S.paiementEtat && S.paiementEtat.statut === 'confirme' ? `
     <div class="carte" style="margin:14px 0;text-align:center">
@@ -1913,74 +1994,87 @@ function ecranAbonnement(){
     </div>` : ''}
     ${S.paiementEtat && S.paiementEtat.statut === 'refuse' ? `
     <div class="carte" style="margin:14px 0;text-align:center;border-color:var(--rouge-bord);background:var(--rouge-fond)">
-      <div class="eyebrow">Paiement non confirmé</div>
+      <div class="eyebrow">Paiement rejeté</div>
       <p class="sous" style="margin:6px 0 0">${E(S.paiementEtat.message || '')}</p>
     </div>` : ''}
-    ${S.paieEnAttente ? `
+    ${paiement ? `
     <div class="carte" style="margin:14px 0;text-align:center">
-      <div class="eyebrow">Demande envoyée</div>
-      <p class="sous" style="margin:6px 0 0">Votre paiement du ${new Date(S.paieEnAttente.cree_le).toLocaleDateString('fr-FR')} est en cours de vérification : deux heures au plus.</p>
+      <div class="eyebrow">Capture reçue</div>
+      <p class="sous" style="margin:6px 0 0">Votre paiement du ${new Date(paiement.cree_le).toLocaleDateString('fr-FR')} est en cours de vérification : deux heures au plus. Vous recevrez une notification dès que c'est confirmé.</p>
     </div>` : `
-    <div class="libelle">Choisissez votre formule</div>
-    ${Object.keys(FORMULES).map(k=>{
+    <div class="libelle" style="margin-top:6px">Choisissez votre Pass</div>
+    ${Object.keys(FORMULES).map(k => {
       const f = FORMULES[k];
-      return `<div class="formule ${S.choixFormule===k?'on':''} ${f.reco?'reco':''}">
-        ${f.reco?'<span class="ruban">la plus avantageuse</span>':''}
+      return `<div class="formule ${f.reco ? 'reco' : ''}">
+        ${f.reco ? '<span class="ruban">recommandé</span>' : ''}
         <div class="haut"><span class="nom">${f.n}</span>
           <span class="prix">${f.prix} <em>${f.per}</em></span></div>
-        <button class="mini" style="margin-top:12px" data-formule="${k}">${S.choixFormule===k?'Formule sélectionnée ✓':'Choisir cette formule'}</button>
+        <p class="sous" style="margin:6px 0 0;font-size:12.5px">${f.jour}</p>
+        <button class="mini" style="margin-top:12px" data-pass="${k}">Prendre le ${f.n}</button>
       </div>`;
     }).join('')}
-    <button class="cta" style="margin-top:10px" data-go="paiement">Payer par mobile money<small>${FORMULES[S.choixFormule].prix} · ${FORMULES[S.choixFormule].per}</small></button>`}
+    ${blocAlternatives()}`}
+
+    <div class="bloc" style="margin-top:20px">
+      <div class="libelle">Toujours gratuit</div>
+      <div class="carte"><p class="sous" style="margin:0">L'actualité du matin, le test de niveau, 20 corrections par jour, le cahier d'erreurs, 2 compositions offertes et la composition nationale du samedi.</p></div>
+    </div>
   </div>`;
 }
 
 function ecranPaiement(){
-  const f = FORMULES[S.choixFormule];
+  const f = FORMULES[S.choixFormule] || FORMULES.mensuelle;
+  const op = OPERATEURS[S.operateur] ? S.operateur : 'orange';
+  const O = OPERATEURS[op];
 
-  /* Étape 3 : la preuve du paiement, jamais un simple clic. */
+  /* Étape 3 : la capture du paiement, dans l'application ou par WhatsApp. */
   if(S.paieEtape === 3){
+    const msgWa = 'Bonjour, j\'ai payé le ' + f.n + ' (' + f.prix + ') par ' + O.nom + '. Mon numéro de compte Mon Concours : ' + ((S.util && S.util.tel) || S.paieTel) + '. Je vous envoie ma capture.';
     vue().innerHTML = `
     <div class="pad">
       <button class="retourhaut" data-paieretour="1">Retour</button>
-      <h1 class="titre">Importez la preuve<br>de votre paiement</h1>
-      <p class="sous" style="margin:10px 0 18px">Téléchargez la capture d'écran envoyée par Orange Money confirmant votre transaction de ${f.prix}.</p>
+      <h1 class="titre">Envoyez la capture<br>de votre paiement</h1>
+      <p class="sous" style="margin:10px 0 18px">Capture d'écran du message ${O.nom} qui confirme votre paiement de ${f.prix}.</p>
 
       ${S.erreur ? `<div class="alerte" role="alert">${E(S.erreur)}</div>` : ''}
 
       ${!S.paievePreuve ? `
       <label class="depot-preuve" for="p-preuve">
         <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>
-        <b>Choisir une capture d'écran</b>
+        <b>Choisir ma capture d'écran</b>
         <span>JPEG ou PNG · 5 Mo maximum</span>
       </label>
       <input id="p-preuve" type="file" accept="image/*" style="display:none" onchange="choisirPreuve(this.files[0])">
       ` : `
       <div class="apercu-preuve">
-        <img src="${S.paievePreuve.dataUrl}" alt="Aperçu de la preuve de paiement">
+        <img src="${S.paievePreuve.dataUrl}" alt="Aperçu de la capture de paiement">
       </div>
       <div class="rangee" style="margin-top:12px;gap:9px">
         <button class="cta creux" style="flex:1" data-preuve-modifier="1">Modifier</button>
-        <button class="cta" style="flex:1" data-preuve-envoyer="1" ${S.paieEnvoi ? 'disabled' : ''}>${S.paieEnvoi ? 'Envoi…' : 'Envoyer la preuve'}</button>
+        <button class="cta" style="flex:1" data-preuve-envoyer="1" ${S.paieEnvoi ? 'disabled' : ''}>${S.paieEnvoi ? 'Envoi…' : 'J\'ai payé : envoyer'}</button>
       </div>
       `}
+      <a class="cta creux" style="margin-top:12px;display:block;text-align:center;text-decoration:none"
+         href="https://wa.me/226${CONTACT.adminTel}?text=${encodeURIComponent(msgWa)}" target="_blank" rel="noopener" data-pister-wa="capture">
+         ${ico('partage',16)} Envoyer ma capture par WhatsApp<small>Si l'envoi dans l'application est lent</small></a>
+      ${blocAlternatives(f.cle)}
     </div>`;
     return;
   }
 
-  /* Étape 2 : confirmation, la demande est enregistrée côté serveur. */
-  if(S.paieEtape===2){
+  /* Étape 2 : la demande est enregistrée, le serveur la vérifie. */
+  if(S.paieEtape === 2){
     vue().innerHTML = `
     <div class="pad" style="padding-top:44px;text-align:center">
       <div class="cachet-note" style="max-width:230px">
         <div class="n" style="font-size:34px">…</div>
-        <div class="l">paiement reçu</div>
+        <div class="l">capture reçue</div>
       </div>
-      <h1 class="titre" style="font-size:24px">Votre preuve est en<br>cours de vérification</h1>
-      <p class="sous" style="margin:12px 0 6px">La vérification peut prendre jusqu'à deux heures. Votre formule s'ouvrira automatiquement dès la confirmation.</p>
+      <h1 class="titre" style="font-size:24px">Votre paiement est en<br>cours de vérification</h1>
+      <p class="sous" style="margin:12px 0 6px">Nous vérifions votre capture, au plus tard dans les 2 heures. Vous recevrez une notification : paiement confirmé, ou rejeté avec la raison.</p>
       <div class="carte" style="margin-top:16px;text-align:left">
-        <div class="mat"><div class="nom">Numéro déclaré<em>Au +226 ${E(S.paieTel)}</em></div><div class="val">✓</div></div>
-        <div class="mat"><div class="nom">Formule demandée<em>${f.n} · ${f.per}</em></div><div class="val num">${f.prix}</div></div>
+        <div class="mat"><div class="nom">Moyen de paiement<em>${O.nom} · au +226 ${E(S.paieTel)}</em></div><div class="val">✓</div></div>
+        <div class="mat"><div class="nom">Pass demandé<em>${f.n} · ${f.per}</em></div><div class="val num">${f.prix}</div></div>
       </div>
       <button class="cta" style="margin-top:18px" data-go="revisions">Ouvrir mes révisions</button>
       <button class="cta creux" style="margin-top:9px" data-go="compte">Retour à mon compte</button>
@@ -1988,43 +2082,41 @@ function ecranPaiement(){
     return;
   }
 
-  /* Étape 1 : le code USSD, le montant est celui de la formule choisie. */
-  if(S.paieEtape===1){
+  /* Étape 1 : où envoyer l'argent. */
+  if(S.paieEtape === 1){
     vue().innerHTML = `
-    <div class="pad" style="padding-top:60px;text-align:center">
-      <div class="attente" role="status" aria-label="Paiement en cours"></div>
-      <h1 class="titre" style="font-size:22px">Confirmez sur<br>votre téléphone</h1>
-      <p class="sous" style="margin:12px 0 20px">Composez le code ci-dessous pour valider ${f.prix} vers Mon Concours, ou suivez le message Orange Money reçu au +226 ${S.paieTel||'…'}.</p>
+    <div class="pad" style="padding-top:40px;text-align:center">
+      <h1 class="titre" style="font-size:22px">Payez ${f.prix}<br>par ${O.nom}</h1>
+      <p class="sous" style="margin:12px 0 18px">Envoyez ${f.prix} au numéro ci-dessous, depuis le ${E(S.paieTel)}. Gardez le message de confirmation : vous en aurez besoin juste après.</p>
       <div class="ussd">
-        <div class="eyebrow">code de paiement</div>
-        <div class="code">*144*4*6*${f.prix.replace(/\D/g,'')}#</div>
-        <p>Une fois la transaction confirmée par Orange Money, importez la preuve à l'étape suivante.</p>
+        <div class="eyebrow">numéro à créditer</div>
+        <div class="code">+226 ${fmtTel(numPaie(op))}</div>
+        <button class="mini" style="margin-top:8px" data-copier-num="${E(numPaie(op))}">Copier le numéro</button>
+        ${op === 'orange' ? `<p style="margin-top:12px">Ou composez : <b>*144*4*6*${f.montant}#</b></p>` : ''}
       </div>
-      <button class="cta" style="margin-top:18px" data-paiefin="1">J'ai effectué le paiement</button>
+      <button class="cta" style="margin-top:18px" data-paiefin="1">J'ai payé<small>Je vais envoyer ma capture</small></button>
       <button class="lien" data-paieannul="1">Annuler</button>
+      ${blocAlternatives(f.cle)}
     </div>`;
     return;
   }
 
-  /* Étape 0 : opérateur, numéro, nom du compte. */
+  /* Étape 0 : moyen de paiement, numéro, nom du compte. */
   vue().innerHTML = `
   <div class="pad">
-    <button class="retourhaut" data-go="abonnement">Formules</button>
+    <button class="retourhaut" data-go="abonnement">Retour</button>
     <h1 class="titre">Paiement</h1>
-    <p class="sous" style="margin:8px 0 18px">${f.n} · ${f.prix} ${f.per}. Aucun compte bancaire nécessaire.</p>
+    <p class="sous" style="margin:8px 0 18px">${f.n} · ${f.prix} pour ${f.per}. Sans renouvellement automatique.</p>
 
-    ${S.erreur?`<div class="alerte" role="alert">${E(S.erreur)}</div>`:''}
+    ${S.erreur ? `<div class="alerte" role="alert">${E(S.erreur)}</div>` : ''}
 
     <div class="libelle">Moyen de paiement</div>
-    <button class="operateur on" data-operateur="orange" aria-pressed="true">
-      <span class="pastille om">OM</span><span><b>Orange Money</b><span>Disponible · validation par code secret</span></span></button>
-    <button class="operateur indispo" disabled aria-disabled="true">
-      <span class="pastille mm">MM</span><span><b>Moov Money</b><span>Non disponible pour le moment</span></span></button>
-    <button class="operateur indispo" disabled aria-disabled="true">
-      <span class="pastille wv">W</span><span><b>Wave</b><span>Non disponible pour le moment</span></span></button>
+    ${Object.keys(OPERATEURS).map(k => `
+    <button class="operateur ${op === k ? 'on' : ''}" data-operateur="${k}" aria-pressed="${op === k}">
+      <span class="pastille ${OPERATEURS[k].cls}">${OPERATEURS[k].pastille}</span><span><b>${OPERATEURS[k].nom}</b><span>${op === k ? 'Sélectionné' : 'Toucher pour choisir'}</span></span></button>`).join('')}
 
     <div class="champ" style="margin-top:16px">
-      <label for="p-tel">Numéro Orange</label>
+      <label for="p-tel">Numéro ${O.nom}</label>
       <div class="prefixe"><span class="ind">+226</span>
         <input id="p-tel" type="tel" inputmode="numeric" maxlength="8" value="${E(S.paieTel)}" placeholder="70 00 00 00" oninput="majPaieTel(this.value)">
       </div>
@@ -2033,7 +2125,7 @@ function ecranPaiement(){
 
     <div class="champ" style="margin-top:12px">
       <label for="p-nom">Nom du compte</label>
-      <input id="p-nom" type="text" value="${E(S.paieNomCompte)}" placeholder="Nom sur le compte Orange Money" oninput="majPaieNom(this.value)">
+      <input id="p-nom" type="text" value="${E(S.paieNomCompte)}" placeholder="Nom sur le compte ${O.nom}" oninput="majPaieNom(this.value)">
       <div class="aide">Le nom associé au numéro qui paie, pour retrouver votre transaction.</div>
     </div>
 
@@ -2042,7 +2134,8 @@ function ecranPaiement(){
       <div class="mat"><div class="nom" style="font-weight:600">Total à payer</div><div class="val num" style="color:var(--craie);white-space:nowrap">${f.prix}</div></div>
     </div>
 
-    <button class="cta vert" style="margin-top:16px" data-payer="1">Payer ${f.prix}<small>Sans renouvellement automatique</small></button>
+    <button class="cta vert" style="margin-top:16px" data-payer="1">Continuer<small>${f.prix} par ${O.nom}</small></button>
+    ${blocAlternatives(f.cle)}
   </div>`;
 }
 
@@ -2181,7 +2274,7 @@ function ecranCours(){
 
   vue().innerHTML = `
   <div class="pad">
-    <button class="retourhaut" data-go="revisions">Mes cours</button>
+    <button class="retourhaut" data-go="revisions">Retour</button>
     <h1 class="titre">Les cours</h1>
     <p class="sous" style="margin:8px 0 16px">Les documents au programme ${S.niveau.toLowerCase()}. À lire ici, ou à télécharger une fois pour travailler sans connexion.</p>
 
@@ -2296,7 +2389,10 @@ function ouvrirNotifications(){
     <div class="poignee"></div>
     <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:4px">
       <h3 style="margin:0">Notifications</h3>
+      <span class="notif-actions">
       ${liste.some(n=>!n.lue) ? `<button class="lien" data-notifs-tout="1">Tout marquer comme lu</button>` : ''}
+      ${liste.length ? `<button class="lien" data-notifs-vider="1">Tout supprimer</button>` : ''}
+      </span>
     </div>
     ${!liste.length ? `
     <p class="sous" style="margin:18px 0">Rien pour le moment. Vos résultats et rappels apparaîtront ici.</p>
@@ -2460,7 +2556,8 @@ function animerApresRendu(){
    Un en-tête commun (logo, nom, site, QR, WhatsApp) et un vrai fichier
    PDF. Quand le téléphone le permet, il demande où l'enregistrer.
    ===================================================================== */
-const telAffiche = () => '+226 ' + CONTACT.adminTel.replace(/(\d{2})(?=\d)/g, '$1 ');
+const fmtTel = t => t.replace(/(\d{2})(?=\d)/g, '$1 ');
+const telAffiche = () => '+226 ' + fmtTel(CONTACT.adminTel) + ' · +226 ' + fmtTel(CONTACT.adminTel2);
 const DOC_CSS = '@page{size:A4;margin:14mm}*{box-sizing:border-box}' +
   'body{font-family:Georgia,"Times New Roman",serif;color:#111;max-width:190mm;margin:0 auto;padding:0 10px;line-height:1.45;background:#fff}@media print{body{padding:0}}' +
   '.tete{display:flex;align-items:center;gap:14px;border-bottom:3px double #111;padding-bottom:12px;flex-wrap:wrap}' +
@@ -2579,10 +2676,28 @@ async function htmlVersPdf(html){
   } finally { ifr.remove(); }
 }
 
+/* Après l'enregistrement, un bandeau propose d'ouvrir le fichier tout de suite :
+   le candidat n'a pas à chercher où le téléphone l'a rangé. */
+function proposerOuverture(blob, nom){
+  try{
+    let z = document.getElementById('ouvrir-fichier');
+    if(z) z.remove();
+    const url = URL.createObjectURL(blob);
+    z = document.createElement('div');
+    z.id = 'ouvrir-fichier'; z.setAttribute('role', 'status');
+    z.innerHTML = '<span>Fichier enregistré dans vos téléchargements.</span><button type="button" class="ouvrir">Ouvrir le fichier</button><button type="button" class="fermer" aria-label="Fermer">×</button>';
+    document.body.appendChild(z);
+    const fermer = () => { z.remove(); setTimeout(() => URL.revokeObjectURL(url), 120000); };
+    z.querySelector('.ouvrir').onclick = () => { if(!window.open(url, '_blank')) location.href = url; fermer(); };
+    z.querySelector('.fermer').onclick = fermer;
+    setTimeout(() => { if(z.isConnected) fermer(); }, 20000);
+  }catch(e){}
+}
 async function enregistrerBlob(blob, nom, poignee){
   if(poignee){
     const w = await poignee.createWritable(); await w.write(blob); await w.close();
     toast('Fichier enregistré : ' + nom);
+    proposerOuverture(blob, nom);
     return;
   }
   const url = URL.createObjectURL(blob);
@@ -2591,6 +2706,25 @@ async function enregistrerBlob(blob, nom, poignee){
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60000);
   toast('Téléchargement lancé : ' + nom, 4500);
+  proposerOuverture(blob, nom);
+}
+
+/* Lecteur intégré : le document s'ouvre dans l'application, sans rien télécharger. */
+function lireDocument(titre, html, retour, telecharger){
+  if(!html) return;
+  S.lecteur = { titre, retour: retour || 'compte', telecharger: telecharger || null,
+    html: html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<div class="noimp">[\s\S]*?<\/div>/i, '')
+      .replace('</head>', '<style>body{padding:16px 14px!important;max-width:none!important}.filigrane{display:none!important}</style></head>') };
+  aller('lecteur');
+}
+function ecranLecteur(){
+  const L = S.lecteur;
+  if(!L){ return aller('compte'); }
+  vue().innerHTML = `<div class="lecteur">
+    <div class="lecteur-barre"><button class="retourhaut" data-go="${E(L.retour)}">Retour</button>
+      ${L.telecharger ? `<button class="mini" data-lecteur-dl="1">${ico('telecharger',14)} Télécharger en PDF</button>` : ''}</div>
+    <iframe class="lecteur-doc" title="${E(L.titre)}" sandbox></iframe></div>`;
+  const f = vue().querySelector('.lecteur-doc'); if(f) f.srcdoc = L.html;
 }
 /* Demande l'emplacement tout de suite (le téléphone l'exige au moment du
    toucher), puis prépare le fichier. */
@@ -2630,7 +2764,13 @@ async function telechargerUrl(url, nom){
   }catch(e){ window.open(url, '_blank'); }
 }
 
+function feuilleBloquee(){
+  if(peutFeuilleDetaillee()) return false;
+  toast('La feuille détaillée fait partie du Pass.', 4500);
+  aller('abonnement'); return true;
+}
 function feuilleComposition(source){
+  if(feuilleBloquee()) return;
   return sortirDocument('Feuille corrigée ' + (S.util.nom || 'candidat'), () => htmlFeuilleComposition(source));
 }
 function htmlFeuilleComposition(source){
@@ -2765,7 +2905,7 @@ function htmlFeuilleComposition(source){
   '<span><i style="border:2px solid #B4231C"></i> Noirci à tort</span>' +
   '<span><i style="border:1px solid #ccc"></i> Non noirci</span>' +
 '</div>' +
-'<div class="pied"><span><b>monconcoursbf.com</b> · WhatsApp <b>+226 ' + CONTACT.adminTel.replace(/(\d{2})(?=\d)/g, '$1 ') + '</b></span><span>Document remis le ' + quand + '</span></div>' +
+'<div class="pied"><span><b>monconcoursbf.com</b> · WhatsApp <b>' + telAffiche() + '</b></span><span>Document remis le ' + quand + '</span></div>' +
 '<div class="noimp"><button onclick="window.print()">Enregistrer en PDF ou imprimer</button></div>' +
 '<scr' + 'ipt>setTimeout(function(){window.print();},600);<\/scr' + 'ipt>' +
 '</body></html>';
@@ -2873,6 +3013,7 @@ async function telechargerRecu(id){
 /* Rejoue une composition déjà remise pour en réimprimer la feuille. */
 function feuilleArchive(id){
   if(!base){ toast('Connexion nécessaire pour retrouver cette copie.'); return; }
+  if(feuilleBloquee()) return;
   return sortirDocument('Feuille corrigée ' + (S.util.nom || 'candidat'), async () => {
     const { data, error } = await base.rpc('ma_copie', { p_composition: id });
     if(error || !data || !data.ok){ toast('Impossible de retrouver cette copie.'); return null; }
@@ -2884,6 +3025,41 @@ function feuilleArchive(id){
     });
     return htmlFeuilleComposition({ grille, reponses, note:data.note || 0, duree:data.duree || 0,
       date:new Date(data.date), sujet:data.sujet, concours:null, seuil:null });
+  });
+}
+
+/* Toutes les compositions corrigées dans un seul PDF : chacune sur ses pages,
+   précédée d'une page de séparation « Composition N ». */
+const corpsFeuille = html => html.slice(html.indexOf('<body>') + 6, html.indexOf('<div class="noimp">'));
+function toutesCompositions(){
+  if(feuilleBloquee()) return;
+  if(!base){ toast('Connexion nécessaire pour réunir vos compositions.'); return; }
+  const liste = ((S.journee && S.journee.compositions) || []).filter(c => c.sur > 0 && !c.collective).slice(0, 40).reverse();
+  if(!liste.length){ toast('Aucune composition corrigée à réunir pour le moment.'); return; }
+  return sortirDocument('Toutes mes compositions ' + (S.util.nom || 'candidat'), async () => {
+    const parts = [];
+    let tete = '';
+    for(let i = 0; i < liste.length; i++){
+      const { data } = await base.rpc('ma_copie', { p_composition: liste[i].id });
+      if(!data || !data.ok || data.correction_le) continue;
+      const grille = [], reponses = {};
+      (data.questions || []).forEach((q, k) => {
+        grille.push({ q:q.enonce, o:q.options || [], bonnes:q.bonnes || [], m:q.matiere || null });
+        if(q.choisies && q.choisies.length) reponses[k] = q.choisies.map(Number);
+      });
+      const h = htmlFeuilleComposition({ grille, reponses, note:data.note || 0, duree:data.duree || 0,
+        date:new Date(data.date), sujet:data.sujet, concours:null, seuil:null });
+      if(!h) continue;
+      if(!tete) tete = h.slice(0, h.indexOf('<body>') + 6);
+      parts.push({ n:parts.length + 1, corps:corpsFeuille(h) });
+    }
+    if(!parts.length){ toast('Impossible de retrouver vos compositions.'); return null; }
+    const sommaire = '<h1>Mes compositions</h1><p style="font-size:14px">' + E(S.util.nom || 'Candidat') + ' · ' + parts.length +
+      ' composition' + (parts.length > 1 ? 's' : '') + ' corrigée' + (parts.length > 1 ? 's' : '') + ' dans ce document.</p>';
+    return tete + sommaire + parts.map(x =>
+      '<div class="saut-page"></div><h1 style="text-align:center;font-size:30px;margin:60px 0 20px">Composition ' + x.n + '</h1>' +
+      '<div class="saut-page"></div>' + x.corps).join('') +
+      '<div class="noimp"><button onclick="window.print()">Enregistrer en PDF ou imprimer</button></div></body></html>';
   });
 }
 
@@ -2958,7 +3134,7 @@ function ecranLecture(){
     /* ouvert depuis une notification, les cours peuvent ne pas être encore arrivés */
     if(S.ressources === null || S.ressources === undefined){
       if(!S.ressourcesEnCours) chargerRessources();
-      vue().innerHTML = `<div class="pad"><button class="retourhaut" data-go="revisions">Mes cours</button>
+      vue().innerHTML = `<div class="pad"><button class="retourhaut" data-go="revisions">Retour</button>
         <div class="squelette large" style="margin-top:16px"></div><p class="sous" style="margin-top:12px">Chargement du cours…</p></div>`;
       return;
     }
@@ -2968,7 +3144,7 @@ function ecranLecture(){
     vue().innerHTML = `
     <div class="pad">
       <div class="jauge-lecture" aria-hidden="true"><i id="jauge-lecture-barre"></i></div>
-      <button class="retourhaut" data-go="revisions">Mes cours</button>
+      <button class="retourhaut" data-go="revisions">Retour</button>
       <div class="eyebrow">${commun ? 'Toutes classes' : S.niveau}</div>
       <h1 class="titre">${E(S.matiereOuverte)}</h1>
       <p class="sous" style="margin:8px 0 0">${lot.length} chapitre${lot.length>1?'s':''} · lecture continue</p>
@@ -3003,7 +3179,7 @@ function ecranLecture(){
   if(!r) return ecranCours();
   vue().innerHTML = `
   <div class="pad">
-    <button class="retourhaut" data-go="cours">La bibliothèque</button>
+    <button class="retourhaut" data-go="cours">Retour</button>
     <div class="eyebrow">${E(r.matiere || '')}${r.theme ? ' · ' + E(r.theme) : ''}</div>
     <h1 class="titre">${E(r.titre)}</h1>
     ${r.commun ? `<p class="sous" style="margin:6px 0 0">Ce cours est le même pour la troisième, la terminale et la licence.</p>` : ''}
@@ -3107,14 +3283,21 @@ function ecranQcm(){
     ${rep === undefined ? `<p class="sous" style="margin-top:12px;font-family:var(--m);font-size:10.5px;letter-spacing:.05em">
         ${S.util.connecte ? 'La correction s\'affiche dès que tu réponds.' : 'Crée ton compte gratuit pour voir la correction.'}</p>` : ''}
 
-    ${c && !c.ok ? `
+    ${c && !c.ok ? (() => {
+      const offre = c.quota && peutProposer(1);
+      return `
       <div class="retour mal">
-        <b>${c.quota ? 'Corrections du jour épuisées' : c.connexion ? 'Compte nécessaire' : 'Correction indisponible'}</b>${E(c.message || '')}
+        ${c.quota
+          ? `<b>20 corrections faites aujourd'hui.</b>Les 20 suivantes reviennent demain.${offre ? ' Pour continuer maintenant : Pass Semaine, 500 F, sans limite pendant 7 jours.' : ''}`
+          : `<b>${c.connexion ? 'Compte nécessaire' : 'Correction indisponible'}</b>${E(c.message || '')}`}
       </div>
-      ${c.quota ? `<button class="cta" style="margin-top:12px" data-go="abonnement">Voir l'abonnement</button>` : ''}
+      ${offre ? `<button class="cta" style="margin-top:12px" data-pass="semaine">Continuer avec le Pass Semaine · 500 F</button>` : ''}
+      ${c.quota ? `<button class="cta creux" style="margin-top:9px" data-demain="1">À demain</button>` : ''}
+      ${offre ? `<button class="lien-mini" style="margin-top:6px" data-proche="semaine">${ico('partage',13)} Un proche paie pour moi</button>` : ''}
       ${c.connexion ? `<button class="cta" style="margin-top:12px" data-modal="inscription">Créer mon compte gratuit</button>` : ''}
       ${c.reseau ? `<button class="cta" style="margin-top:12px" data-qcm-relancer="1">Réessayer</button>` : ''}
-      <button class="cta creux" style="margin-top:9px" data-qsuiv="1">Question suivante →</button>` : ''}
+      ${c.quota ? '' : `<button class="cta creux" style="margin-top:9px" data-qsuiv="1">Question suivante →</button>`}`;
+    })() : ''}
     ${c && c.ok ? `
       <div class="retour ${c.correcte?'bien':'mal'}">
         <b>${c.correcte?'Bonne réponse':'Réponse incorrecte'}</b>
@@ -3123,7 +3306,7 @@ function ecranQcm(){
         ${c.correcte ? '' : '<div style="margin-top:6px;font-size:12.5px">Elle entre dans « Mes erreurs ».</div>'}
       </div>
       ${motiv ? `<div class="motiv"><b>${E(motiv)}</b></div>` : ''}
-      ${typeof c.quota_restant === 'number' ? `<p class="sous" style="margin-top:8px;font-size:12px">${c.quota_restant} correction${c.quota_restant>1?'s':''} gratuite${c.quota_restant>1?'s':''} restante${c.quota_restant>1?'s':''} aujourd'hui.</p>` : ''}
+      ${typeof c.quota_restant === 'number' && c.quota_restant <= 5 ? `<p class="sous" style="margin-top:8px;font-size:12px">${c.quota_restant} correction${c.quota_restant>1?'s':''} gratuite${c.quota_restant>1?'s':''} restante${c.quota_restant>1?'s':''} aujourd'hui.</p>` : ''}
       ${!c.correcte ? `<button class="cta creux" style="margin-top:10px" data-similaires="${E(q.id)}">S'entraîner sur 3 questions similaires</button>` : ''}
       <div class="actions-q">
         <button class="lien-mini" data-signaler="${E(q.id)}">${ico('drapeau',13)} Signaler une erreur</button>
@@ -3164,16 +3347,33 @@ async function repondreQcm(i){
 /* =====================================================================
    ÉCRAN 4 — LA GRILLE
    ===================================================================== */
+/* Point 2 : la 3e composition. Les chiffres viennent du serveur, jamais arrondis ni inventés. */
+function blocPoint2(){
+  const cs = ((S.journee && S.journee.compositions) || []).filter(c => c.sur > 0 && !c.collective);
+  const moy = cs.length ? Math.round(cs.slice(0, 2).reduce((a, c) => a + c.score / c.sur * 50, 0) / Math.min(2, cs.length)) : null;
+  const rest = S.sujetsRestants && S.sujetsRestants.ok ? S.sujetsRestants.restants : null;
+  const offre = peutProposer(2);
+  return `
+    <div class="carte" style="text-align:left;margin:0 0 14px">
+      ${moy !== null ? `<p class="sous" style="margin:0 0 6px">Ta moyenne sur tes deux compositions : <b>${moy}/50</b>.</p>` : ''}
+      ${rest !== null && rest > 0 ? `<p class="sous" style="margin:0 0 6px">Il te reste <b>${rest} sujet${rest > 1 ? 's' : ''}</b> à composer.</p>` : ''}
+      ${offre ? `<p class="sous" style="margin:0">Pass Mois : 1 000 F pour 30 jours, soit 33 F par jour.</p>` : ''}
+    </div>
+    ${offre ? `<button class="cta" data-pass="mensuelle">Pass Mois · 1 000 F</button>
+      <button class="cta creux" style="margin-top:9px" data-pass="semaine">Pass Semaine · 500 F</button>
+      <button class="lien-mini" style="margin-top:8px" data-proche="mensuelle">${ico('partage',13)} Un proche paie pour moi</button>` : ''}
+    <p class="sous" style="margin:12px 0 0;font-size:12.5px">La composition nationale du samedi reste gratuite.</p>`;
+}
 function ecranCompoAttente(){
   const etat = S.compoEtat;
   const titres = { chargement:'Préparation du sujet…', connexion:'Un compte est nécessaire',
-    abonnement:'La composition fait partie de l\'abonnement', erreur:'Composition indisponible' };
+    abonnement:'Tes 2 compositions offertes sont faites', erreur:'Composition indisponible' };
   const textes = {
     chargement: S.compoLent
       ? 'La connexion est lente, on insiste. Ne quittez pas cette page : le sujet arrive.'
       : 'Le sujet arrive. Le chronomètre ne démarre qu\'une fois la feuille affichée.',
-    connexion: 'Crée ton compte gratuit : tu as droit à 7 jours d\'essai avec les compositions comprises.',
-    abonnement: 'Chaque composition est un sujet de 50 questions en 25 minutes, sur la feuille à noircir, corrigé par le serveur. Ta période d\'essai est terminée : l\'abonnement l\'ouvre à nouveau.',
+    connexion: 'Crée ton compte gratuit : tes 2 premières compositions sont offertes.',
+    abonnement: '',
     erreur: S.compoMessage || 'Le sujet n\'a pas pu être chargé.'
   };
   vue().innerHTML = `
@@ -3183,7 +3383,7 @@ function ecranCompoAttente(){
     <p class="sous" style="margin:10px 0 18px">${E(textes[etat] || textes.erreur)}</p>
     ${etat === 'connexion' ? `<button class="cta" data-modal="inscription">Créer mon compte</button>
       <button class="lien" data-modal="connexion">J'ai déjà un compte</button>` : ''}
-    ${etat === 'abonnement' ? `<button class="cta" data-go="abonnement">Voir les formules</button>` : ''}
+    ${etat === 'abonnement' ? blocPoint2() : ''}
     ${etat === 'erreur' ? `<button class="cta" data-compo-relancer="1">Réessayer</button>` : ''}
     ${etat !== 'chargement' ? `<button class="cta creux" style="margin-top:9px" data-go="revisions">Réviser en attendant</button>` : ''}
   </div>`;
@@ -3246,14 +3446,15 @@ function ecranGrille(){
         <span class="ico-tab">${ico('grille',15)}</span>Feuille de réponses</button>
     </div>
 
-    ${(feuille && !S.sujetVu) ? `<div class="appel-note">↑ Les ${nbQ} questions sont dans l'onglet « Le sujet »</div>` : ''}
 
     <div class="gr-corps ${feuille?'':'avec-scrub pile'}" id="corps">
       ${feuille ? feuilleOptique() : sujetComposition()}
     </div>
 
-    ${feuille ? '' : `<button class="geste-feuille" data-compotab="feuille" aria-label="Aller à la feuille de réponses">
-      <span>Glisser vers la feuille pour cocher</span><span class="fleche" aria-hidden="true">→</span></button>`}
+    ${feuille ? (S.sujetVu ? '' : `<button class="geste-feuille geste-sujet" data-compotab="sujet" aria-label="Aller au sujet pour lire les questions">
+      <span class="fleche" aria-hidden="true">←</span><span>Glisser vers le sujet pour lire les questions</span></button>`)
+      : `<button class="geste-feuille" data-compotab="feuille" aria-label="Aller à la feuille de réponses">
+      <span>Glisser vers la feuille pour noircir la bonne réponse</span><span class="fleche" aria-hidden="true">→</span></button>`}
 
     ${feuille ? '' : `<div class="scrub" id="scrub" aria-hidden="true">
       <div class="rail-s"></div>
@@ -3628,7 +3829,7 @@ function ecranCopie(){
     const passe = Date.now() >= fin.getTime();
     vue().innerHTML = `
     <div class="copie">
-      <button class="retourhaut" data-go="aujourdhui">Actualité</button>
+      <button class="retourhaut" data-go="aujourdhui">Retour</button>
       <div class="eyebrow">Composition nationale (simulation) · copie remise</div>
       <h1 class="titre" style="margin-bottom:10px">Votre copie<br>est remise</h1>
       <div class="cachet-note"><div class="n num">${S.grilleNote ?? 0} / ${S.grille.length}</div>
@@ -3652,7 +3853,7 @@ function ecranCopie(){
   const utilise = S.dureeUtilisee ?? ((S.dureeCompo || 1500) - S.chrono);
   vue().innerHTML = `
   <div class="copie">
-    <button class="retourhaut" data-go="aujourdhui">Actualité</button>
+    <button class="retourhaut" data-go="aujourdhui">Retour</button>
     <div class="eyebrow">Copie corrigée · ${new Date().toLocaleDateString('fr-FR',{day:'numeric',month:'long'})}${S.sujetRef ? ' · <span style="white-space:nowrap">sujet n° ' + E(S.sujetRef) + '</span>' : ''}</div>
     <h1 class="titre" style="margin-bottom:10px">Votre feuille<br>est corrigée</h1>
 
@@ -3683,7 +3884,9 @@ function ecranCopie(){
       ? 'Vous êtes au-dessus du seuil du dernier admis de ce concours. Le seuil bouge d\'une année à l\'autre : gardez de la marge.'
       : `Il vous manque ${seuil-n} bonne${seuil-n>1?'s':''} réponse${seuil-n>1?'s':''} pour atteindre le seuil du dernier admis de ce concours.`}</p>` : ''}
 
-    <button class="cta" data-feuille="1" style="margin-top:16px">${ico('telecharger',17)} Télécharger ma feuille corrigée<small>Analyse, recommandations, puis le sujet complet corrigé</small></button>
+    ${peutFeuilleDetaillee() ? `
+    <button class="cta" data-feuille="1" style="margin-top:16px">${ico('telecharger',17)} Télécharger ma composition corrigée<small>Analyse, recommandations, puis le sujet complet corrigé</small></button>
+    <button class="cta creux" data-lire-feuille="1" style="margin-top:8px">${ico('lire',17)} Lire directement ma feuille corrigée<small>Sans rien télécharger</small></button>` : ''}
     ${fausses.length ? `<button class="cta creux" data-erreursdusoir="1" style="margin-top:9px">Reprendre mes fautes maintenant<small>${fausses.length} question${fausses.length>1?'s':''} dans « Mes erreurs »</small></button>` : ''}
     <button class="cta creux" data-recommencer="neuve" style="margin-top:9px">Nouvelle composition<small>Le sujet que vous avez le moins composé</small></button>
 
@@ -3699,10 +3902,27 @@ function ecranCopie(){
     </div>
 
     ${blocMatieresCopie(S.grille, S.reponses, n, total)}
+    ${blocPoint3(seuil, n, admis)}
 
     <button class="cta creux" data-carte-resultat="copie" style="margin-top:14px">${ico("partage",15)} Partager ma carte de résultat<small>Une image avec votre note, le logo et le QR code</small></button>
     <button class="cta discret" data-partage="performance" style="margin-top:9px">${ico("partage",15)} Partager<small>WhatsApp, Facebook, ou copier le lien</small></button>
   </div>`;
+}
+
+/* Point 3 : sous « À travailler en priorité ». La note et le détail par matière restent gratuits. */
+function blocPoint3(seuil, n, admis){
+  if(S.gratuit || estAbonne()) return '';
+  const mats = bilanMatieres(S.grille, S.reponses).filter(x => x.n > 0).sort((a, b) => a.j / a.n - b.j / b.n).slice(0, 2).map(x => x.nom);
+  const manque = (seuil !== null && !admis) ? seuil - n : 0;
+  const bloquee = !peutFeuilleDetaillee();
+  const offre = bloquee && peutProposer(3) && !S.copiePlusTard;
+  return `
+    ${manque > 0 ? `<div class="carte" style="margin-top:14px"><p class="sous" style="margin:0"><b>Il te manque ${manque} point${manque > 1 ? 's' : ''} pour le seuil.</b> Ta feuille détaillée te dit quoi réviser en premier.</p></div>` : ''}
+    ${offre ? `<div class="carte" style="margin-top:14px;text-align:left">
+      <p class="sous" style="margin:0 0 10px">Ta feuille détaillée reprend ${mats.length ? E(mats.join(' et ')) : 'tes matières faibles'} question par question, avec l'explication de chaque faute.</p>
+      <button class="cta" data-pass="semaine">Débloquer ma feuille · Pass Semaine 500 F</button>
+      <button class="cta creux" style="margin-top:8px" data-copie-plus-tard="1">Plus tard</button>
+    </div>` : (bloquee ? `<p class="sous" style="margin-top:14px;font-size:12.5px">La feuille détaillée fait partie du Pass. <button class="lien-mini" data-go="abonnement">Voir mon Pass</button></p>` : '')}`;
 }
 
 /* =====================================================================
@@ -3768,7 +3988,8 @@ function ecranCahier(){
     </div>
     ${S.details && typeof S.details.erreurs_mois === 'number' ? `<p class="sous" style="margin-top:10px">Ce mois-ci : <b class="num">${S.details.erreurs_mois}</b> réponse${S.details.erreurs_mois>1?'s':''} fausse${S.details.erreurs_mois>1?'s':''} · <b class="num">${S.details.refermees_total || 0}</b> erreur${(S.details.refermees_total||0)>1?'s':''} refermée${(S.details.refermees_total||0)>1?'s':''} depuis le début.</p>` : ''}
     ${nDiff ? `<div class="conseil-err">${ico('drapeau',14)}<p><b>${nDiff} question${nDiff>1?'s':''} ratée${nDiff>1?'s':''} au moins deux fois.</b> Lis l'explication lentement, écris-toi une note, puis reprends-les une par une.</p></div>` : ''}
-    ${ouvertes() ? `<button class="cta creux btn-cahier" style="margin-top:12px" data-export-cahier="1">${ico('telecharger',17)} Télécharger mon cahier d'erreurs en PDF</button>` : ''}
+    ${ouvertes() ? `<button class="cta creux btn-cahier" style="margin-top:12px" data-export-cahier="1">${ico('telecharger',17)} Télécharger mon cahier d'erreurs en PDF</button>
+    <button class="cta creux btn-cahier" style="margin-top:8px" data-lire-cahier="1">${ico('lire',17)} Voir mon cahier d'erreurs directement ici</button>` : ''}
     ${list.length ? `
     <div class="bloc">
       ${vueC === 'toutes' ? repartitionErreurs(list) : ''}
@@ -3818,7 +4039,7 @@ function ecranReprise(){
   const juste = rep === e.i;
   vue().innerHTML = `
   <div class="qzone">
-    <button class="retourhaut" data-sortir-reprise="1" style="margin-bottom:12px">Mes erreurs</button>
+    <button class="retourhaut" data-sortir-reprise="1" style="margin-bottom:12px">Retour</button>
     <div class="qmeta"><span>REPRISE · CAHIER</span><span>RATÉE ${e.rate} FOIS</span></div>
     <div class="qtexte">${E(e.q)}</div>
     ${e.opts.map((o,i)=>{
@@ -3961,15 +4182,11 @@ function ecranCompte(){
       </div>`:''}
     </div>
 
-    <button class="grande" data-diagnostic="1" aria-expanded="${S.voirDiagnostic}">
-      <span class="ic">${ico('diagnostic',19)}</span>
-      <span><b>Mes forces et mes faiblesses</b><span>Calculé sur toutes vos réponses</span></span>
-      <span class="fl">${S.voirDiagnostic?'▲':'▼'}</span>
-    </button>
-    ${S.voirDiagnostic ? (function(){
+    <div class="libelle" style="margin-top:18px">Mes forces et mes faiblesses</div>
+    ${(function(){
       const pm = ((S.stats && S.stats.par_matiere) || []).filter(x => x.traitees >= 5)
         .map(x => ({ ...x, taux: Number(x.taux) || 0 })).sort((a,b) => b.taux - a.taux);
-      if(!pm.length) return `<div class="carte reveal" style="margin-top:9px"><p class="sous">Il faut au moins 5 réponses dans une matière pour en mesurer le niveau. Révisez quelques questions, puis revenez ici.</p></div>`;
+      if(!pm.length) return `<div class="carte" style="margin-top:9px"><p class="sous">Il faut au moins 5 réponses dans une matière pour en mesurer le niveau. Révisez quelques questions, puis revenez ici.</p></div>`;
       const forces = pm.filter(x => x.taux >= 60), faibles = pm.filter(x => x.taux < 60).reverse();
       const ligne = (x, cl) => `<div class="mat"><div class="nom">${E(x.matiere)}<em>${x.traitees} réponses</em></div><div class="jauge ${cl}"><i style="width:${x.taux}%"></i></div><div class="val num">${x.taux}</div></div>`;
       return `<div class="carte reveal" style="margin-top:9px">
@@ -3979,7 +4196,9 @@ function ecranCompte(){
         <button class="cta vert" style="margin-top:12px" data-cible="${E(faibles[0].matiere)}">Réviser ${E(faibles[0].matiere)}</button>` : ''}
         <p class="sous" style="margin-top:9px;font-size:11.5px">Une matière passe dans les forces à partir de 60 % de bonnes réponses.</p>
       </div>`;
-    })() : ''}
+    })()}
+
+    ${blocPlanSemaine()}
 
     ${blocMesCompositions()}
 
@@ -4082,7 +4301,7 @@ function ecranCompte(){
 function ecranSuppression(){
   if(!S.util.connecte) return ecranCompte();
   vue().innerHTML = `<div class="pad">
-    <button class="retourhaut" data-go="compte">Mon compte</button>
+    <button class="retourhaut" data-go="compte">Retour</button>
     <div class="eyebrow">Supprimer mon compte</div>
     <h1 class="titre">Tout effacer ?</h1>
     <div class="carte suppr-carte" style="margin-top:14px">
@@ -4483,12 +4702,12 @@ async function chargerQdj(){
 }
 function ecranQdj(){
   const q = S.qdj;
-  if(!q){ chargerQdj(); vue().innerHTML = `<div class="pad"><button class="retourhaut" data-go="aujourdhui">Actualité</button><div class="squelette large" style="margin-top:16px"></div></div>`; return; }
-  if(q.vide || q.erreur){ vue().innerHTML = `<div class="pad"><button class="retourhaut" data-go="aujourdhui">Actualité</button><h1 class="titre">Question du jour</h1><p class="sous">${q.erreur ? 'Elle n\'a pas pu être chargée. Vérifie ta connexion.' : 'Pas de question du jour pour le moment.'}</p></div>`; return; }
+  if(!q){ chargerQdj(); vue().innerHTML = `<div class="pad"><button class="retourhaut" data-go="aujourdhui">Retour</button><div class="squelette large" style="margin-top:16px"></div></div>`; return; }
+  if(q.vide || q.erreur){ vue().innerHTML = `<div class="pad"><button class="retourhaut" data-go="aujourdhui">Retour</button><h1 class="titre">Question du jour</h1><p class="sous">${q.erreur ? 'Elle n\'a pas pu être chargée. Vérifie ta connexion.' : 'Pas de question du jour pour le moment.'}</p></div>`; return; }
   const c = S.qdjCorrection, rep = S.qdjRep;
   vue().innerHTML = `
   <div class="pad">
-    <button class="retourhaut" data-go="aujourdhui">Actualité</button>
+    <button class="retourhaut" data-go="aujourdhui">Retour</button>
     <div class="eyebrow">${E(dateDuJour())} · ${E(q.matiere || '')}</div>
     <h1 class="titre">La question du jour</h1>
     <p class="sous" style="margin:6px 0 14px">La même pour tous les candidats aujourd'hui${q.repondants ? ` · <span class="num">${q.repondants}</span> ont déjà répondu` : ''}.</p>
@@ -4505,7 +4724,7 @@ function ecranQdj(){
         ${c.correcte ? '' : `<div style="margin-bottom:6px">La bonne réponse : <strong class="bonne-rep">${E((c.bonnes || []).map(k => 'ABCD'[k] + '. ' + q.options[k]).join(' + '))}</strong></div>`}
         ${c.explication ? `<b style="margin-top:2px">Pourquoi ?</b>${E(c.explication)}` : ''}
       </div>
-      ${c.taux !== null && c.taux !== undefined && c.repondants >= 3 ? `<p class="sous" style="margin-top:10px"><span class="num">${c.taux} %</span> des ${c.repondants} candidats ont trouvé la bonne réponse aujourd'hui.</p>` : ''}
+      ${c.taux !== null && c.taux !== undefined ? `<p class="sous" style="margin-top:10px"><span class="num">${c.taux} %</span> des candidats ont trouvé la bonne réponse aujourd'hui.</p>` : ''}
       <button class="cta" style="margin-top:12px" data-partage-qdj="1">${ico('partage',16)} Défier un camarade<small>Envoie-lui la question du jour sur WhatsApp</small></button>
       ${S.util.connecte ? `<button class="cta creux" style="margin-top:9px" data-pourtoi="10">Continuer avec 10 questions pour toi</button>`
         : `<button class="cta creux" style="margin-top:9px" data-modal="inscription">Créer mon compte gratuit<small>Pour garder tes erreurs et ta progression</small></button>`}
@@ -4541,11 +4760,11 @@ async function chargerQuestionPartagee(id){
 function ecranQuestionPartagee(){
   const q = S.qp;
   if(!q || !q.charge){ vue().innerHTML = `<div class="pad"><div class="squelette large" style="margin-top:16px"></div></div>`; return; }
-  if(q.vide || q.erreur){ vue().innerHTML = `<div class="pad"><button class="retourhaut" data-go="aujourdhui">Actualité</button><h1 class="titre">Question indisponible</h1><p class="sous">Cette question n'existe plus ou n'est pas accessible pour le moment.</p><button class="cta" style="margin-top:14px" data-go="qdj">Voir la question du jour</button></div>`; return; }
+  if(q.vide || q.erreur){ vue().innerHTML = `<div class="pad"><button class="retourhaut" data-go="aujourdhui">Retour</button><h1 class="titre">Question indisponible</h1><p class="sous">Cette question n'existe plus ou n'est pas accessible pour le moment.</p><button class="cta" style="margin-top:14px" data-go="qdj">Voir la question du jour</button></div>`; return; }
   const c = q.c, rep = q.rep;
   vue().innerHTML = `
   <div class="pad">
-    <button class="retourhaut" data-go="aujourdhui">Actualité</button>
+    <button class="retourhaut" data-go="aujourdhui">Retour</button>
     <div class="eyebrow">Question partagée · ${E(q.matiere || '')}</div>
     <h1 class="titre" style="font-size:24px">Un camarade te défie</h1>
     <div class="qtexte" style="margin-top:12px">${E(q.enonce)}</div>
@@ -4611,7 +4830,7 @@ function boutonsReactions(l){
 const STATUTS = { admis:'Admis', attente:'Liste d\'attente', echoue:'Non admis' };
 function ecranGagnants(){
   const c = S.classementEp;
-  const tete = `<button class="retourhaut" data-go="aujourdhui">Actualité</button>`;
+  const tete = `<button class="retourhaut" data-go="aujourdhui">Retour</button>`;
   if(!c || !c.charge){ vue().innerHTML = `<div class="pad">${tete}<div class="squelette large" style="margin-top:16px"></div><div class="squelette"></div></div>`; return; }
   if(!c.ok){ vue().innerHTML = `<div class="pad">${tete}<h1 class="titre">Résultats indisponibles</h1><p class="sous">${E(c.message || 'Vérifiez votre connexion.')}</p></div>`; return; }
   if(!c.termine){
@@ -4657,6 +4876,8 @@ function ecranGagnants(){
       <div><b class="num">${c.echoues}</b><span>non admis</span></div>
     </div>
     ${statut}
+    ${m && peutProposer(4) ? `<div class="carte" style="margin-top:12px;text-align:left"><p class="sous" style="margin:0 0 10px">Pour préparer la prochaine nationale : Pass Mois, 1 000 F.</p>
+      <button class="cta" data-pass="mensuelle">Pass Mois · 1 000 F</button></div>` : ''}
     ${podium.length ? `<div class="felicitations">
       <div class="eyebrow" style="color:var(--or)">Félicitations</div>
       <p>Bravo à <b>${E(podium[0].nom)}</b>, major de la composition avec <b class="num">${podium[0].score}/${podium[0].sur}</b>${c.recompense ? `. ${E(c.recompense)} lui revient` : ''}.${podium.length > 1 ? ' Bravo aussi à ' + podium.slice(1).map(l => '<b>' + E(l.nom) + '</b> (' + l.rang + 'e)').join(' et ') + '.' : ''}</p>
@@ -4920,6 +5141,41 @@ function blocRappels(){
 }
 
 /* ---------- mes compositions, dans le compte ---------- */
+/* ---------- le plan de la semaine ---------- */
+const lundiDeLaSemaine = () => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d.toISOString().slice(0, 10); };
+const planActif = () => { const p = lireReglages().plan; return p && p.semaine === lundiDeLaSemaine() ? p : null; };
+async function chargerPlan(){
+  if(!base || !S.util.connecte || !planActif()) return;
+  try{ const { data } = await base.rpc('mon_plan_semaine'); if(data && data.ok){ S.plan = data; if(S.ecran === 'compte') rendre(); } }catch(e){}
+}
+function blocPlanSemaine(){
+  if(!S.util.connecte) return '';
+  const p = planActif();
+  if(!p){
+    return `<div class="bloc"><div class="libelle">Ma semaine</div>
+      <button class="grande" style="margin-top:0" data-plan-faire="1">
+        <span class="ic">${ico('cible',19)}</span>
+        <span><b>Faire un plan pour la semaine</b><span>3 compositions, 60 questions d'institutions, la fiche d'AES, et votre note dimanche</span></span>
+        <span class="fl">→</span></button></div>`;
+  }
+  const d = S.plan || {};
+  const compos = d.compositions || 0, inst = d.institutions || 0, fiche = (d.fiche || 0) > 0;
+  const dimanche = new Date().getDay() === 0;
+  const ligne = (fait, titre, etat, action) => `<div class="plan-l ${fait ? 'fait' : ''}">
+    <span class="plan-c" aria-hidden="true">${fait ? '✓' : ''}</span>
+    <span class="plan-t"><b>${titre}</b><em>${etat}</em></span>${fait ? '' : action}</div>`;
+  return `<div class="bloc"><div class="libelle">Votre plan pour la semaine</div>
+    <div class="carte">
+      ${ligne(compos >= 3, '3 compositions', Math.min(compos, 3) + ' sur 3', `<button class="mini" data-go="grille">Composer</button>`)}
+      ${ligne(inst >= 60, '60 questions d\'institutions', Math.min(inst, 60) + ' sur 60', `<button class="mini" data-cible="Institutions et AES">Réviser</button>`)}
+      ${ligne(fiche, 'La fiche d\'AES', fiche ? 'lue cette semaine' : 'pas encore lue', `<button class="mini" data-matiere="${encodeURIComponent('Institutions et AES')}">Lire</button>`)}
+      <div class="plan-l ${dimanche && d.note !== null && d.note !== undefined ? 'fait' : ''}">
+        <span class="plan-c" aria-hidden="true">${dimanche ? '★' : ''}</span>
+        <span class="plan-t"><b>Dimanche : votre note de la semaine</b>
+          <em>${dimanche ? (d.note !== null && d.note !== undefined ? 'Moyenne de vos compositions : ' + d.note + ' %' : 'Aucune composition cette semaine') : 'Elle s\'affiche ici dimanche'}</em></span></div>
+      <button class="lien-mini" style="margin-top:10px" data-plan-effacer="1">Refaire mon plan</button>
+    </div></div>`;
+}
 function blocMesCompositions(){
   const j = S.journee; if(!j) return '';
   const cs = (j.compositions || []).filter(c => c.sur > 0);
@@ -4939,16 +5195,18 @@ function blocMesCompositions(){
         <div><b class="num">${best} %</b><span>meilleure note</span></div>
       </div>
       ${evol !== null ? `<p class="sous" style="margin-top:10px">Vos 3 dernières compositions : ${evol === 0 ? 'même niveau que les 3 d\'avant' : (evol > 0 ? '<b style="color:var(--vert-texte)">+' + evol + ' points</b>' : '<b style="color:var(--rouge-texte)">' + evol + ' points</b>') + ' par rapport aux 3 d\'avant'}.</p>` : ''}
-      <div class="libelle" style="margin-top:14px">Dernières copies</div>
-      ${cs.slice(0, 6).map(c => {
+      <div class="libelle" style="margin-top:14px">Mes dernières compositions</div>
+      ${cs.slice(0, 3).map((c, i) => {
         const p = Math.round(c.score / c.sur * 100);
+        const numero = Math.max(1, (st.compositions || cs.length) - i);
         return `<div class="copie-l">
-          <div class="cl-g"><b>${c.collective ? 'Composition nationale' : 'Entraînement'}</b><span>${E(new Date(c.date).toLocaleDateString('fr-FR', { day:'numeric', month:'short' }))}</span></div>
+          <div class="cl-g"><b>${c.collective ? 'Composition nationale' : 'Composition ' + numero}</b><span>${E(new Date(c.date).toLocaleDateString('fr-FR', { day:'numeric', month:'short' }))}</span></div>
           <div class="cl-barre"><i class="${p >= 60 ? 'haut' : (p < 40 ? 'bas' : '')}" style="width:${p}%"></i></div>
           <b class="num cl-n">${c.score}/${c.sur}</b>
           <button class="mini" data-archive="${E(c.id)}" aria-label="Télécharger la feuille corrigée">${ico('telecharger',14)}</button>
         </div>`;
-      }).join('')}`;
+      }).join('')}
+      ${cs.length > 1 ? `<button class="cta creux" style="margin-top:12px" data-toutes-compos>${ico('telecharger',16)} Télécharger toutes mes compositions (un seul PDF)</button>` : ''}`;
   }
   return `<div class="bloc">
     <div class="libelle">Mes compositions et mon activité</div>
@@ -4966,6 +5224,17 @@ function blocMesCompositions(){
 }
 
 /* ---------- liens directs et bouton retour du téléphone ---------- */
+/* « S'entraîner sur vos 10 dernières fautes » : on rouvre le cahier sur la première à reprendre */
+async function lancerFautes(){
+  if(!S.util.connecte){ S.modal = 'connexion'; S.erreur = ''; return surcouche(); }
+  if(!S.cahier.length) await chargerCahier();
+  const liste = aReprendre();
+  if(!liste.length){ toast('Aucune faute à reprendre pour le moment. Bravo !', 4500); return aller('aujourdhui'); }
+  S.cahierDepuisGrille = false; S.cahierFiltre = false;
+  repriseIdx = S.cahier.indexOf(liste[0]); repriseRep = undefined;
+  pister('LAST_FAULTS_STARTED', { n: Math.min(10, liste.length) });
+  aller('cahier');
+}
 function ouvrirLienDirect(){
   const p = new URLSearchParams(location.search);
   const depuis = p.get('depuis');
@@ -4977,6 +5246,7 @@ function ouvrirLienDirect(){
   else if(/^[0-9a-f-]{36}$/i.test(p.get('defi') || '')){ cible = 'defi'; S.lienDefi = p.get('defi'); S.defi = { etat:'chargement', id:p.get('defi') }; }
   else if(/^[0-9a-f-]{36}$/i.test(p.get('copie') || '')){ const id = p.get('copie'); setTimeout(() => feuilleArchive(id), 1500); }
   else if(p.get('reprendre') === 'cours' || p.get('reprendre') === 'qcm') cible = repriseCible(p.get('reprendre'));
+  else if(p.get('fautes')){ setTimeout(lancerFautes, 1200); }
   else if(p.has('compte')) cible = 'compte';
   else if(p.has('parcours')) cible = 'parcours';
   if(p.toString()) try{ history.replaceState({ ecran: cible || S.ecran }, '', location.pathname); }catch(e){}
@@ -5117,7 +5387,7 @@ async function chargerDetails(){
 const NIVEAUX_C = [
   { nom:'Débutant', crit:() => [] },
   { nom:'Confirmé', crit:() => [['questions', 500, 'questions résolues (QCM)', 'questions'], ['compos', 150, 'compositions', 'compositions']] },
-  { nom:'Prêt pour le concours', crit:v => [['questions', 4000, 'questions résolues (QCM)', 'questions'], ['compos', 2500, 'compositions', 'compositions'], ['cours', v.coursTotal, 'cours de votre niveau lus', 'cours lus']] }
+  { nom:'Prêt pour le concours', crit:v => [['questions', 4000, 'questions résolues (QCM)', 'questions'], ['compos', 1500, 'compositions', 'compositions'], ['cours', v.coursTotal, 'cours de votre niveau lus', 'cours lus']] }
 ];
 function valeursNiveau(){
   const st = S.stats || {}, dt = S.details || {};
@@ -5145,11 +5415,22 @@ function verifierNiveau(){
   ecrireReglage('niveauAtteint', n);
 }
 /* le chemin Débutant → Confirmé → Prêt, avec des flèches */
+function infoNiveau(n){
+  const i = S.nivInfo;
+  if(typeof i !== 'number' || !NIVEAUX_C[i]) return '';
+  const niv = NIVEAUX_C[i], nom = niv.nom.toLowerCase();
+  let txt;
+  if(i === n.i) txt = `Vous êtes au niveau <b>${nom}</b>.`;
+  else if(i < n.i) txt = `Vous avez déjà dépassé le niveau <b>${nom}</b>. Vous êtes au niveau <b>${n.nom.toLowerCase()}</b>.`;
+  else txt = `Vous êtes au niveau <b>${n.nom.toLowerCase()}</b>. Pour atteindre le niveau <b>${nom}</b>, il faut :</p>` +
+    '<ul class="niv-info-liste">' + niv.crit(n.v).map(([k, c, l]) => `<li><b class="num">${nombreFr(c)}</b> ${l}${n.v[k] >= c ? ' ✓' : ' <i>(vous en avez ' + nombreFr(n.v[k]) + ')</i>'}</li>`).join('') + '</ul><p style="display:none">';
+  return `<div class="niv-info" role="status"><p>${txt}</p></div>`;
+}
 function cheminNiveaux(n){
-  return `<div class="niv-route">${NIVEAUX_C.map((x, i) => {
+  return `${infoNiveau(n)}<div class="niv-route">${NIVEAUX_C.map((x, i) => {
     const etat = i < n.i ? 'passe' : (i === n.i ? 'actuel' : 'avenir');
     return `${i ? `<span class="niv-fleche ${i <= n.i ? 'on' : ''}" aria-hidden="true">→</span>` : ''}
-      <div class="niv-pas ${etat}"><span class="niv-rond">${etat === 'passe' ? '✓' : i + 1}</span><b>${x.nom}</b>${etat === 'actuel' ? '<em>Vous êtes ici</em>' : ''}</div>`;
+      <button type="button" class="niv-pas ${etat} ${S.nivInfo === i ? 'choisi' : ''}" data-nivinfo="${i}"><span class="niv-rond">${etat === 'passe' ? '✓' : i + 1}</span><b>${x.nom}</b>${etat === 'actuel' ? '<em>Vous êtes ici</em>' : ''}</button>`;
   }).join('')}</div>`;
 }
 function criteresNiveau(niv, v){
@@ -5281,7 +5562,7 @@ async function chargerNotion(){
 }
 function ecranNotion(){
   const n = S.notion;
-  const tete = `<button class="retourhaut" data-go="aujourdhui">Actualité</button>`;
+  const tete = `<button class="retourhaut" data-go="aujourdhui">Retour</button>`;
   if(!n){ chargerNotion(); vue().innerHTML = `<div class="pad">${tete}<div class="squelette large" style="margin-top:16px"></div><div class="squelette"></div></div>`; return; }
   if(n.vide || n.erreur){ vue().innerHTML = `<div class="pad">${tete}<h1 class="titre">Notion du jour</h1><p class="sous">${n.erreur ? 'Elle n\'a pas pu être chargée.' : 'Pas de notion disponible pour ce niveau.'}</p></div>`; return; }
   vue().innerHTML = `
@@ -5304,7 +5585,7 @@ function ecranRecherche(){
   const res = q.length >= 3 ? toutes.filter(x => (x.q + ' ' + x.o.join(' ')).toLowerCase().includes(q)).slice(0, 30) : [];
   vue().innerHTML = `
   <div class="pad">
-    <button class="retourhaut" data-go="aujourdhui">Actualité</button>
+    <button class="retourhaut" data-go="aujourdhui">Retour</button>
     <h1 class="titre">Chercher une question</h1>
     <p class="sous" style="margin:6px 0 12px">Dans les ${nombreFr(toutes.length)} questions du niveau ${E(S.niveau.toLowerCase())}. Tape au moins 3 lettres : un mot, un nom, une date.</p>
     <div class="champ"><input id="rech-q" type="search" value="${E(S.rechQ || '')}" placeholder="Ex. : constitution, Sankara, glycémie…" oninput="filtrerQuestions(this.value)" autocomplete="off"></div>
@@ -5447,7 +5728,7 @@ function feuilleDefi(){
 const STATUT_INVITE = { en_attente:'n\'a pas encore répondu', accepte:'a accepté, compose', refuse:'a refusé le défi', termine:'a terminé' };
 function ecranDefi(){
   const d = S.defi;
-  const tete = `<button class="retourhaut" data-go="aujourdhui">Actualité</button>`;
+  const tete = `<button class="retourhaut" data-go="aujourdhui">Retour</button>`;
   if(!d){
     if(!S.defiPrep) nouveauDefi();
     const p = S.defiPrep;
@@ -5567,7 +5848,7 @@ async function chargerTop(){
 }
 function ecranTop(){
   const t = S.top;
-  const tete = `<button class="retourhaut" data-go="aujourdhui">Actualité</button>`;
+  const tete = `<button class="retourhaut" data-go="aujourdhui">Retour</button>`;
   if(!t){ chargerTop(); vue().innerHTML = `<div class="pad">${tete}<div class="squelette large" style="margin-top:16px"></div></div>`; return; }
   vue().innerHTML = `<div class="pad">${tete}
     <div class="eyebrow">Depuis lundi</div>
@@ -5587,7 +5868,7 @@ function ecranProposer(){
   const mats = (S.banque || []).map(m => m.nom);
   const f = S.prop || (S.prop = { enonce:'', o:['','','',''], bonne:null, expl:'', source:'', matiere:mats[0] || '' });
   vue().innerHTML = `<div class="pad">
-    <button class="retourhaut" data-go="aujourdhui">Actualité</button>
+    <button class="retourhaut" data-go="aujourdhui">Retour</button>
     <h1 class="titre">Proposer une question</h1>
     <p class="sous" style="margin:6px 0 14px">Tu connais une question tombée au concours, ou une notion qui piège souvent ? Propose-la. L'équipe la vérifie avant de la publier, et tu es prévenu quand elle entre dans la banque.</p>
     ${S.erreur ? `<div class="alerte" role="alert">${E(S.erreur)}</div>` : ''}
@@ -5612,7 +5893,7 @@ function ecranParcours(){
   const jours = debut ? Math.max(1, Math.ceil((Date.now() - new Date(debut)) / 86400000)) : null;
   const mats = (dt.par_matiere || []).filter(m => m.n_recent + m.n_avant >= 5);
   vue().innerHTML = `<div class="pad">
-    <button class="retourhaut" data-go="compte">Mon compte</button>
+    <button class="retourhaut" data-go="compte">Retour</button>
     <div class="eyebrow">Mon parcours</div>
     <h1 class="titre">${debut ? 'Depuis le ' + E(new Date(debut).toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' })) : 'Ton chemin'}</h1>
     ${jours ? `<p class="sous" style="margin-top:6px">${jours} jour${jours > 1 ? 's' : ''} depuis ta première séance.</p>` : ''}
@@ -5794,7 +6075,7 @@ function ecranHorsLigne(){
   const attente = enAttentePack(p).length;
   if(!p){
     vue().innerHTML = `<div class="pad">
-      <button class="retourhaut" data-go="revisions">Mes cours</button>
+      <button class="retourhaut" data-go="revisions">Retour</button>
       <div class="eyebrow">Révision hors ligne</div>
       <h1 class="titre">Réviser sans réseau</h1>
       <p class="sous" style="margin-top:8px">Téléchargez un pack de 50 questions de votre niveau, avec leurs corrections, quand vous avez du réseau ou du Wi-Fi. Ensuite, révisez où vous voulez, même sans forfait. Vos réponses partent toutes seules au retour du réseau.</p>
@@ -5815,7 +6096,7 @@ function ecranHorsLigne(){
     <span class="${enLigne ? 'en-ligne' : 'hors-ligne'}">${enLigne ? (attente ? attente + ' à envoyer' : 'Tout est envoyé') : 'Hors ligne' + (attente ? ' · ' + attente + ' en attente' : '')}</span></div>`;
   if(!cur){
     vue().innerHTML = `<div class="pad">
-      <button class="retourhaut" data-go="revisions">Mes cours</button>
+      <button class="retourhaut" data-go="revisions">Retour</button>
       <div class="eyebrow">Révision hors ligne</div>
       <h1 class="titre">Pack terminé</h1>
       ${etat}
@@ -5830,7 +6111,7 @@ function ecranHorsLigne(){
   const q = cur.q, rep = p.faites[q.id];
   const bonnes = q.bonnes || [];
   vue().innerHTML = `<div class="qzone">
-    <button class="retourhaut" data-go="revisions" style="margin-bottom:12px">Mes cours</button>
+    <button class="retourhaut" data-go="revisions" style="margin-bottom:12px">Retour</button>
     ${etat}
     <div class="qmeta"><span>HORS LIGNE · ${E((q.matiere || '').toUpperCase())}</span><span>${cur.i + 1} / ${total}</span></div>
     <div class="qtexte">${E(q.enonce)}</div>
@@ -6050,10 +6331,18 @@ window.addEventListener('appinstalled', () => { S.installer = null; pister('APP_
 
 /* ---------- export du cahier d'erreurs ---------- */
 function exporterCahier(){
+  if(!S.cahier.some(e => e.suite < 3)){ toast('Ton cahier est vide.'); return; }
+  pister('ERRORS_EXPORTED', { n: S.cahier.filter(e => e.suite < 3).length });
+  return sortirDocument('Cahier d erreurs ' + (S.util.nom || ''), htmlCahier);
+}
+function lireCahier(){
+  if(!S.cahier.some(e => e.suite < 3)){ toast('Ton cahier est vide.'); return; }
+  pister('ERRORS_READ_INLINE');
+  lireDocument('Mon cahier d\'erreurs', htmlCahier(), 'cahier', exporterCahier);
+}
+function htmlCahier(){
   const list = S.cahier.filter(e => e.suite < 3);
-  if(!list.length){ toast('Ton cahier est vide.'); return; }
-  pister('ERRORS_EXPORTED', { n: list.length });
-  return sortirDocument('Cahier d erreurs ' + (S.util.nom || ''), () => docComplet('Mon cahier d\'erreurs',
+  return docComplet('Mon cahier d\'erreurs',
     '.e{break-inside:avoid;border-bottom:1px solid #ccc;padding:9px 0;font-size:13px}' +
     '.m{font:11px Helvetica,Arial,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#666}.b{color:#0E7A54;font-weight:bold}.n{font-style:italic;color:#444}',
     docEntete() +
@@ -6061,7 +6350,7 @@ function exporterCahier(){
     list.map((e, i) => '<div class="e"><div class="m">' + E(e.matiere || '') + ' · ratée ' + e.rate + ' fois</div><b>' + (i + 1) + '.</b> ' + E(e.q) +
       '<br>Bonne réponse : <span class="b">' + E(e.bon) + '</span>' + (e.note ? '<br>' + E(e.note) : '') +
       (e.notePerso ? '<br><span class="n">Ma note : ' + E(e.notePerso) + '</span>' : '') + '</div>').join('') +
-    docPied()));
+    docPied());
 }
 
 /* ---------- mode concentration et plein écran ---------- */
@@ -6073,6 +6362,60 @@ function basculerPleinEcran(){
   }catch(e){ toast('Le plein écran n\'est pas disponible sur ce téléphone.'); }
 }
 document.addEventListener('fullscreenchange', () => { if(S.ecran === 'grille' && !S.corrige) ecranGrille(); });
+
+/* ---------- tirer vers le bas pour actualiser, comme sur les autres applications ---------- */
+const SANS_ACTUALISER = ['grille','qcm','test','testIntro','engagement','reprise','pourtoi','defi','lecteur','resultat','paiement','inscription','connexion','proposer','lecture'];
+async function actualiserTout(){
+  const tout = [];
+  const lance = f => { try{ const r = f(); if(r && r.then) tout.push(r.catch(() => {})); }catch(e){} };
+  if(base){
+    lance(chargerNotifications); lance(chargerActualites);
+    if(S.util.connecte){
+      lance(chargerProgression); lance(chargerJournee); lance(chargerDetails); lance(chargerCahier);
+      lance(chargerEpreuve); lance(chargerCompositions); lance(chargerRappel); lance(chargerMonConcours);
+    }
+    if(S.ecran === 'qdj') lance(chargerQdj);
+  }
+  await Promise.race([Promise.all(tout), new Promise(r => setTimeout(r, 4000))]);
+  rendre();
+}
+(function(){
+  let y0 = null, x0 = null, tire = 0, bande = null;
+  const indic = () => {
+    if(bande) return bande;
+    bande = document.createElement('div'); bande.id = 'tirer-actualiser'; bande.setAttribute('aria-hidden', 'true');
+    bande.innerHTML = '<i></i><span>Relâcher pour actualiser</span>';
+    document.body.appendChild(bande); return bande;
+  };
+  const fin = () => { if(bande){ bande.classList.remove('on', 'pret', 'tourne'); bande.style.transform = ''; } tire = 0; y0 = null; };
+  document.addEventListener('touchstart', e => {
+    const v = vue();
+    if(!v || SANS_ACTUALISER.includes(S.ecran) || !e.touches[0] || e.touches.length !== 1) { y0 = null; return; }
+    if(e.target.closest('input,textarea,select,.gr-corps,.lecteur-doc,#voile,.panneau')) { y0 = null; return; }
+    if(v.scrollTop > 0){ y0 = null; return; }
+    y0 = e.touches[0].clientY; x0 = e.touches[0].clientX; tire = 0;
+  }, { passive:true });
+  document.addEventListener('touchmove', e => {
+    if(y0 === null || !e.touches[0]) return;
+    const dy = e.touches[0].clientY - y0, dx = Math.abs(e.touches[0].clientX - x0);
+    if(dy <= 8 || dx > dy){ if(tire) fin(); return; }
+    tire = Math.min(dy, 140);
+    const b = indic(); b.classList.add('on');
+    b.style.transform = 'translate(-50%,' + Math.round(tire * 0.55 - 40) + 'px)';
+    b.classList.toggle('pret', tire >= 90);
+    b.querySelector('span').textContent = tire >= 90 ? 'Relâcher pour actualiser' : 'Tirer pour actualiser';
+  }, { passive:true });
+  document.addEventListener('touchend', async () => {
+    if(y0 === null){ return; }
+    const ok = tire >= 90;
+    if(!ok){ fin(); return; }
+    const b = indic(); b.classList.add('tourne'); b.querySelector('span').textContent = 'Actualisation…';
+    y0 = null;
+    try{ await actualiserTout(); toast('À jour.', 1800); }catch(e){}
+    fin();
+  }, { passive:true });
+  document.addEventListener('touchcancel', fin, { passive:true });
+})();
 
 /* ---------- glisser vers le haut pour la question suivante (fil) ---------- */
 (function(){
@@ -6318,7 +6661,7 @@ function surcouche(){
 function ecranApparence(){
   vue().innerHTML = `
   <div class="pad">
-    <button class="retourhaut" data-go="compte">Mon compte</button>
+    <button class="retourhaut" data-go="compte">Retour</button>
     <h1 class="titre">Apparence</h1>
     <p class="sous" style="margin:8px 0 18px">Même application, deux ambiances. Le choix s'applique tout de suite, partout.</p>
 
@@ -6369,7 +6712,7 @@ function rendre(){
     aujourdhui:ecranAujourdhui, actualite:ecranActualite,
     revisions:ecranRevisions, cours:ecranCours, lecture:ecranLecture, qcm:ecranQcm,
     grille:ecranGrille, copie:ecranCopie,
-    cahier:ecranCahier, compte:ecranCompte,
+    cahier:ecranCahier, lecteur:ecranLecteur, compte:ecranCompte,
     pourtoi:ecranPourToi, qdj:ecranQdj, question:ecranQuestionPartagee, gagnants:ecranGagnants,
     notion:ecranNotion, recherche:ecranRecherche, defi:ecranDefi, top:ecranTop, proposer:ecranProposer, parcours:ecranParcours, horsligne:ecranHorsLigne, suppression:ecranSuppression}[S.ecran] || ecranAujourdhui);
 
@@ -6394,7 +6737,7 @@ function rendre(){
 }
 
 document.addEventListener('click', ev=>{
-  const t = ev.target.closest('[data-matiere],[data-vers],[data-musique],[data-notifs],[data-notifs-tout],[data-notif-lire],[data-copier],[data-partage-natif],[data-fermer-partage],[data-paieretour],[data-preuve-modifier],[data-preuve-envoyer],[data-feuille],[data-archive],[data-partage],[data-oeil],[data-reinitialiser],[data-lire],[data-telecharger],[data-apercu],[data-saut],[data-compotab],[data-bascule-theme],[data-modal],[data-entrer],[data-bascule],[data-plustard],[data-deconnecter],[data-theme-choix],[data-erreursdusoir],[data-cible],[data-cours],[data-inscrire],[data-connecter],[data-oubli],[data-formule],[data-operateur],[data-payer],[data-paiefin],[data-paieannul],[data-go],[data-toutcahier],[data-actu],[data-actu-repli],[data-niv],[data-mat],[data-qcm],[data-qsuiv],[data-cahierfreq],[data-classement],[data-diagnostic],[data-defi],[data-duel],[data-badges],[data-phase],[data-conc],[data-dep],[data-test],[data-tb],[data-tremettre],[data-retest],[data-seance],[data-rep],[data-suivante],[data-b],[data-remettre],[data-recommencer],[data-reprise],[data-rr],[data-fin-reprise],[data-qcm-relancer],[data-compo-relancer],[data-remise-relancer],[data-recu]');
+  const t = ev.target.closest('[data-matiere],[data-vers],[data-musique],[data-notifs],[data-notifs-tout],[data-notifs-vider],[data-notif-lire],[data-copier],[data-partage-natif],[data-fermer-partage],[data-paieretour],[data-preuve-modifier],[data-preuve-envoyer],[data-plan-faire],[data-plan-effacer],[data-copie-plus-tard],[data-pass],[data-proche],[data-code-ouvrir],[data-code-valider],[data-copier-num],[data-demain],[data-feuille],[data-lire-feuille],[data-lire-cahier],[data-lecteur-dl],[data-nivinfo],[data-archive],[data-toutes-compos],[data-partage],[data-oeil],[data-reinitialiser],[data-lire],[data-telecharger],[data-apercu],[data-saut],[data-compotab],[data-bascule-theme],[data-modal],[data-entrer],[data-bascule],[data-plustard],[data-deconnecter],[data-theme-choix],[data-erreursdusoir],[data-cible],[data-cours],[data-inscrire],[data-connecter],[data-oubli],[data-formule],[data-operateur],[data-payer],[data-paiefin],[data-paieannul],[data-go],[data-toutcahier],[data-actu],[data-actu-repli],[data-niv],[data-mat],[data-qcm],[data-qsuiv],[data-cahierfreq],[data-classement],[data-diagnostic],[data-defi],[data-duel],[data-badges],[data-phase],[data-conc],[data-dep],[data-test],[data-tb],[data-tremettre],[data-retest],[data-seance],[data-rep],[data-suivante],[data-b],[data-remettre],[data-recommencer],[data-reprise],[data-rr],[data-fin-reprise],[data-qcm-relancer],[data-compo-relancer],[data-remise-relancer],[data-recu]');
   if(!t) return;
   const d = t.dataset;
 
@@ -6475,13 +6818,38 @@ document.addEventListener('click', ev=>{
   if(d.qcmRelancer){ const r = S.qcmRep; S.qcmRep = undefined; return repondreQcm(r); }
   if(d.compoRelancer){ S.compoEtat = null; return ouvrirComposition(); }
   if(d.remiseRelancer){ S.remiseEtat = 'envoi'; rendre(); return cloturerComposition(); }
+  if(d.pass){
+    if(!FORMULES[d.pass]) return;
+    if(!S.util.connecte){ S.modal = 'inscription'; S.erreur = ''; return surcouche(); }
+    S.choixFormule = d.pass; S.paieEtape = 0; S.erreur = '';
+    pister('PAYWALL_CLICKED', { point: S.propositionPoint || 5, formule: d.pass });
+    pister('SUBSCRIPTION_PLAN_SELECTED', { formule: d.pass });
+    pister('PAYMENT_STARTED', { formule: d.pass });
+    return aller('paiement');
+  }
+  if(d.planFaire !== undefined){ ecrireReglage('plan', { semaine: lundiDeLaSemaine(), cree: Date.now() }); pister('WEEK_PLAN_CREATED'); chargerPlan(); signalCandidat('Votre plan de la semaine est prêt.'); return rendre(); }
+  if(d.planEffacer !== undefined){ ecrireReglage('plan', null); S.plan = null; return rendre(); }
+  if(d.copiePlusTard !== undefined){ S.copiePlusTard = true; return rendre(); }
+  if(d.demain){ ecrireReglage('pass_demain', Date.now()); pister('PAYWALL_DISMISSED', { point: S.propositionPoint || 0 }); S.propositionPoint = null; return aller('aujourdhui'); }
+  if(d.proche){
+    pister('PROXY_PAY_SHARED', { formule: d.proche });
+    const msg = messageProche(d.proche);
+    window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank', 'noopener');
+    return;
+  }
+  if(d.codeOuvrir){ S.codeOuvert = !S.codeOuvert; S.codeErreur = ''; return rendre(); }
+  if(d.codeValider){ return validerCode(); }
+  if(d.copierNum){
+    try{ navigator.clipboard.writeText(d.copierNum); toast('Numéro copié.'); }catch(e){ toast('+226 ' + fmtTel(d.copierNum), 6000); }
+    return;
+  }
   if(d.formule){ S.choixFormule = d.formule; pister('SUBSCRIPTION_PLAN_SELECTED', { formule: d.formule }); return rendre(); }
-  if(d.operateur){ S.operateur = d.operateur; return rendre(); }
+  if(d.operateur){ S.operateur = d.operateur; S.erreur = ''; return rendre(); }
   if(d.payer){
     const tel = S.paieTel.replace(/\D/g,'');
-    if(tel.length !== 8){ S.erreur = "Saisissez le numéro Orange Money à 8 chiffres."; return rendre(); }
+    if(tel.length !== 8){ S.erreur = "Saisissez le numéro qui paie, à 8 chiffres."; return rendre(); }
     if(!S.paieNomCompte || S.paieNomCompte.trim().length < 2){ S.erreur = "Indiquez le nom du compte qui effectue le paiement."; return rendre(); }
-    S.erreur=''; S.operateur = 'orange'; S.paieEtape = 1; return rendre();
+    S.erreur = ''; S.paieEtape = 1; return rendre();
   }
   if(d.paiefin){
     /* Un clic du candidat ne vaut pas un paiement : on demande la
@@ -6512,13 +6880,14 @@ document.addEventListener('click', ev=>{
         if(eUp) throw eUp;
 
         const { data, error } = await base.rpc('soumettre_paiement', {
-          p_formule: S.choixFormule, p_operateur: 'orange', p_telephone: S.paieTel,
+          p_formule: S.choixFormule, p_operateur: S.operateur, p_telephone: S.paieTel,
           p_nom_compte: S.paieNomCompte, p_preuve_chemin: chemin
         });
         if(error) throw error;
         if(!data || !data.ok){ S.erreur = (data && data.message) || 'Envoi impossible.'; S.paieEnvoi = false; return rendre(); }
 
-        pister('PAYMENT_PROOF_SENT', { formule: S.choixFormule });
+        pister('PAYMENT_PROOF_SENT', { formule: S.choixFormule, operateur: S.operateur });
+        pister('PAYMENT_SENT', { formule: S.choixFormule });
         S.paieEnAttente = { cree_le: new Date().toISOString() };
         S.paieEnvoi = false; S.paieEtape = 2;
         rendre();
@@ -6537,7 +6906,8 @@ document.addEventListener('click', ev=>{
     aller('aujourdhui');
     if(!S.modalDejaVu && !S.util.connecte){
       clearTimeout(S.minuteur);
-      S.minuteur = setTimeout(()=>{ if(!S.util.connecte){ S.modal='inscription'; S.modalDejaVu=true; surcouche(); } }, 6000);
+      bienvenue();
+      S.minuteur = setTimeout(()=>{ if(!S.util.connecte){ S.modal='inscription'; S.modalDejaVu=true; surcouche(); } }, DELAI_INSCRIPTION);
     }
     return;
   }
@@ -6555,9 +6925,19 @@ document.addEventListener('click', ev=>{
   }
   if(d.musique){ basculerMusique(); return; }
   if(d.feuille){ feuilleComposition(); return; }
+  if(d.lireFeuille){ if(feuilleBloquee()) return; lireDocument('Feuille corrigée', htmlFeuilleComposition(), 'copie', feuilleComposition); return; }
+  if(d.lireCahier){ lireCahier(); return; }
+  if(d.lecteurDl){ const L = S.lecteur; if(L && L.telecharger) L.telecharger(); return; }
   if(d.archive){ feuilleArchive(d.archive); return; }
+  if(d.nivinfo !== undefined){ S.nivInfo = (S.nivInfo === +d.nivinfo) ? null : +d.nivinfo; rendre(); return; }
+  if(d.toutesCompos !== undefined){ toutesCompositions(); return; }
   if(d.notifs){ ouvrirNotifications(); return; }
   if(d.notifsTout){ marquerNotifsLues(null); return; }
+  if(d.notifsVider !== undefined){
+    S.notifications = []; memoEcrire('notifications', [], true); rendre();
+    if(base) base.rpc('supprimer_notifications').then(() => {}, () => toast('Suppression non enregistrée : vérifiez votre connexion.'));
+    return;
+  }
   if(d.notifLire){ ouvrirNotif((S.notifications || []).find(n => String(n.id) === String(d.notifLire))); return; }
   if(d.partage){ ouvrirPartage(d.partage); return; }
   if(d.partageNatif){ document.getElementById('voile').hidden = true; partager(d.partageNatif); return; }
@@ -6744,6 +7124,50 @@ document.addEventListener('click', ev=>{
     return rendre();
   }
 });
+
+/* ---------- bienvenue, puis fenêtres d'invitation (installer, notifications) ----------
+   Rien ne tombe d'un coup : le candidat a le temps de découvrir l'application.
+   La fenêtre d'inscription vient après 30 secondes, l'installation après 3 minutes,
+   les notifications après 5 minutes et demie. Un « Plus tard » repousse de 3 jours. */
+const DELAI_INSCRIPTION = 30000;
+function bienvenue(){
+  if(S.bienvenueDite) return; S.bienvenueDite = true;
+  setTimeout(() => { if(!S.modal && ['aujourdhui','actualite'].includes(S.ecran)) signalCandidat('Bienvenue sur Mon Concours. Prenez le temps de regarder.'); }, 1800);
+}
+const ECRANS_CALMES = ['grille','qcm','test','testIntro','engagement','reprise','pourtoi','defi','resultat','lecture','paiement','lecteur'];
+function peutInviter(){ return !ECRANS_CALMES.includes(S.ecran) && !S.modal && !document.getElementById('invitation') && !enComposition(); }
+function fenetreInvitation(o){
+  const z = document.createElement('div');
+  z.id = 'invitation'; z.setAttribute('role', 'dialog'); z.setAttribute('aria-modal', 'true'); z.setAttribute('aria-label', o.titre);
+  z.innerHTML = '<div class="inv-carte"><div class="inv-ic">' + ico(o.icone, 26) + '</div><h2>' + E(o.titre) + '</h2><p>' + E(o.texte) + '</p>' +
+    '<button type="button" class="cta inv-oui">' + E(o.oui) + '</button><button type="button" class="lien-mini inv-non">Plus tard</button></div>';
+  document.body.appendChild(z);
+  const fermer = repousse => { z.remove(); if(repousse) ecrireReglage('inv_' + o.cle, Date.now()); };
+  z.querySelector('.inv-oui').onclick = () => { fermer(false); ecrireReglage('inv_' + o.cle + '_fait', true); try{ o.action(); }catch(e){} };
+  z.querySelector('.inv-non').onclick = () => fermer(true);
+  z.addEventListener('click', e => { if(e.target === z) fermer(true); });
+  pister('INVITATION_SHOWN', { cle:o.cle });
+}
+function invitationPossible(cle){
+  const r = lireReglages();
+  if(r['inv_' + cle + '_fait']) return false;
+  const t = r['inv_' + cle];
+  return !(t && Date.now() - t < 3 * 86400000);
+}
+function planifierInvitations(){
+  const essayer = (delai, cle, condition, config, essais) => setTimeout(function tente(){
+    if(!condition() || !invitationPossible(cle)) return;
+    if(!peutInviter()){ if((essais = (essais || 0) + 1) < 12) setTimeout(tente, 30000); return; }
+    fenetreInvitation(Object.assign({ cle }, config));
+  }, delai);
+  essayer(180000, 'install', () => !estInstallee() && !CONTACT.playStore,
+    { icone:'telecharger', titre:'Installer Mon Concours', texte:'Installez l\'application sur votre téléphone : elle s\'ouvre comme une application, même avec peu de réseau.',
+      oui:'Installer l\'application', action: () => installerAppli() });
+  essayer(330000, 'notifs', () => S.util.connecte && pushPossible() && 'Notification' in window && Notification.permission === 'default' && !(S.rappel && S.rappel.actif),
+    { icone:'cloche', titre:'Être prévenu à temps', texte:'Autorisez les notifications : un rappel chaque soir à 18 h, vos résultats, les compositions du samedi. Vous pourrez changer l\'heure dans Mon compte.',
+      oui:'Autoriser les notifications', action: () => activerRappel(18, 0) });
+}
+planifierInvitations();
 
 ouvrirLienDirect();
 rendre();

@@ -673,7 +673,7 @@ body{background:var(--encre);padding:0;overflow:hidden}
 .bouton-tete svg{display:block;flex:none}
 .bouton-tete span{display:none}
 @media(min-width:700px){.bouton-tete span{display:inline}}
-@media(max-width:520px){.apptete .droite{display:none}}
+@media(max-width:520px){.apptete .droite{display:none}.apptete .mot{margin-right:auto}}
 /* très petits écrans (320 px) : l'en-tête d'un visiteur (4 boutons) doit tenir sans déborder */
 @media(max-width:360px){.apptete{padding:8px;gap:4px}.apptete .mot{font-size:13px;margin-left:2px}}
 @media(max-width:340px){.apptete .mot{font-size:12px}.bouton-tete{min-width:36px;padding:6px 7px}}
@@ -1687,7 +1687,67 @@ body.sans-anim .nd-barre i{transition:none}
 .reglages a{display:flex;justify-content:space-between;align-items:center;width:100%;padding:13px 0;
   border-bottom:1px solid var(--trait);font-size:14.5px;color:var(--craie);text-decoration:none}
 .reglages a span{font-size:16px;color:var(--craie2)}
-.lien-suppr{display:block;margin:18px auto 4px;padding:6px 10px;font-size:12px;color:var(--craie2);opacity:.7;text-decoration:underline;background:none;border:0;cursor:pointer}
+.lien-suppr{display:block;margin:10px auto 0;padding:2px 6px;font-size:10px;line-height:1.2;width:auto;min-height:0;color:var(--craie2);opacity:.45;text-decoration:underline;background:none;border:0;cursor:pointer}
 .suppr-liste{margin:0;padding-left:20px;font-size:14px;line-height:1.55}
 .cta.danger{background:var(--rouge-plein, #B4231C);border-color:var(--rouge-bord, #B4231C);color:#fff}
 .sous a{color:var(--vert-texte)}
+
+/* niveaux : puces touchables + information en haut */
+.button.niv-pas,.niv-pas{font:inherit;color:inherit;cursor:pointer}
+.niv-pas.avenir,.niv-pas.passe,.niv-pas.actuel{font-family:inherit}
+.niv-pas.choisi .niv-rond{box-shadow:0 0 0 2px var(--or)}
+.niv-info{background:var(--carte2,rgba(255,255,255,.06));border:1px solid var(--or);border-radius:12px;padding:10px 14px;margin:0 0 12px;font-size:13.5px;line-height:1.45}
+.niv-info p{margin:0}
+.niv-info-liste{margin:6px 0 0 18px;padding:0}
+.niv-info-liste li{margin:2px 0}
+
+/* lecteur de documents intégré */
+.lecteur{display:flex;flex-direction:column;height:100%;min-height:70vh;padding:10px 12px 0}
+.lecteur-barre{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+.lecteur-barre .retourhaut{margin:0}
+.lecteur-doc{flex:1;min-height:70vh;width:100%;border:1px solid var(--trait);border-radius:10px;background:#fff}
+/* bandeau « Ouvrir le fichier » après un enregistrement */
+#ouvrir-fichier{position:fixed;left:12px;right:12px;bottom:calc(76px + env(safe-area-inset-bottom));z-index:60;display:flex;align-items:center;gap:8px;
+  background:var(--ardoise2);border:1px solid var(--or);border-radius:12px;padding:10px 12px;font-size:13px;box-shadow:0 6px 24px rgba(0,0,0,.35)}
+#ouvrir-fichier span{flex:1}
+#ouvrir-fichier .ouvrir{background:var(--or);color:#1a1405;border:0;border-radius:8px;padding:8px 12px;font-weight:700;font-size:12.5px}
+#ouvrir-fichier .fermer{background:none;border:0;color:var(--craie2);font-size:20px;line-height:1;padding:0 4px}
+
+.geste-sujet .fleche{animation-name:flecheGauche}
+
+/* tirer pour actualiser */
+#tirer-actualiser{position:fixed;top:56px;left:50%;transform:translate(-50%,-40px);z-index:70;display:flex;align-items:center;gap:8px;opacity:0;pointer-events:none;
+  background:var(--ardoise2);border:1px solid var(--or);color:var(--craie);border-radius:999px;padding:7px 14px;font-size:12.5px;box-shadow:0 4px 16px rgba(0,0,0,.35);transition:opacity .15s}
+#tirer-actualiser.on{opacity:1}
+#tirer-actualiser i{width:14px;height:14px;border-radius:50%;border:2px solid var(--or);border-top-color:transparent;display:block;transition:transform .2s}
+#tirer-actualiser.pret i{transform:rotate(180deg)}
+#tirer-actualiser.tourne{transform:translate(-50%,16px)!important;opacity:1}
+#tirer-actualiser.tourne i{animation:tourneActu .8s linear infinite}
+@keyframes tourneActu{to{transform:rotate(360deg)}}
+
+/* fenêtres d'invitation */
+#invitation{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;padding:16px;animation:invFond .25s ease}
+#invitation .inv-carte{width:100%;max-width:420px;background:var(--ardoise2);border:1px solid var(--trait);border-radius:18px;padding:22px 20px 14px;text-align:center;animation:invMonte .3s ease}
+#invitation .inv-ic{width:52px;height:52px;border-radius:50%;margin:0 auto 10px;display:grid;place-items:center;background:var(--or-fond);color:var(--or)}
+#invitation h2{font-family:var(--d);font-size:19px;margin:0 0 6px}
+#invitation p{font-size:14px;line-height:1.5;color:var(--craie2);margin:0 0 16px}
+#invitation .cta{width:100%}
+#invitation .inv-non{display:block;margin:10px auto 0;padding:8px 12px}
+@keyframes invFond{from{opacity:0}to{opacity:1}}
+@keyframes invMonte{from{transform:translateY(24px);opacity:0}to{transform:none;opacity:1}}
+@media(min-width:700px){#invitation{align-items:center}}
+
+/* Mon Pass : « un proche paie » et « j'ai un code » */
+.alt-paiement{margin-top:16px;display:grid;gap:8px}
+.alt-paiement .cta small{display:block;font-weight:400;opacity:.8}
+
+.notif-actions{display:flex;gap:14px;flex-wrap:wrap}
+
+/* plan de la semaine */
+.plan-l{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--trait)}
+.plan-l:last-of-type{border-bottom:0}
+.plan-c{flex:none;width:22px;height:22px;border-radius:50%;border:1.5px solid var(--trait);display:grid;place-items:center;font-size:13px;color:var(--or)}
+.plan-l.fait .plan-c{background:var(--cachet);border-color:var(--cachet);color:#fff}
+.plan-t{flex:1;min-width:0}
+.plan-t b{display:block;font-size:13.5px}
+.plan-t em{font-style:normal;font-size:12px;color:var(--craie2)}
