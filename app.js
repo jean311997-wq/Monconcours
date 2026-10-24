@@ -1921,12 +1921,11 @@ const OPERATEURS = {
 };
 const numPaie = op => (CONTACT.paiement && CONTACT.paiement[op]) || CONTACT.adminTel;
 const estAbonne = () => !!(S.abo && S.abo.actif);
-/* Une seule proposition de Pass par visite, et pas de nouvelle avant 3 jours après « À demain ». */
+/* Le candidat peut recevoir plusieurs propositions d'abonnement ; seul « À demain » les suspend 3 jours. */
 function peutProposer(point){
   if(S.gratuit || estAbonne()) return false;
   const t = lireReglages().pass_demain;
   if(t && Date.now() - t < 3 * 86400000) return false;
-  if(S.propositionPoint && S.propositionPoint !== point) return false;
   if(S.propositionPoint !== point){ S.propositionPoint = point; pister('PAYWALL_VIEWED', { point }); }
   return true;
 }
@@ -2022,7 +2021,7 @@ function ecranAbonnement(){
 
     <div class="bloc" style="margin-top:20px">
       <div class="libelle">Toujours gratuit</div>
-      <div class="carte"><p class="sous" style="margin:0">L'actualité du matin, le test de niveau, 20 corrections par jour, le cahier d'erreurs, 2 compositions offertes et la composition nationale du samedi.</p></div>
+      <div class="carte"><p class="sous" style="margin:0">L'actualité du matin, le test de niveau, 10 corrections par jour, le cahier d'erreurs, 3 compositions offertes et la composition nationale du samedi.</p></div>
     </div>
   </div>`;
 }
@@ -2218,7 +2217,7 @@ function ecranRevisions(){
     ${!S.util.connecte ? `<div class="carte" style="margin-top:12px">
       <p class="sous">${S.gratuit ? "Sans compte, tu peux lire les questions. Pour voir la correction et garder tes erreurs, crée ton compte : c'est gratuit." : "Sans compte, tu peux lire les questions. Pour voir la correction, crée ton compte gratuit : 20 corrections par jour, sans limite avec l'abonnement."}</p>
     </div>` : (!S.abo.actif && !S.gratuit ? `<div class="carte" style="margin-top:12px">
-      <p class="sous">Formule gratuite : 20 corrections par jour. L'abonnement les rend illimitées et ouvre les compositions.</p>
+      <p class="sous">Formule gratuite : 10 corrections par jour. L'abonnement les rend illimitées et ouvre les compositions.</p>
     </div>` : '')}
   </div>`;
 }
@@ -3312,12 +3311,12 @@ function ecranQcm(){
       return `
       <div class="retour mal">
         ${c.quota
-          ? `<b>20 corrections faites aujourd'hui.</b>Les 20 suivantes reviennent demain.${offre ? ' Pour continuer maintenant : Pass Semaine, 500 F, sans limite pendant 7 jours.' : ''}`
+          ? `<b>Vous avez atteint votre limite d'essai gratuit.</b>Vos 10 corrections du jour sont faites : elles reviennent demain. Pour continuer maintenant, faites l'abonnement.`
           : `<b>${c.connexion ? 'Compte nécessaire' : 'Correction indisponible'}</b>${E(c.message || '')}`}
       </div>
-      ${offre ? `<button class="cta" style="margin-top:12px" data-pass="semaine">Continuer avec le Pass Semaine · 500 F</button>` : ''}
+      ${offre ? `<button class="cta" style="margin-top:12px" data-go="abonnement">Faire l'abonnement</button>` : ''}
       ${c.quota ? `<button class="cta creux" style="margin-top:9px" data-demain="1">À demain</button>` : ''}
-      ${offre ? `<button class="lien-mini" style="margin-top:6px" data-proche="semaine">${ico('partage',13)} Un proche paie pour moi</button>` : ''}
+      ${offre ? `<button class="lien-mini" style="margin-top:6px" data-proche="mensuelle">${ico('partage',13)} Un proche paie pour moi</button>` : ''}
       ${c.connexion ? `<button class="cta" style="margin-top:12px" data-modal="inscription">Créer mon compte gratuit</button>` : ''}
       ${c.reseau ? `<button class="cta" style="margin-top:12px" data-qcm-relancer="1">Réessayer</button>` : ''}
       ${c.quota ? '' : `<button class="cta creux" style="margin-top:9px" data-qsuiv="1">Question suivante →</button>`}`;
@@ -3374,29 +3373,28 @@ async function repondreQcm(i){
 /* Point 2 : la 3e composition. Les chiffres viennent du serveur, jamais arrondis ni inventés. */
 function blocPoint2(){
   const cs = ((S.journee && S.journee.compositions) || []).filter(c => c.sur > 0 && !c.collective);
-  const moy = cs.length ? Math.round(cs.slice(0, 2).reduce((a, c) => a + c.score / c.sur * 50, 0) / Math.min(2, cs.length)) : null;
+  const moy = cs.length ? Math.round(cs.slice(0, 3).reduce((a, c) => a + c.score / c.sur * 50, 0) / Math.min(3, cs.length)) : null;
   const rest = S.sujetsRestants && S.sujetsRestants.ok ? S.sujetsRestants.restants : null;
   const offre = peutProposer(2);
   return `
     <div class="carte" style="text-align:left;margin:0 0 14px">
-      ${moy !== null ? `<p class="sous" style="margin:0 0 6px">Ta moyenne sur tes deux compositions : <b>${moy}/50</b>.</p>` : ''}
+      ${moy !== null ? `<p class="sous" style="margin:0 0 6px">Ta moyenne sur tes trois compositions : <b>${moy}/50</b>.</p>` : ''}
       ${rest !== null && rest > 0 ? `<p class="sous" style="margin:0 0 6px">Il te reste <b>${rest} sujet${rest > 1 ? 's' : ''}</b> à composer.</p>` : ''}
-      ${offre ? `<p class="sous" style="margin:0">Pass Mois : 1 000 F pour 30 jours.</p>` : ''}
     </div>
-    ${offre ? `<button class="cta" data-pass="mensuelle">Pass Mois · 1 000 F</button>
-      <button class="cta creux" style="margin-top:9px" data-pass="semaine">Pass Semaine · 500 F</button>
+    ${offre ? `<p class="sous" style="margin:0 0 12px"><b>Vous avez atteint vos limites d'essai gratuit.</b> Faites l'abonnement, puis choisissez le Pass qui vous convient.</p>
+      <button class="cta" data-go="abonnement">Faire l'abonnement</button>
       <button class="lien-mini" style="margin-top:8px" data-proche="mensuelle">${ico('partage',13)} Un proche paie pour moi</button>` : ''}
     <p class="sous" style="margin:12px 0 0;font-size:12.5px">La composition nationale du samedi reste gratuite.</p>`;
 }
 function ecranCompoAttente(){
   const etat = S.compoEtat;
   const titres = { chargement:'Préparation du sujet…', connexion:'Un compte est nécessaire',
-    abonnement:'Tes 2 compositions offertes sont faites', erreur:'Composition indisponible' };
+    abonnement:'Tes 3 compositions offertes sont faites', erreur:'Composition indisponible' };
   const textes = {
     chargement: S.compoLent
       ? 'La connexion est lente, on insiste. Ne quittez pas cette page : le sujet arrive.'
       : 'Le sujet arrive. Le chronomètre ne démarre qu\'une fois la feuille affichée.',
-    connexion: 'Crée ton compte gratuit : tes 2 premières compositions sont offertes.',
+    connexion: 'Crée ton compte gratuit : tes 3 premières compositions sont offertes.',
     abonnement: '',
     erreur: S.compoMessage || 'Le sujet n\'a pas pu être chargé.'
   };
@@ -3943,8 +3941,8 @@ function blocPoint3(seuil, n, admis){
   return `
     ${manque > 0 ? `<div class="carte" style="margin-top:14px"><p class="sous" style="margin:0"><b>Il te manque ${manque} point${manque > 1 ? 's' : ''} pour le seuil.</b> Ta feuille détaillée te dit quoi réviser en premier.</p></div>` : ''}
     ${offre ? `<div class="carte" style="margin-top:14px;text-align:left">
-      <p class="sous" style="margin:0 0 10px">Ta feuille détaillée reprend ${mats.length ? E(mats.join(' et ')) : 'tes matières faibles'} question par question, avec l'explication de chaque faute.</p>
-      <button class="cta" data-pass="semaine">Débloquer ma feuille · Pass Semaine 500 F</button>
+      <p class="sous" style="margin:0 0 10px"><b>Vous avez atteint vos limites d'essai gratuit.</b> Faites l'abonnement pour débloquer la feuille détaillée : ${mats.length ? E(mats.join(' et ')) : 'tes matières faibles'}, question par question, avec l'explication de chaque faute.</p>
+      <button class="cta" data-go="abonnement">Faire l'abonnement</button>
       <button class="cta creux" style="margin-top:8px" data-copie-plus-tard="1">Plus tard</button>
     </div>` : (bloquee ? `<p class="sous" style="margin-top:14px;font-size:12.5px">La feuille détaillée fait partie du Pass. <button class="lien-mini" data-go="abonnement">Voir mon Pass</button></p>` : '')}`;
 }
@@ -4901,8 +4899,8 @@ function ecranGagnants(){
       <div><b class="num">${c.echoues}</b><span>non admis</span></div>
     </div>
     ${statut}
-    ${m && peutProposer(4) ? `<div class="carte" style="margin-top:12px;text-align:left"><p class="sous" style="margin:0 0 10px">Pour préparer la prochaine nationale : Pass Mois, 1 000 F.</p>
-      <button class="cta" data-pass="mensuelle">Pass Mois · 1 000 F</button></div>` : ''}
+    ${m && peutProposer(4) ? `<div class="carte" style="margin-top:12px;text-align:left"><p class="sous" style="margin:0 0 10px">Pour préparer la prochaine nationale, faites l'abonnement.</p>
+      <button class="cta" data-go="abonnement">Faire l'abonnement</button></div>` : ''}
     ${podium.length ? `<div class="felicitations">
       <div class="eyebrow" style="color:var(--or)">Félicitations</div>
       <p>Bravo à <b>${E(podium[0].nom)}</b>, major de la composition avec <b class="num">${podium[0].score}/${podium[0].sur}</b>${c.recompense ? `. ${E(c.recompense)} lui revient` : ''}.${podium.length > 1 ? ' Bravo aussi à ' + podium.slice(1).map(l => '<b>' + E(l.nom) + '</b> (' + l.rang + 'e)').join(' et ') + '.' : ''}</p>
@@ -5273,6 +5271,7 @@ function ouvrirLienDirect(){
   else if(p.get('reprendre') === 'cours' || p.get('reprendre') === 'qcm') cible = repriseCible(p.get('reprendre'));
   else if(p.get('fautes')){ setTimeout(lancerFautes, 1200); }
   else if(p.has('compte')) cible = 'compte';
+  else if(p.has('abonnement')) cible = 'abonnement';
   else if(p.has('parcours')) cible = 'parcours';
   if(p.toString()) try{ history.replaceState({ ecran: cible || S.ecran }, '', location.pathname); }catch(e){}
   if(cible){
@@ -6057,15 +6056,16 @@ function ecrirePack(p){ try{ if(p) localStorage.setItem(CLE_PACK, JSON.stringify
 const enAttentePack = p => p ? Object.keys(p.faites || {}).filter(id => !(p.envoyees || []).includes(id)) : [];
 async function telechargerPack(){
   if(!S.util.connecte){ S.modal = 'inscription'; S.erreur = ''; return surcouche(); }
-  if(!(S.gratuit || estAbonne())){ toast('Les QCM sans connexion font partie du Pass.'); return aller('abonnement'); }
+  if(!packGratuitDispo()){ toast('Vous avez atteint votre limite d\'essai gratuit : faites l\'abonnement.'); return aller('abonnement'); }
   if(!navigator.onLine){ toast('Il faut du réseau (ou du Wi-Fi) pour télécharger le pack.'); return; }
   const ancien = lirePack();
   if(ancien && enAttentePack(ancien).length) await envoyerPack();
   S.packEtat = 'chargement'; rendre();
   try{
-    const { data, error } = await base.rpc('pack_hors_ligne', { p_niveau: niveauCand(), p_matieres: null, p_nombre: 50 });
+    const { data, error } = await base.rpc('pack_hors_ligne', { p_niveau: niveauCand(), p_matieres: null, p_nombre: 30 });
     if(error) throw error;
     if(!data || !data.ok){ S.packEtat = null; toast((data && data.message) || 'Pack indisponible pour le moment.', 5000); return rendre(); }
+    if(!(S.gratuit || estAbonne())) ecrireReglage('pack_gratuit_pris', true);
     ecrirePack({ cree_le: data.cree_le, niveau: niveauCand(), questions: data.questions, faites:{}, envoyees:[], i:0 });
     S.packEtat = null; S.packRep = undefined;
     pister('OFFLINE_PACK_DOWNLOADED', { n: data.questions.length });
@@ -6117,21 +6117,23 @@ function blocCoursHL(){
 }
 /* Les QCM sans connexion : réservés au Pass */
 function blocQcmHL(p, enLigne, termine){
-  const libre = S.gratuit || estAbonne();
+  const libre = packGratuitDispo();
   if(!libre) return `<div class="bloc">
-    <div class="libelle">Les QCM sans connexion · avec le Pass</div>
+    <div class="libelle">Les QCM sans connexion · abonnement</div>
     <div class="carte">
-      <p class="sous" style="margin:0 0 12px">Gardez 50 questions corrigées sur le téléphone et faites-les sans réseau, même sans forfait. Vos réponses partent au retour du réseau. Cette option fait partie du Pass.</p>
-      <button class="cta" data-go="abonnement">Voir le Pass</button>
+      <p class="sous" style="margin:0 0 12px">Vous avez atteint votre limite d'essai gratuit : le premier pack de 30 questions est déjà pris. Faites l'abonnement pour garder d'autres questions corrigées sur le téléphone et les faire sans réseau.</p>
+      <button class="cta" data-go="abonnement">Faire l'abonnement</button>
     </div></div>`;
   return `<div class="bloc">
     <div class="libelle">Les QCM sans connexion</div>
     <div class="carte">
-      <p class="sous" style="margin:0 0 10px">${termine ? 'Votre pack est terminé.' : 'Téléchargez un pack de 50 questions de votre niveau, avec leurs corrections, quand vous avez du réseau. Vos réponses partent toutes seules au retour du réseau.'}</p>
+      <p class="sous" style="margin:0 0 10px">${termine ? 'Votre pack est terminé.' : 'Téléchargez un pack de 30 questions de votre niveau, avec leurs corrections, quand vous avez du réseau. Le premier pack est gratuit. Vos réponses partent toutes seules au retour du réseau.'}</p>
       <button class="cta" data-pack-telecharger="1" ${S.packEtat === 'chargement' || !enLigne ? 'disabled' : ''}>${S.packEtat === 'chargement' ? '<span class="spin"></span> Téléchargement…' : ico('telecharger',16) + (termine ? ' Télécharger un nouveau pack' : ' Télécharger mon pack')}</button>
       ${!enLigne ? '<p class="sous" style="margin-top:10px">Vous êtes hors ligne : le pack se télécharge quand vous avez du réseau.</p>' : ''}
     </div></div>`;
 }
+/* Le premier pack de 30 questions est offert ; les suivants font partie du Pass. */
+const packGratuitDispo = () => S.gratuit || estAbonne() || !lireReglages().pack_gratuit_pris;
 function ecranHorsLigne(){
   const p = lirePack();
   const enLigne = navigator.onLine;
@@ -7201,6 +7203,17 @@ document.addEventListener('click', ev=>{
    La fenêtre d'inscription vient après 30 secondes, l'installation après 3 minutes,
    les notifications après 5 minutes et demie. Un « Plus tard » repousse de 3 jours. */
 const DELAI_INSCRIPTION = 35000;
+/* Un candidat qui revient est salué : « Bon retour, Prénom ». Une fois par visite. */
+function saluerRetour(){
+  if(S.retourDit) return;
+  const m = lireMemoire() || {};
+  if(!m.dejaVenu || !m.nom || /^candidat$/i.test(m.nom.trim())) return;
+  S.retourDit = true;
+  const prenom = m.nom.trim().split(/\s+/)[0];
+  const textes = ['Bon retour, ' + prenom + ' ! Content de vous revoir.', 'Bienvenue à nouveau, ' + prenom + '. On reprend là où vous en étiez.'];
+  setTimeout(() => { if(!S.modal && ['aujourdhui','actualite'].includes(S.ecran)) signalCandidat(textes[new Date().getDate() % 2]); }, 1600);
+}
+saluerRetour();
 function bienvenue(){
   if(S.bienvenueDite) return; S.bienvenueDite = true;
   setTimeout(() => { if(!S.modal && ['aujourdhui','actualite'].includes(S.ecran)) signalCandidat('Bienvenue sur Mon Concours. Prenez le temps de regarder.'); }, 1800);
