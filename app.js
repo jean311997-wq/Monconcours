@@ -50,14 +50,20 @@ function lireMemoire(){
   catch(e){ return null; }
 }
 function ecrireMemoire(o){
-  try{ localStorage.setItem(MEMOIRE, JSON.stringify(Object.assign({dejaVenu:true}, o))); }
+  try{
+    const ancien = lireMemoire() || {};
+    const base = { dejaVenu:true };
+    if(ancien.testFait) base.testFait = true;       // le test de niveau ne s'oublie jamais
+    localStorage.setItem(MEMOIRE, JSON.stringify(Object.assign(base, o)));
+  }
   catch(e){}
 }
 /* À la déconnexion on oublie l'identité, jamais le fait d'être déjà venu. */
 function oublierIdentite(){
   const m = lireMemoire() || {};
-  ecrireMemoire({ niveau: m.niveau || null });
+  ecrireMemoire({ niveau: m.niveau || null, testFait: !!m.testFait });
 }
+function testDejaFait(){ return !!(lireMemoire() || {}).testFait; }
 
 /* =====================================================================
    ÉTAT
@@ -476,6 +482,9 @@ function aller(e){
   }
   /* un nouvel appui sur « Composition » après un échec retente une fois */
   if(e === 'grille' && S.compoEtat === 'erreur' && !ouvertureEnCours) S.compoEtat = null;
+  /* le test de niveau se passe une seule fois : plus jamais d'étapes 1, 2, 3 ensuite */
+  if(['engagement','testIntro','test'].includes(e) && testDejaFait()) e = 'aujourdhui';
+  if(e === 'resultat' && testDejaFait() && S.testNote === null) e = 'aujourdhui';
   if(S.gratuit && (e === 'abonnement' || e === 'paiement')) e = 'compte';   // pas de formules pendant la phase gratuite
   if(['revisions','qcm'].includes(e)){ progressionMemo(); chargerQuestions(); }
   if(e !== 'lecture'){ S.matiereOuverte = null; S.lectureReprise = null; }
@@ -659,6 +668,7 @@ function ecranTest(){
 function remettreTest(){
   if(S.testTimer){clearInterval(S.testTimer);S.testTimer=null;}
   S.testCorrige = true;
+  ecrireMemoire(Object.assign({}, lireMemoire() || {}, { testFait:true }));
   pister('DIAGNOSTIC_COMPLETED', { repondues: Object.keys(S.testRep).length });
   let n=0; TEST.forEach((g,i)=>{ const r=S.testRep[i]||[]; if(r.length===1 && r[0]===g.i) n++; });
   S.testNote = n;
@@ -755,7 +765,6 @@ function ecranResultat(){
     </div>
 
     <button class="cta" style="margin-top:18px" data-entrer="1">Entrer dans l'application<small>Actualité · révisions · composition · erreurs</small></button>
-    <button class="cta creux" style="margin-top:9px" data-retest="1">Refaire le test</button>
   </div>`;
 }
 
@@ -1600,14 +1609,10 @@ function dateCourteFr(iso){
   return new Date(iso).toLocaleDateString('fr-FR', { day:'numeric', month:'long' });
 }
 function carteActu(a, neuf){
-  return `<div class="info ${a.v?'ok':'att'}">
-    <div class="info-tete">
-      <span class="tampon ${a.v?'t-ok':'t-att'}">${a.v?'✓ Vérifié':'À confirmer'}</span>
-      ${neuf?'<span class="tag-neuf">Nouveau</span>':''}
-    </div>
+  return `<div class="info ok">
+    ${neuf?'<div class="info-tete"><span class="tag-neuf">Nouveau</span></div>':''}
     <span class="eyebrow info-source">${E(a.s)}${a.le ? (a.s ? ' · ' : '') + E(dateCourteFr(a.le)) : ''}</span>
     <h2>${E(a.t)}</h2><p>${E(a.x)}</p>
-    ${a.p ? `<p class="info-pourquoi"><b>Utile pour</b>${E(a.p)}</p>` : ''}
   </div>`;
 }
 function blocActuVide(){
@@ -2276,7 +2281,7 @@ function ecranCours(){
   <div class="pad">
     <button class="retourhaut" data-go="revisions">Retour</button>
     <h1 class="titre">Les cours</h1>
-    <p class="sous" style="margin:8px 0 16px">Les documents au programme ${S.niveau.toLowerCase()}. À lire ici, ou à télécharger une fois pour travailler sans connexion.</p>
+    <p class="sous" style="margin:8px 0 16px">Les documents au programme ${S.niveau.toLowerCase()}. Ils restent lisibles sans connexion : le téléphone les garde dès que vous êtes en ligne.</p>
 
     <div class="champ" style="margin-bottom:12px">
       <input id="rech-cours" type="search" inputmode="search" value="${E(S.rechercheCours)}"
@@ -3189,36 +3194,57 @@ function ecranLecture(){
   suivreLecture([r.id]);
 }
 
+function sansAccent(n){ return String(n || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); }
+/* Les cours d'un niveau, tels que l'écran les lit. Un cours sans niveau est commun aux trois classes. */
+async function lireRessourcesNiveau(niveau){
+  const { data, error } = await base.from('ressources')
+    .select('id, titre, texte, type_ressource, theme, niveau, fichier_chemin, nom_fichier, taille_octets, matieres(nom, ordre, tous_niveaux, niveaux)')
+    .eq('statut','publie')
+    .or('niveau.eq.' + niveau + ',niveau.is.null')
+    .limit(300);
+  if(error) throw error;
+  return (data || [])
+    .filter(r => !(r.matieres && r.matieres.niveaux && !r.matieres.niveaux.includes(niveau)))
+    .map(r => ({ ...r,
+      matiere: r.matieres ? r.matieres.nom : 'Autres documents',
+      rang:    r.matieres ? (r.matieres.ordre || 99) : 99,
+      commun:  !r.niveau }))
+    /* ordre stable : matiere du programme, puis theme, puis titre. Jamais la date. */
+    .sort((x, y) =>
+      x.rang - y.rang
+      || (x.theme || '').localeCompare(y.theme || '', 'fr')
+      || x.titre.localeCompare(y.titre, 'fr'));
+}
 async function chargerRessources(){
   if(!base) return;
   S.ressourcesEnCours = true;
-  { const n0 = S.niveau.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''), m0 = memoLire('ressources-' + n0);
+  { const n0 = sansAccent(S.niveau), m0 = memoLire('ressources-' + n0);
     if(m0 && !S.ressources){ S.ressources = m0; if(['cours','lecture','revisions'].includes(S.ecran)) rendre(); } }
   try{
-    const niveau = S.niveau.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-    /* Un cours sans niveau est commun aux trois classes : il doit apparaitre partout. */
-    const { data, error } = await base.from('ressources')
-      .select('id, titre, texte, type_ressource, theme, niveau, fichier_chemin, nom_fichier, taille_octets, matieres(nom, ordre, tous_niveaux, niveaux)')
-      .eq('statut','publie')
-      .or('niveau.eq.' + niveau + ',niveau.is.null')
-      .limit(200);
-    if(error) throw error;
-    S.ressources = (data || [])
-      .filter(r => !(r.matieres && r.matieres.niveaux && !r.matieres.niveaux.includes(niveau)))
-      .map(r => ({ ...r,
-        matiere: r.matieres ? r.matieres.nom : 'Autres documents',
-        rang:    r.matieres ? (r.matieres.ordre || 99) : 99,
-        commun:  !r.niveau }))
-      /* ordre stable : matiere du programme, puis theme, puis titre. Jamais la date. */
-      .sort((x, y) =>
-        x.rang - y.rang
-        || (x.theme || '').localeCompare(y.theme || '', 'fr')
-        || x.titre.localeCompare(y.titre, 'fr'));
+    const niveau = sansAccent(S.niveau);
+    S.ressources = await lireRessourcesNiveau(niveau);
     memoEcrire('ressources-' + niveau, S.ressources);
   }catch(e){ if(!S.ressources) S.ressources = []; }
   S.ressourcesEnCours = false;
   if(['cours','lecture','revisions'].includes(S.ecran)) rendre();
 }
+/* Lecture sans réseau : une fois connecté, le téléphone garde en silence les cours des trois
+   niveaux (troisième, terminale, licence). Les cours sont du texte : quelques dizaines de Ko. */
+async function garderCoursHorsLigne(){
+  if(!base || !navigator.onLine || garderCoursHorsLigne.enCours) return;
+  garderCoursHorsLigne.enCours = true;
+  try{
+    for(const niv of ['troisieme', 'terminale', 'licence']){
+      try{
+        const liste = await lireRessourcesNiveau(niv);
+        if(liste.length) memoEcrire('ressources-' + niv, liste);
+      }catch(e){}
+    }
+    ecrireReglage('cours_hors_ligne', Date.now());
+  }finally{ garderCoursHorsLigne.enCours = false; }
+}
+setTimeout(garderCoursHorsLigne, 6000);
+window.addEventListener('online', () => setTimeout(garderCoursHorsLigne, 2000));
 
 async function telechargerRessource(id){
   const r = (S.ressources || []).find(x => x.id === id);
@@ -5517,8 +5543,7 @@ function blocPlus(){
     ${dernier && pos > 0 ? `<button class="grande" style="margin-top:12px" data-mat="${E(dernier)}">
       <span class="ic">${ico('revisions',19)}</span><span><b>Reprendre ${E(dernier)}</b><span>Question ${pos + 1}, là où tu t'es arrêté</span></span><span class="fl">→</span></button>` : ''}
     ${debutant && S.util.connecte ? `<div class="carte" style="margin-top:12px"><div class="libelle" style="margin-bottom:6px">Pour bien commencer</div>
-      <p class="sous" style="margin-bottom:10px">Commence par les bases : quelques questions chaque jour, puis ta première composition. Ton cahier d'erreurs se remplit tout seul et te guide.</p>
-      <button class="cta creux" data-retest="1">Refaire le test de niveau</button></div>` : ''}
+      <p class="sous" style="margin-bottom:10px">Commence par les bases : quelques questions chaque jour, puis ta première composition. Ton cahier d'erreurs se remplit tout seul et te guide.</p></div>` : ''}
 
     ${S.util.connecte ? `<div class="carte mission" style="margin-top:18px">
       <div class="libelle" style="margin-bottom:6px"><span>${ico('cible',14)} Défi du jour</span></div>
@@ -6737,7 +6762,7 @@ function rendre(){
 }
 
 document.addEventListener('click', ev=>{
-  const t = ev.target.closest('[data-matiere],[data-vers],[data-musique],[data-notifs],[data-notifs-tout],[data-notifs-vider],[data-notif-lire],[data-copier],[data-partage-natif],[data-fermer-partage],[data-paieretour],[data-preuve-modifier],[data-preuve-envoyer],[data-plan-faire],[data-plan-effacer],[data-copie-plus-tard],[data-pass],[data-proche],[data-code-ouvrir],[data-code-valider],[data-copier-num],[data-demain],[data-feuille],[data-lire-feuille],[data-lire-cahier],[data-lecteur-dl],[data-nivinfo],[data-archive],[data-toutes-compos],[data-partage],[data-oeil],[data-reinitialiser],[data-lire],[data-telecharger],[data-apercu],[data-saut],[data-compotab],[data-bascule-theme],[data-modal],[data-entrer],[data-bascule],[data-plustard],[data-deconnecter],[data-theme-choix],[data-erreursdusoir],[data-cible],[data-cours],[data-inscrire],[data-connecter],[data-oubli],[data-formule],[data-operateur],[data-payer],[data-paiefin],[data-paieannul],[data-go],[data-toutcahier],[data-actu],[data-actu-repli],[data-niv],[data-mat],[data-qcm],[data-qsuiv],[data-cahierfreq],[data-classement],[data-diagnostic],[data-defi],[data-duel],[data-badges],[data-phase],[data-conc],[data-dep],[data-test],[data-tb],[data-tremettre],[data-retest],[data-seance],[data-rep],[data-suivante],[data-b],[data-remettre],[data-recommencer],[data-reprise],[data-rr],[data-fin-reprise],[data-qcm-relancer],[data-compo-relancer],[data-remise-relancer],[data-recu]');
+  const t = ev.target.closest('[data-matiere],[data-vers],[data-musique],[data-notifs],[data-notifs-tout],[data-notifs-vider],[data-notif-lire],[data-copier],[data-partage-natif],[data-fermer-partage],[data-paieretour],[data-preuve-modifier],[data-preuve-envoyer],[data-plan-faire],[data-plan-effacer],[data-copie-plus-tard],[data-pass],[data-proche],[data-code-ouvrir],[data-code-valider],[data-copier-num],[data-demain],[data-feuille],[data-lire-feuille],[data-lire-cahier],[data-lecteur-dl],[data-nivinfo],[data-archive],[data-toutes-compos],[data-partage],[data-oeil],[data-reinitialiser],[data-lire],[data-telecharger],[data-apercu],[data-saut],[data-compotab],[data-bascule-theme],[data-modal],[data-entrer],[data-bascule],[data-plustard],[data-deconnecter],[data-theme-choix],[data-erreursdusoir],[data-cible],[data-cours],[data-inscrire],[data-connecter],[data-oubli],[data-formule],[data-operateur],[data-payer],[data-paiefin],[data-paieannul],[data-go],[data-toutcahier],[data-actu],[data-actu-repli],[data-niv],[data-mat],[data-qcm],[data-qsuiv],[data-cahierfreq],[data-classement],[data-diagnostic],[data-defi],[data-duel],[data-badges],[data-phase],[data-conc],[data-dep],[data-test],[data-tb],[data-tremettre],[data-seance],[data-rep],[data-suivante],[data-b],[data-remettre],[data-recommencer],[data-reprise],[data-rr],[data-fin-reprise],[data-qcm-relancer],[data-compo-relancer],[data-remise-relancer],[data-recu]');
   if(!t) return;
   const d = t.dataset;
 
@@ -6907,7 +6932,7 @@ document.addEventListener('click', ev=>{
     if(!S.modalDejaVu && !S.util.connecte){
       clearTimeout(S.minuteur);
       bienvenue();
-      S.minuteur = setTimeout(()=>{ if(!S.util.connecte){ S.modal='inscription'; S.modalDejaVu=true; surcouche(); } }, DELAI_INSCRIPTION);
+      S.minuteur = setTimeout(()=>{ if(!S.util.connecte && !S.inscriptionProposee){ S.inscriptionProposee=true; ecrireReglage('inscription_vue', Date.now()); S.modal='inscription'; S.modalDejaVu=true; surcouche(); } }, DELAI_INSCRIPTION);
     }
     return;
   }
@@ -7058,11 +7083,6 @@ document.addEventListener('click', ev=>{
     return ecranTest();
   }
   if(d.tremettre) return remettreTest();
-  if(d.retest){
-    S.testRep={}; S.testCorrige=false; S.testChrono=120; S.testNote=null;
-    S.cahier = S.cahier.filter(e=>!TEST.some(t=>t.q===e.q));
-    return aller('test');
-  }
 
   if(d.compotab){
     basculerCompoTab(d.compotab);
@@ -7129,7 +7149,7 @@ document.addEventListener('click', ev=>{
    Rien ne tombe d'un coup : le candidat a le temps de découvrir l'application.
    La fenêtre d'inscription vient après 30 secondes, l'installation après 3 minutes,
    les notifications après 5 minutes et demie. Un « Plus tard » repousse de 3 jours. */
-const DELAI_INSCRIPTION = 30000;
+const DELAI_INSCRIPTION = 20000;
 function bienvenue(){
   if(S.bienvenueDite) return; S.bienvenueDite = true;
   setTimeout(() => { if(!S.modal && ['aujourdhui','actualite'].includes(S.ecran)) signalCandidat('Bienvenue sur Mon Concours. Prenez le temps de regarder.'); }, 1800);
@@ -7139,35 +7159,84 @@ function peutInviter(){ return !ECRANS_CALMES.includes(S.ecran) && !S.modal && !
 function fenetreInvitation(o){
   const z = document.createElement('div');
   z.id = 'invitation'; z.setAttribute('role', 'dialog'); z.setAttribute('aria-modal', 'true'); z.setAttribute('aria-label', o.titre);
-  z.innerHTML = '<div class="inv-carte"><div class="inv-ic">' + ico(o.icone, 26) + '</div><h2>' + E(o.titre) + '</h2><p>' + E(o.texte) + '</p>' +
-    '<button type="button" class="cta inv-oui">' + E(o.oui) + '</button><button type="button" class="lien-mini inv-non">Plus tard</button></div>';
+  /* o.obligatoire : pas de bouton « Plus tard » ni de fermeture en touchant le fond */
+  z.innerHTML = '<div class="inv-carte"><div class="inv-ic">' + (o.icone === 'whatsapp' ? logoReseau('whatsapp') : ico(o.icone, 26)) + '</div><h2>' + E(o.titre) + '</h2><p>' + E(o.texte) + '</p>' +
+    '<button type="button" class="cta inv-oui">' + E(o.oui) + '</button>' +
+    (o.obligatoire ? '' : '<button type="button" class="lien-mini inv-non">Plus tard</button>') + '</div>';
   document.body.appendChild(z);
-  const fermer = repousse => { z.remove(); if(repousse) ecrireReglage('inv_' + o.cle, Date.now()); };
-  z.querySelector('.inv-oui').onclick = () => { fermer(false); ecrireReglage('inv_' + o.cle + '_fait', true); try{ o.action(); }catch(e){} };
-  z.querySelector('.inv-non').onclick = () => fermer(true);
-  z.addEventListener('click', e => { if(e.target === z) fermer(true); });
-  pister('INVITATION_SHOWN', { cle:o.cle });
+  const noter = () => ecrireReglage('inv_' + o.cle, Date.now());
+  const fermer = () => { z.remove(); noter(); };
+  z.querySelector('.inv-oui').onclick = () => {
+    z.remove(); noter();
+    if(!o.sansFait) ecrireReglage('inv_' + o.cle + '_fait', true);
+    try{ o.action(); }catch(e){}
+  };
+  if(!o.obligatoire){
+    z.querySelector('.inv-non').onclick = fermer;
+    z.addEventListener('click', e => { if(e.target === z) fermer(); });
+  }
+  noter();
+  pister('INVITATION_SHOWN', { cle:o.cle, rappel:o.rappel || 0 });
 }
-function invitationPossible(cle){
+/* une invitation déjà « faite » ne revient plus ; sinon, jamais deux fois à moins de 4 minutes d'écart */
+function invitationPossible(cle, ecart){
   const r = lireReglages();
   if(r['inv_' + cle + '_fait']) return false;
   const t = r['inv_' + cle];
-  return !(t && Date.now() - t < 3 * 86400000);
+  return !(t && Date.now() - t < (ecart === undefined ? 240000 : ecart));
+}
+const TEXTES_WHATSAPP = [
+  { titre:'Rejoignez la communauté', texte:'Intégrez la communauté WhatsApp de Mon Concours pour rester informé : dates des concours, compositions du samedi, nouveautés.' },
+  { titre:'Vous avez oublié quelque chose', texte:'Vous avez oublié de vous intégrer dans le groupe WhatsApp de Mon Concours. C\'est là que sont annoncées les dates et les nouveautés.' },
+  { titre:'Ne ratez pas les annonces', texte:'Vous n\'êtes toujours pas dans la communauté WhatsApp de Mon Concours. Rejoignez-la en un geste pour ne rien manquer.' }
+];
+function notifsAEncourager(){
+  return S.util.connecte && pushPossible() && 'Notification' in window && Notification.permission !== 'denied' &&
+    !(S.rappel && S.rappel.actif && Notification.permission === 'granted');
 }
 function planifierInvitations(){
-  const essayer = (delai, cle, condition, config, essais) => setTimeout(function tente(){
-    if(!condition() || !invitationPossible(cle)) return;
-    if(!peutInviter()){ if((essais = (essais || 0) + 1) < 12) setTimeout(tente, 30000); return; }
+  const essayer = (delai, cle, condition, config, ecart) => setTimeout(function tente(essais){
+    if(!condition() || !invitationPossible(cle, ecart)) return;
+    if(!peutInviter()){ essais = (essais || 0) + 1; if(essais < 30) setTimeout(() => tente(essais), 20000); return; }
     fenetreInvitation(Object.assign({ cle }, config));
   }, delai);
-  essayer(180000, 'install', () => !estInstallee() && !CONTACT.playStore,
+  /* installation : vers 1 minute, sans bouton « Plus tard » ; si le téléphone refuse, on redemande après 1 heure */
+  essayer(60000, 'install', () => !estInstallee() && !CONTACT.playStore,
     { icone:'telecharger', titre:'Installer Mon Concours', texte:'Installez l\'application sur votre téléphone : elle s\'ouvre comme une application, même avec peu de réseau.',
-      oui:'Installer l\'application', action: () => installerAppli() });
-  essayer(330000, 'notifs', () => S.util.connecte && pushPossible() && 'Notification' in window && Notification.permission === 'default' && !(S.rappel && S.rappel.actif),
-    { icone:'cloche', titre:'Être prévenu à temps', texte:'Autorisez les notifications : un rappel chaque soir à 18 h, vos résultats, les compositions du samedi. Vous pourrez changer l\'heure dans Mon compte.',
-      oui:'Autoriser les notifications', action: () => activerRappel(18, 0) });
+      oui:'Installer l\'application', obligatoire:true, sansFait:true, action: () => installerAppli() }, 3600000);
+  /* communauté WhatsApp : 2 minutes, 10 minutes, 1 heure ; plus jamais une fois rejointe */
+  [120000, 600000, 3600000].forEach((d, i) => essayer(d, 'whatsapp', () => !!CONTACT.canal,
+    { icone:'whatsapp', titre:TEXTES_WHATSAPP[i].titre, texte:TEXTES_WHATSAPP[i].texte, oui:'Rejoindre la communauté', rappel:i,
+      action: () => { window.open(CONTACT.canal, '_blank', 'noopener'); pister('WHATSAPP_JOINED_CLICK', {}); } }, 120000));
+  /* notifications : mêmes moments, décalés d'une minute pour ne pas empiler deux fenêtres ; s'arrête dès qu'elles sont acceptées */
+  const TEXTES_NOTIFS = [
+    'Autorisez les notifications : Mon Concours vous prévient, même quand vous êtes sur Facebook ou WhatsApp, pour le rappel du soir, vos résultats et les compositions du samedi.',
+    'Vous n\'avez pas encore autorisé les notifications. Sans elles, vous ne serez pas prévenu des compositions ni de vos rappels.',
+    'Dernier rappel : autorisez les notifications pour recevoir vos rappels et ne pas rater la composition du samedi.'
+  ];
+  [180000, 660000, 3660000].forEach((d, i) => {
+    setTimeout(() => { if(S.util.connecte && !S.rappel) chargerRappel(); }, d - 15000);
+    essayer(d, 'notifs', notifsAEncourager,
+      { icone:'cloche', titre:i ? 'Notifications toujours coupées' : 'Être prévenu à temps', texte:TEXTES_NOTIFS[i], oui:'Autoriser les notifications', rappel:i, sansFait:true,
+        action: () => activerRappel(18, 0) }, 120000);
+  });
 }
 planifierInvitations();
+
+/* Inscription : un visiteur qui n'a pas de compte la voit assez vite, même s'il est déjà venu.
+   Une fois par visite au plus, et pas plus d'une fois toutes les 6 heures. */
+(function planifierInscription(){
+  const tente = essais => {
+    if(S.util.connecte || S.inscriptionProposee) return;
+    const r = lireReglages();
+    if(r.inscription_vue && Date.now() - r.inscription_vue < 6 * 3600000) return;
+    if(!peutInviter()){ essais = (essais || 0) + 1; if(essais < 40) setTimeout(() => tente(essais), 10000); return; }
+    S.inscriptionProposee = true; S.modalDejaVu = true;
+    ecrireReglage('inscription_vue', Date.now());
+    S.modal = 'inscription'; surcouche();
+  };
+  setTimeout(() => tente(0), 25000);
+})();
 
 ouvrirLienDirect();
 rendre();
