@@ -319,7 +319,7 @@ window.addEventListener('beforeunload', e => {
 (function reprendreReglages(){
   const r = lireReglages();
   if(r.theme === 'sombre' || r.theme === 'clair') S.theme = r.theme;
-  if(r.parcours === 'A' || r.parcours === 'B') S.parcours = r.parcours;
+  if(['A','B','C'].includes(r.parcours)) S.parcours = r.parcours;
   /* S.taches est un TABLEAU. Object.assign en aurait fait un objet,
      qui n'a pas de .filter : l'accueil plantait et l'écran restait noir. */
   if(Array.isArray(r.taches) && r.tachesJour === new Date().toDateString()){
@@ -687,7 +687,7 @@ function remettreTest(){
   if(corps){
     const s=document.createElement('div'); s.className='scan'; corps.appendChild(s);
     setTimeout(()=>{ s.remove(); pister('DIAGNOSTIC_RESULT_VIEWED', { note: S.testNote, parcours: S.parcours });
-      if(S.parcours === 'B' && !S.util.connecte){ pister('RESULT_LOCKED'); aller('verrou'); } else aller('resultat'); }, 1600);
+      if((S.parcours === 'B' || S.parcours === 'C') && !S.util.connecte){ pister('RESULT_LOCKED'); aller('verrou'); } else aller('resultat'); }, 1600);
   }
 }
 
@@ -767,8 +767,30 @@ function ecranResultat(){
       </ol>
     </div>
 
-    ${S.parcours === 'B' ? feuilleTestCorrigee() : ''}
-    <button class="cta" style="margin-top:18px" data-entrer="1">${S.parcours === 'B' ? 'Continuer dans l\'application' : 'Entrer dans l\'application'}<small>Actualité · révisions · composition · erreurs</small></button>
+    ${S.parcours === 'B' || S.parcours === 'C' ? feuilleTestCorrigee() : ''}
+    ${S.parcours === 'C' ? blocPlanPaiement(faibles) : ''}
+    <button class="cta" style="margin-top:18px" data-entrer="1">${S.parcours === 'B' || S.parcours === 'C' ? 'Continuer dans l\'application' : 'Entrer dans l\'application'}<small>Actualité · révisions · composition · erreurs</small></button>
+  </div>`;
+}
+
+/* --- parcours C : le plan de rattrapage et les prix, juste après la feuille corrigée --- */
+function blocPlanPaiement(faibles){
+  if(S.gratuit || estAbonne()) return '';
+  const cible = faibles.length ? faibles.slice(0,2).map(x => E(x)).join(' et ') : 'les matières du concours';
+  const f = FORMULES, an = f.annuelle;
+  const ligne = (k, nom, sous) => `<div class="carte" style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
+        <b>${nom}</b><span class="num">${f[k].ancien ? '<s style="opacity:.55;font-weight:400">' + E(f[k].ancien) + '</s> ' : ''}<b>${E(f[k].prix)}</b></span></div>
+      <p class="sous" style="margin:4px 0 8px">${sous}</p>
+      <button class="mini" data-pass="${k}">Prendre le ${f[k].n}</button></div>`;
+  return `<div class="bonne-nouvelle" style="margin-top:18px">
+    <h2>Ton plan pour rattraper ${cible}</h2>
+    <p class="sous" style="margin:0 0 10px">La première séance est ouverte pour toi dans l'application. Le plan complet se débloque avec un pass.</p>
+    ${S.offre ? `<div class="offre-kicker" style="margin:0 0 8px">Offre du jour · valable aujourd'hui seulement · il reste <b data-offre-reste="1">${resteOffre()}</b></div>` : ''}
+    ${S.offre ? ligne('annuelle', 'Pass Année', '12 mois sans limite, à moitié prix. L\'offre expire ' + jourOffre() + ' à minuit.') : ''}
+    ${ligne('mensuelle', 'Pass Mois', '30 jours pour travailler chaque jour.')}
+    ${ligne('semaine', 'Pass Semaine', '7 jours pour essayer, le plus petit prix.')}
+    ${S.offre ? '' : ligne('annuelle', 'Pass Année', '12 mois sans limite.')}
   </div>`;
 }
 
@@ -1105,7 +1127,7 @@ async function chargerAbonnement(){
     S.paieEnAttente = (S.paiementEtat && S.paiementEtat.statut === 'en_attente') ? S.paiementEtat : null;
     const of = await chargerOffre(true);   // l'offre naît tout de suite, avec sa notification
     if(of && of.nouvelle) chargerNotifications();
-    if(['compte','abonnement','aujourdhui'].includes(S.ecran)) rendre();
+    if(['compte','abonnement','aujourdhui','resultat'].includes(S.ecran)) rendre();
   }catch(e){}
 }
 
@@ -7453,7 +7475,7 @@ async function assignerParcours(){
   if(testDejaFait() || S.util.connecte || !base) return;
   try{
     const { data } = await base.rpc('attribuer_parcours');
-    if(data === 'A' || data === 'B'){
+    if(['A','B','C'].includes(data)){
       S.parcours = data; ecrireReglage('parcours', data);
       pister('PARCOURS_ASSIGNE', { parcours: data });
     }
