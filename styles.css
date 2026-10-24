@@ -1751,3 +1751,23 @@ body.sans-anim .nd-barre i{transition:none}
 .plan-t{flex:1;min-width:0}
 .plan-t b{display:block;font-size:13.5px}
 .plan-t em{font-style:normal;font-size:12px;color:var(--craie2)}
+
+/* offre flash : 24 heures, on la ferme avec la croix */
+.offre-carte{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:195;width:min(440px,calc(100% - 24px));
+  transform:translate(-50%,140%);opacity:0;transition:transform .35s cubic-bezier(.2,.8,.3,1),opacity .35s;
+  padding:16px 16px 14px;border-radius:16px;border:1.5px solid var(--or);background:var(--encre);color:var(--craie);
+  box-shadow:0 16px 40px rgba(0,0,0,.5);text-align:left}
+.offre-carte.vu{transform:translate(-50%,0);opacity:1}
+.offre-x{position:absolute;top:6px;right:8px;width:34px;height:34px;border:0;background:transparent;color:var(--craie2);font-size:26px;line-height:1;cursor:pointer}
+.offre-kicker{font-family:var(--m);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--laterite-txt);padding-right:30px}
+.offre-prix{margin-top:8px;font-family:var(--d);font-weight:800;font-size:26px;letter-spacing:-.02em}
+.offre-prix s{font-size:16px;font-weight:600;color:var(--craie2);margin-right:6px}
+.offre-texte{margin-top:6px;font-size:13px;line-height:1.45;color:var(--craie2)}
+.offre-texte b{color:var(--craie);font-variant-numeric:tabular-nums}
+.offre-carte .cta{margin-top:12px}
+.formule.flash{border-color:var(--or)}
+.formule .barre{font-size:12px;color:var(--craie2);margin-right:4px}
+.flash-reste{margin-top:6px;font-size:12px;color:var(--laterite-txt)}
+.flash-reste b{font-variant-numeric:tabular-nums}
+@media(min-width:860px){.offre-carte{bottom:24px}}
+@media(prefers-reduced-motion:reduce){.offre-carte{transition:none}}

@@ -989,6 +989,7 @@ function ouvrirNotif(n){
   if(genre === 'reprendre') return aller(repriseCible(id) || 'aujourdhui');
   if(genre === 'parcours') return aller('parcours');
   if(genre === 'installer') return installerAppli();
+  if(genre === 'offre'){ chargerOffre(false).then(() => aller('abonnement')); return; }
   if(n.type === 'paiement' && !S.gratuit) return aller('abonnement');
 }
 
@@ -1058,9 +1059,104 @@ async function chargerAbonnement(){
     const { data: dem } = await base.rpc('mon_paiement_en_cours');
     S.paiementEtat = (dem && dem.ok && dem.statut) ? dem : null;
     S.paieEnAttente = (S.paiementEtat && S.paiementEtat.statut === 'en_attente') ? S.paiementEtat : null;
+    const of = await chargerOffre(true);   // l'offre naît tout de suite, avec sa notification
+    if(of && of.nouvelle) chargerNotifications();
     if(['compte','abonnement','aujourdhui'].includes(S.ecran)) rendre();
   }catch(e){}
 }
+
+/* =====================================================================
+   OFFRE FLASH : le Pass Année à moitié prix pendant 24 heures.
+   Le serveur fixe le prix et la fin ; l'écran ne fait que l'afficher.
+   ===================================================================== */
+let _annuelleBase = null;
+const annuelleBase = () => _annuelleBase || (_annuelleBase = Object.assign({}, FORMULES.annuelle));
+const fmtFcfa = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' FCFA';
+function appliquerOffre(o){
+  const actif = !!(o && o.actif && o.formule === 'annuelle' && o.fin_le && new Date(o.fin_le) > new Date());
+  S.offre = actif ? o : null;
+  FORMULES.annuelle = actif
+    ? Object.assign({}, annuelleBase(), { prix: fmtFcfa(o.montant), montant: o.montant, ancien: annuelleBase().prix, jour: Math.round(o.montant / 365) + ' F par jour' })
+    : Object.assign({}, annuelleBase());
+}
+async function chargerOffre(creer){
+  if(!base || !S.util.connecte || S.gratuit || estAbonne()){ appliquerOffre(null); return null; }
+  try{
+    const { data, error } = await base.rpc('mon_offre_flash', { p_creer: !!creer });
+    if(error) throw error;
+    appliquerOffre(data);
+    return data;
+  }catch(e){ return null; }
+}
+function resteOffre(){
+  const ms = S.offre ? Math.max(0, new Date(S.offre.fin_le) - Date.now()) : 0;
+  const h = Math.floor(ms / 3600000), m = Math.floor(ms % 3600000 / 60000), sec = Math.floor(ms % 60000 / 1000);
+  return String(h).padStart(2, '0') + ' h ' + String(m).padStart(2, '0') + ' min ' + String(sec).padStart(2, '0') + ' s';
+}
+/* le décompte vit tout seul : à la fin, les prix reviennent à la normale */
+setInterval(() => {
+  const els = document.querySelectorAll('[data-offre-reste]');
+  if(!els.length && !S.offre) return;
+  if(S.offre && new Date(S.offre.fin_le) <= new Date()){
+    appliquerOffre(null);
+    document.querySelectorAll('.offre-carte').forEach(x => x.remove());
+    if(['abonnement','paiement'].includes(S.ecran) && S.paieEtape === 0) rendre();
+    return;
+  }
+  els.forEach(el => { el.textContent = resteOffre(); });
+}, 1000);
+
+function fermerOffre(){
+  document.querySelectorAll('.offre-carte').forEach(c => { c.classList.remove('vu'); setTimeout(() => c.remove(), 350); });
+  const r = lireReglages().offre || {};
+  r.vu = Date.now(); ecrireReglage('offre', r);
+}
+function afficherOffre(){
+  if(!S.offre || document.querySelector('.offre-carte')) return;
+  const f = FORMULES.annuelle;
+  const c = document.createElement('div');
+  c.className = 'offre-carte';
+  c.setAttribute('role', 'dialog');
+  c.setAttribute('aria-label', 'Offre flash de 24 heures');
+  c.innerHTML = `<button class="offre-x" aria-label="Fermer l'offre">×</button>
+    <div class="offre-kicker">Offre flash · 24 heures seulement</div>
+    <div class="offre-prix"><s>${E(f.ancien || '')}</s> <b>${E(f.prix)}</b></div>
+    <div class="offre-texte">Le Pass Année, 12 mois sans limite, à moitié prix. Cette offre s'arrête dans <b data-offre-reste="1">${resteOffre()}</b>.</div>
+    <button class="cta offre-go">Profiter de l'offre</button>`;
+  c.querySelector('.offre-x').onclick = fermerOffre;
+  c.querySelector('.offre-go').onclick = () => {
+    fermerOffre();
+    S.choixFormule = 'annuelle'; S.paieEtape = 0; S.erreur = '';
+    pister('FLASH_OFFER_CLICKED');
+    aller('paiement');
+  };
+  c.addEventListener('keydown', e => { if(e.key === 'Escape') fermerOffre(); });
+  document.body.appendChild(c);
+  setTimeout(() => c.classList.add('vu'), 30);
+  pister('FLASH_OFFER_SHOWN');
+}
+/* dix minutes d'utilisation réelle, puis l'offre apparaît (une fois créée, elle ne revient pas à zéro) */
+const OFFRE_ATTENTE_S = 600;
+async function suiviOffre(){
+  if(document.visibilityState !== 'visible' || !S.util.connecte || !base || S.gratuit || estAbonne()) return;
+  const r = lireReglages().offre || { s: 0, vu: 0 };
+  if((r.s || 0) < OFFRE_ATTENTE_S){
+    if(Date.now() - O.dernierTemps < 60000){ r.s = (r.s || 0) + 15; ecrireReglage('offre', r); }
+    if(r.s < OFFRE_ATTENTE_S) return;
+  }
+  const enEpreuve = enComposition() || SANS_TETE.includes(S.ecran);
+  if(enEpreuve){ document.querySelectorAll('.offre-carte').forEach(x => x.remove()); return; }
+  if(S.modal || document.querySelector('.offre-carte')) return;
+  if(!S.offre){
+    if(S.offreT && Date.now() - S.offreT < 1800000) return;
+    S.offreT = Date.now();
+    await chargerOffre(true);
+    if(S.ecran === 'abonnement') rendre();
+  }
+  /* première apparition tout de suite, rappel toutes les 3 heures tant que l'offre dure */
+  if(S.offre && Date.now() - (r.vu || 0) > 3 * 3600000){ chargerNotifications(); afficherOffre(); }
+}
+setInterval(suiviOffre, 15000);
 
 async function chargerConcours(){
   if(!base) return;
@@ -2010,10 +2106,11 @@ function ecranAbonnement(){
     <div class="libelle" style="margin-top:6px">Choisissez votre Pass</div>
     ${Object.keys(FORMULES).map(k => {
       const f = FORMULES[k];
-      return `<div class="formule ${f.reco ? 'reco' : ''}">
-        ${f.reco ? '<span class="ruban">recommandé</span>' : ''}
+      return `<div class="formule ${f.reco ? 'reco' : ''} ${f.ancien ? 'flash' : ''}">
+        ${f.ancien ? '<span class="ruban">offre flash</span>' : f.reco ? '<span class="ruban">recommandé</span>' : ''}
         <div class="haut"><span class="nom">${f.n}</span>
-          <span class="prix">${f.prix} <em>${f.per}</em></span></div>
+          <span class="prix">${f.ancien ? `<s class="barre">${f.ancien}</s> ` : ''}${f.prix} <em>${f.per}</em></span></div>
+        ${f.ancien ? `<div class="flash-reste">Il reste <b data-offre-reste="1">${resteOffre()}</b></div>` : ''}
         <button class="mini" style="margin-top:12px" data-pass="${k}">Prendre le ${f.n}</button>
       </div>`;
     }).join('')}
