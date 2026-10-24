@@ -1,0 +1,4 @@
+-- Rappel du jour personnalisé : « Vous avez N erreurs à revoir, surtout en <matière> ».
+-- Appliqué par remplacement dans public.envois_a_faire (voir l'historique de la base).
+-- La requête ajoute la colonne matiere_faible (matière qui compte le plus d'erreurs à revoir)
+-- et un cas supplémentaire dans le message du rappel quotidien.
