@@ -2021,7 +2021,7 @@ function ecranAbonnement(){
 
     <div class="bloc" style="margin-top:20px">
       <div class="libelle">Toujours gratuit</div>
-      <div class="carte"><p class="sous" style="margin:0">L'actualité du matin, le test de niveau, 10 corrections par jour, le cahier d'erreurs, 3 compositions offertes et la composition nationale du samedi.</p></div>
+      <div class="carte"><p class="sous" style="margin:0">Avec ton inscription : l'actualité du matin, le test de niveau, le cahier d'erreurs, des corrections chaque jour, des compositions pour t'essayer et la composition nationale du samedi.</p></div>
     </div>
   </div>`;
 }
