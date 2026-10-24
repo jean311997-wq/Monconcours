@@ -28,7 +28,7 @@ Deno.serve(async (req: Request) => {
       await webpush.sendNotification(
         { endpoint: e.endpoint, keys: { p256dh: e.p256dh, auth: e.auth } },
         JSON.stringify({ titre: e.titre, message: e.message, lien: e.lien }),
-        { TTL: 3600 },
+        { TTL: 3600, urgency: "high" },
       );
       ok++;
     } catch (err) {

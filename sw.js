@@ -3,7 +3,7 @@
    Un candidat en 2G ne doit pas repayer le chargement à chaque visite,
    et un candidat sans réseau doit pouvoir relire ses cours.
    ===================================================================== */
-const VERSION = 'mc-v34';
+const VERSION = 'mc-v35';
 const COQUE   = VERSION + '-coque';   // les fichiers de l'application
 const DONNEES = VERSION + '-donnees'; // les réponses de la base
 
@@ -130,6 +130,8 @@ self.addEventListener('push', e => {
   e.waitUntil(self.registration.showNotification(d.titre || 'Mon Concours', {
     body: d.message || 'Ta séance du jour t\'attend.',
     icon: '/icone-192.png', badge: '/favicon.png',
+    /* vibration et nouvelle alerte : c'est ce qui fait descendre la bannière en haut de l'écran, même dans Facebook ou WhatsApp */
+    vibrate: [220, 110, 220], renotify: true, silent: false, requireInteraction: false,
     data: { lien: d.lien || '/' }, tag: (d.lien || 'rappel').slice(0, 60)
   }));
 });
