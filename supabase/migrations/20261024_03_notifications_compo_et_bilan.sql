@@ -1,0 +1,7 @@
+-- 24 octobre 2026 : notifications personnalisées
+-- 1. À la fin d'une composition individuelle : notification push « Vous avez raté N questions, surtout en <matière> »,
+--    qui ouvre « Mes fautes » (lien /?fautes=1). Les compositions collectives gardent la notification simple
+--    (la correction n'est visible qu'à la fin de l'épreuve).
+-- 2. Bilan du dimanche : ajoute « Vous progressez en <matière> : N % de réussite cette semaine » quand
+--    la réussite de la semaine dépasse celle des semaines précédentes (au moins 5 réponses cette semaine).
+-- Appliqué directement dans la base (fonctions notifier_resultat_composition et envois_a_faire).
