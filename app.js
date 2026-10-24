@@ -454,7 +454,7 @@ function memoReprendre(){
 })();
 
 /* Écrans de première visite : on n'y renvoie plus personne par accident. */
-const ECRANS_DECOUVERTE = ['engagement','testIntro','test','resultat','verrou'];
+const ECRANS_DECOUVERTE = ['engagement','testIntro','test','resultat','verrou','verrou_d'];
 
 const derniersAppels = {};
 function pasTropSouvent(cle, ms){
@@ -522,7 +522,7 @@ const ONGLETS = [
 ];
 function nav(){
   const n = $('#nav'), r = $('#rail');
-  const cache = ['engagement','testIntro','test','resultat','verrou','seance','inscription','connexion','paiement'].includes(S.ecran);
+  const cache = ['engagement','testIntro','test','resultat','verrou','verrou_d','seance','inscription','connexion','paiement'].includes(S.ecran);
   n.style.display = cache ? 'none' : 'grid';
   r.style.display = cache ? 'none' : '';
   const app = document.querySelector('.app'); if(app) app.classList.toggle('sans-rail', cache);
@@ -687,8 +687,45 @@ function remettreTest(){
   if(corps){
     const s=document.createElement('div'); s.className='scan'; corps.appendChild(s);
     setTimeout(()=>{ s.remove(); pister('DIAGNOSTIC_RESULT_VIEWED', { note: S.testNote, parcours: S.parcours });
-      if((S.parcours === 'B' || S.parcours === 'C') && !S.util.connecte){ pister('RESULT_LOCKED'); aller('verrou'); } else aller('resultat'); }, 1600);
+      if((S.parcours === 'B' || S.parcours === 'C') && !S.util.connecte){ pister('RESULT_LOCKED'); aller('verrou'); }
+      else if(S.parcours === 'D' && !S.util.connecte){ pister('RESULT_LOCKED'); aller('verrou_d'); }
+      else aller('resultat'); }, 1600);
   }
+}
+
+/* --- parcours D : popup paiement optionnel après le résultat --- */
+function ouvrirPopupPaiementD(){
+  if(document.getElementById('popup-paiement-d')) return; // déjà ouvert
+  pister('PARCOURS_D_PAYWALL_SHOWN');
+  const overlay = document.createElement('div');
+  overlay.id = 'popup-paiement-d';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;display:flex;align-items:flex-end;justify-content:center';
+  overlay.innerHTML = `
+  <div style="background:var(--fond);border-radius:20px 20px 0 0;padding:24px 20px 36px;width:100%;max-width:480px;box-shadow:0 -4px 32px rgba(0,0,0,.18)">
+    <div style="width:40px;height:4px;background:var(--bord);border-radius:2px;margin:0 auto 20px"></div>
+    <div style="font-size:22px;font-weight:700;margin-bottom:8px">Continue à te préparer 🎯</div>
+    <p style="color:var(--sous);margin:0 0 20px;font-size:14px;line-height:1.5">Accède à toutes les révisions, compositions et ton plan personnalisé. Résilie à tout moment.</p>
+    <div style="display:grid;gap:10px;margin-bottom:18px">
+      <button class="cta" style="margin:0" data-go="abonnement" data-paiement-plus-tard-close="1">
+        Voir les offres<small>À partir de 500 FCFA / semaine</small>
+      </button>
+      <button class="lien" style="display:block;text-align:center;padding:12px 0" data-paiement-plus-tard="1">
+        Plus tard
+      </button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  /* fermer en cliquant l'overlay */
+  overlay.addEventListener('click', ev => {
+    const btn = ev.target.closest('[data-paiement-plus-tard],[data-go]');
+    if(btn){
+      overlay.remove();
+      if(btn.dataset.go === 'abonnement'){ pister('PARCOURS_D_PAYWALL_CLICKED'); aller('abonnement'); }
+      else pister('PARCOURS_D_PAYWALL_DISMISSED');
+    } else if(ev.target === overlay){
+      overlay.remove(); pister('PARCOURS_D_PAYWALL_DISMISSED');
+    }
+  });
 }
 
 /* --- 3 sur 3 : le résultat --- */
@@ -771,6 +808,10 @@ function ecranResultat(){
     ${S.parcours === 'C' ? blocPlanPaiement(faibles) : ''}
     <button class="cta" style="margin-top:18px" data-entrer="1">${S.parcours === 'B' || S.parcours === 'C' ? 'Continuer dans l\'application' : 'Entrer dans l\'application'}<small>Actualité · révisions · composition · erreurs</small></button>
   </div>`;
+  /* Parcours D : proposer le paiement après 3 secondes, avec bouton "Plus tard" */
+  if(S.parcours === 'D'){
+    setTimeout(() => ouvrirPopupPaiementD(), 3000);
+  }
 }
 
 /* --- parcours C : le plan de rattrapage et les prix, juste après la feuille corrigée --- */
@@ -792,6 +833,61 @@ function blocPlanPaiement(faibles){
     ${ligne('semaine', 'Pass Semaine', '7 jours pour essayer, le plus petit prix.')}
     ${S.offre ? '' : ligne('annuelle', 'Pass Année', '12 mois sans limite.')}
   </div>`;
+}
+
+/* --- parcours D : install PWA + notifs obligatoires avant de voir le résultat --- */
+function ecranVerrouD(){
+  const etapeD = S.verrouDEtape || 1; // 1=inscription, 2=install, 3=notifs
+  let contenu = '';
+  if(etapeD === 1){
+    contenu = `
+    <div class="marquehero">${logoSvg(38)}
+      <div><div class="mot">MON <i>CONCOURS</i></div>
+        <div class="devise">Prépare ton concours, un jour après l'autre.</div></div></div>
+    <div class="progression"><i class="on"></i><i class="on"></i><i class="on"></i></div>
+    <div class="pastille-etape" style="margin:14px 0 10px">Ta copie est corrigée</div>
+    <div class="bloc-note">
+      <div class="marque-note"><span class="v num">?</span><span class="d num">/10</span></div>
+      <div class="note-legende">
+        <div class="l1">Ta note est prête</div>
+        <div class="l2">Dix questions corrigées</div>
+        <div class="l3">Inscris-toi pour la voir</div>
+      </div>
+    </div>
+    <div class="verdict fragile"><b>Inscris-toi gratuitement pour voir ta réponse.</b>
+      Tu découvres ta note, ta feuille corrigée avec l'explication de chaque question, et les matières à travailler en premier.</div>
+    <button class="cta" style="margin-top:18px" data-modal="inscription">Voir ma note : inscription gratuite<small>30 secondes, sans e-mail</small></button>
+    <button class="lien" style="display:block;margin:12px auto 0" data-modal="connexion">J'ai déjà un compte</button>`;
+  } else if(etapeD === 2){
+    contenu = `
+    <div class="marquehero">${logoSvg(38)}
+      <div><div class="mot">MON <i>CONCOURS</i></div></div></div>
+    <div class="pastille-etape" style="margin:20px 0 10px">Étape 1 sur 2 · installe l'application</div>
+    <div class="bloc-note" style="padding:20px 16px">
+      <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:block;margin:0 auto 12px"><path d="M12 2v13M8 11l4 4 4-4"/><rect x="3" y="17" width="18" height="4" rx="2"/></svg>
+      <div class="note-legende" style="text-align:center">
+        <div class="l1">Télécharge l'application</div>
+        <div class="l2">Accède à ta note depuis ton écran d'accueil, même sans connexion.</div>
+      </div>
+    </div>
+    <div class="verdict fragile">Une fois installée, tu accèdes à ta note et à toutes les fonctionnalités : révisions quotidiennes, compositions, plan de correction.</div>
+    <button class="cta" style="margin-top:18px" data-installe-d="1">Installer l'application<small>Gratuit · sur ton écran d'accueil</small></button>`;
+  } else if(etapeD === 3){
+    contenu = `
+    <div class="marquehero">${logoSvg(38)}
+      <div><div class="mot">MON <i>CONCOURS</i></div></div></div>
+    <div class="pastille-etape" style="margin:20px 0 10px">Étape 2 sur 2 · active les rappels</div>
+    <div class="bloc-note" style="padding:20px 16px">
+      <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:block;margin:0 auto 12px"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      <div class="note-legende" style="text-align:center">
+        <div class="l1">Active les notifications</div>
+        <div class="l2">Reçois tes rappels de révision et les alertes de composition.</div>
+      </div>
+    </div>
+    <div class="verdict fragile">Tu recevras une alerte le matin pour réviser et un rappel avant chaque composition nationale.</div>
+    <button class="cta" style="margin-top:18px" data-notifs-d="1">Activer les notifications<small>Tu peux les désactiver à tout moment</small></button>`;
+  }
+  vue().innerHTML = `<div class="pad" style="padding-top:20px">${contenu}</div>`;
 }
 
 /* --- parcours B : la note reste cachée jusqu'à l'inscription --- */
@@ -5473,7 +5569,7 @@ window.addEventListener('popstate', ev => {
 /* Les nouveaux boutons ont leur propre écouteur : le grand aiguillage
    plus bas reste tel quel. */
 document.addEventListener('click', ev => {
-  const t = ev.target.closest('[data-quitter],[data-quitter-oui],[data-quitter-non],[data-son],[data-correction-differee],[data-gagnants],[data-pourtoi],[data-fil-rep],[data-fil-suiv],[data-qdj-rep],[data-qp-rep],[data-signaler],[data-signal-envoi],[data-objectif],[data-rejoindre],[data-rappel-activer],[data-rappel-retirer],[data-reagir],[data-partage-question],[data-partage-qdj],[data-partage-rang],[data-carte-resultat],[data-sortir-reprise],[data-inscrire-nat],[data-nat-oui],[data-nat-non],[data-resultats-pdf],[data-telecharger-mat],[data-rappel-heure]');
+  const t = ev.target.closest('[data-quitter],[data-quitter-oui],[data-quitter-non],[data-son],[data-correction-differee],[data-gagnants],[data-pourtoi],[data-fil-rep],[data-fil-suiv],[data-qdj-rep],[data-qp-rep],[data-signaler],[data-signal-envoi],[data-objectif],[data-rejoindre],[data-rappel-activer],[data-rappel-retirer],[data-reagir],[data-partage-question],[data-partage-qdj],[data-partage-rang],[data-carte-resultat],[data-sortir-reprise],[data-inscrire-nat],[data-nat-oui],[data-nat-non],[data-resultats-pdf],[data-telecharger-mat],[data-rappel-heure],[data-installe-d],[data-notifs-d],[data-paiement-plus-tard]');
   if(!t) return;
   const d = t.dataset;
   try{ const cle = Object.keys(d)[0]; pister('BUTTON_CLICKED', { valeur: String(d[cle]).slice(0,40) }, cle); }catch(e){}
@@ -5557,6 +5653,28 @@ document.addEventListener('click', ev => {
   if(d.resultatsPdf) return resultatsPdf();
   if(d.telechargerMat) return telechargerCoursMatiere(decodeURIComponent(d.telechargerMat));
   if(d.rappelHeure){ const h = document.getElementById('rappel-h'), m = document.getElementById('rappel-m'); return activerRappel(h ? +h.value : 19, m ? +m.value : 0); }
+  if(d.installeD){
+    pister('PARCOURS_D_INSTALL_CLICKED');
+    installerAppli();
+    /* On avance à l'étape notifs même si l'install échoue (iOS, navigateur incompatible) */
+    setTimeout(() => { S.verrouDEtape = 3; aller('verrou_d'); }, 1200);
+    return;
+  }
+  if(d.notifsD){
+    pister('PARCOURS_D_NOTIFS_CLICKED');
+    activerRappel(18, 0).then(() => {
+      aller('resultat');
+    }).catch(() => {
+      /* La permission est refusée ou indisponible → on laisse quand même voir le résultat */
+      aller('resultat');
+    });
+    return;
+  }
+  if(d.paiementPlusTard){
+    pister('PARCOURS_D_PAIEMENT_PLUS_TARD');
+    document.getElementById('voile').hidden = true; S.modal = null;
+    return;
+  }
 });
 
 /* =====================================================================
@@ -6606,7 +6724,7 @@ function basculerPleinEcran(){
 document.addEventListener('fullscreenchange', () => { if(S.ecran === 'grille' && !S.corrige) ecranGrille(); });
 
 /* ---------- tirer vers le bas pour actualiser, comme sur les autres applications ---------- */
-const SANS_ACTUALISER = ['grille','qcm','test','testIntro','engagement','reprise','pourtoi','defi','lecteur','resultat','verrou','paiement','inscription','connexion','proposer','lecture'];
+const SANS_ACTUALISER = ['grille','qcm','test','testIntro','engagement','reprise','pourtoi','defi','lecteur','resultat','verrou','verrou_d','paiement','inscription','connexion','proposer','lecture'];
 async function actualiserTout(){
   const tout = [];
   const lance = f => { try{ const r = f(); if(r && r.then) tout.push(r.catch(() => {})); }catch(e){} };
@@ -6765,7 +6883,7 @@ document.addEventListener('click', ev => {
 /* =====================================================================
    RENDU + ÉVÉNEMENTS
    ===================================================================== */
-const SANS_TETE = ['test','grille','engagement','testIntro','resultat','verrou'];
+const SANS_TETE = ['test','grille','engagement','testIntro','resultat','verrou','verrou_d'];
 /* raccourci caché vers l'administration : cinq touchers rapides sur le logo */
 let touchesLogo = [];
 document.addEventListener('click', ev => {
@@ -6947,7 +7065,7 @@ function rendre(){
     profondeurVue = 0;
     pister('SCREEN_VIEWED');
   }
-  const dessiner = ({engagement:ecranEngagement, testIntro:ecranTestIntro, test:ecranTest, resultat:ecranResultat, verrou:ecranVerrou,
+  const dessiner = ({engagement:ecranEngagement, testIntro:ecranTestIntro, test:ecranTest, resultat:ecranResultat, verrou:ecranVerrou, verrou_d:ecranVerrouD,
     inscription:ecranInscription, connexion:ecranConnexion,
     abonnement:ecranAbonnement, paiement:ecranPaiement,
     apparence:ecranApparence,
@@ -7014,7 +7132,10 @@ document.addEventListener('click', ev=>{
         ecrireMemoire({ nom:f.nom.trim(), tel:tel, niveauProfil:S.niveauProfil });
         pister('ACCOUNT_CREATED', { niveau: S.niveau });
         S.modal = null; chargerProgression();
-        if(S.defi && S.defi.etat === 'connexion') ouvrirDefi(S.defi.id); else if(S.ecran === 'verrou' && S.testNote !== null) aller('resultat'); else aller('aujourdhui');
+        if(S.defi && S.defi.etat === 'connexion') ouvrirDefi(S.defi.id);
+        else if(S.ecran === 'verrou' && S.testNote !== null) aller('resultat');
+        else if(S.ecran === 'verrou_d' && S.testNote !== null){ S.verrouDEtape = 2; aller('verrou_d'); }
+        else aller('aujourdhui');
       });
       return;
     }
@@ -7051,7 +7172,10 @@ document.addEventListener('click', ev=>{
       S.modal = null;
       await reprendreSession();
       await chargerProgression();
-      if(S.defi && S.defi.etat === 'connexion') ouvrirDefi(S.defi.id); else if(S.ecran === 'verrou' && S.testNote !== null) aller('resultat'); else aller('aujourdhui');
+      if(S.defi && S.defi.etat === 'connexion') ouvrirDefi(S.defi.id);
+      else if(S.ecran === 'verrou' && S.testNote !== null) aller('resultat');
+      else if(S.ecran === 'verrou_d' && S.testNote !== null){ S.verrouDEtape = 2; aller('verrou_d'); }
+      else aller('aujourdhui');
     })();
     return;
   }
@@ -7382,7 +7506,7 @@ function bienvenue(){
   if(S.bienvenueDite) return; S.bienvenueDite = true;
   setTimeout(() => { if(!S.modal && ['aujourdhui','actualite'].includes(S.ecran)) signalCandidat('Bienvenue sur Mon Concours. Prenez le temps de regarder.'); }, 1800);
 }
-const ECRANS_CALMES = ['grille','qcm','test','testIntro','engagement','reprise','pourtoi','defi','resultat','verrou','lecture','paiement','lecteur'];
+const ECRANS_CALMES = ['grille','qcm','test','testIntro','engagement','reprise','pourtoi','defi','resultat','verrou','verrou_d','lecture','paiement','lecteur'];
 function peutInviter(){ return !ECRANS_CALMES.includes(S.ecran) && !S.modal && !document.getElementById('invitation') && !enComposition(); }
 function fenetreInvitation(o){
   const z = document.createElement('div');
@@ -7475,7 +7599,7 @@ async function assignerParcours(){
   if(testDejaFait() || S.util.connecte || !base) return;
   try{
     const { data } = await base.rpc('attribuer_parcours');
-    if(['A','B','C'].includes(data)){
+    if(['A','B','C','D'].includes(data)){
       S.parcours = data; ecrireReglage('parcours', data);
       pister('PARCOURS_ASSIGNE', { parcours: data });
     }
