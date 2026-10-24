@@ -78,7 +78,7 @@ const S = {
   form:{nom:'', tel:'', pin:'', pin2:'', couleur:''}, codeVisible:false, erreur:'',
   abo:{actif:false, formule:null, jours_restants:0, echeance:'formule gratuite'},
   gratuit:true,             // phase de lancement : tout est gratuit (le serveur fait foi)
-  theme:'sombre', sessionCounter:0, cahierDepuisGrille:false,
+  theme:'clair', sessionCounter:0, cahierDepuisGrille:false,
   modal:null, modalDejaVu:false, matiereOuverte:null, sync:null, bloque:false, qcmPos:{}, rechercheCours:'', compositions:[], niveauConnu:false, notifications:[], notifCharge:false, dateConcours:null, nomConcours:null, typeEpreuve:'Concours direct · épreuve écrite',
   choixFormule:'mensuelle', operateur:'orange', paieTel:'', paieEtape:0,
   concours:'', sujetRef:'', seuil:null, compoEtat:null, compoMessage:'', corrigeServeur:null,
