@@ -69,7 +69,7 @@ function testDejaFait(){ return !!(lireMemoire() || {}).testFait; }
    ÉTAT
    ===================================================================== */
 const S = {
-  ecran:'engagement', phase:0,
+  ecran:'engagement', phase:0, parcours:null,
   testRep:{}, testChrono:120, testTimer:null, testCorrige:false, testNote:null,
   taches:[false,false,false], actuOnglet:'national', cahierFiltre:false,
   niveau:'Troisième', matiere:null, qcmIdx:0, qcmRep:undefined, qcmJustes:0, qcmSerie:0,
@@ -319,6 +319,7 @@ window.addEventListener('beforeunload', e => {
 (function reprendreReglages(){
   const r = lireReglages();
   if(r.theme === 'sombre' || r.theme === 'clair') S.theme = r.theme;
+  if(r.parcours === 'A' || r.parcours === 'B') S.parcours = r.parcours;
   /* S.taches est un TABLEAU. Object.assign en aurait fait un objet,
      qui n'a pas de .filter : l'accueil plantait et l'écran restait noir. */
   if(Array.isArray(r.taches) && r.tachesJour === new Date().toDateString()){
@@ -453,7 +454,7 @@ function memoReprendre(){
 })();
 
 /* Écrans de première visite : on n'y renvoie plus personne par accident. */
-const ECRANS_DECOUVERTE = ['engagement','testIntro','test','resultat'];
+const ECRANS_DECOUVERTE = ['engagement','testIntro','test','resultat','verrou'];
 
 const derniersAppels = {};
 function pasTropSouvent(cle, ms){
@@ -521,7 +522,7 @@ const ONGLETS = [
 ];
 function nav(){
   const n = $('#nav'), r = $('#rail');
-  const cache = ['engagement','testIntro','test','resultat','seance','inscription','connexion','paiement'].includes(S.ecran);
+  const cache = ['engagement','testIntro','test','resultat','verrou','seance','inscription','connexion','paiement'].includes(S.ecran);
   n.style.display = cache ? 'none' : 'grid';
   r.style.display = cache ? 'none' : '';
   const app = document.querySelector('.app'); if(app) app.classList.toggle('sans-rail', cache);
@@ -555,25 +556,25 @@ function nav(){
    ===================================================================== */
 const TEST = [
   {q:'« Le pays des hommes intègres » est quelle figure de style ?',
-   o:['Comparaison','Métaphore','Périphrase','Personnification'],i:2,d:'Français'},
+   o:['Comparaison','Métaphore','Périphrase','Personnification'],i:2,d:'Français',e:"« Le pays des hommes intègres » désigne le Burkina Faso sans le nommer : c'est une périphrase."},
   {q:'Accord : « les lettres que j\'ai … »',
-   o:['écrit','écrite','écrits','écrites'],i:3,d:'Français'},
+   o:['écrit','écrite','écrits','écrites'],i:3,d:'Français',e:"Le complément « que » (les lettres) est placé avant « avoir » : le participe s'accorde avec lui, féminin pluriel, donc « écrites »."},
   {q:'Seul cours d\'eau pérenne du Burkina Faso',
-   o:['Le Nakambé','Le Nazinon','Le Mouhoun','La Comoé'],i:2,d:'Histoire-géographie'},
+   o:['Le Nakambé','Le Nazinon','Le Mouhoun','La Comoé'],i:2,d:'Histoire-géographie',e:"Le Mouhoun (ancienne Volta Noire) est le cours d'eau pérenne que retiennent les programmes. Le Nakambé et le Nazinon se tarissent en saison sèche."},
   {q:'Le pays a pris le nom de Burkina Faso en',
-   o:['1960','1983','1984','1987'],i:2,d:'Histoire-géographie'},
+   o:['1960','1983','1984','1987'],i:2,d:'Histoire-géographie',e:'Le 4 août 1984, la Haute-Volta devient le Burkina Faso.'},
   {q:'L\'Alliance des États du Sahel réunit',
-   o:['Burkina, Mali, Guinée','Burkina, Mali, Niger','Burkina, Niger, Tchad','Mali, Niger, Guinée'],i:1,d:'Institutions et AES'},
+   o:['Burkina, Mali, Guinée','Burkina, Mali, Niger','Burkina, Niger, Tchad','Mali, Niger, Guinée'],i:1,d:'Institutions et AES',e:"L'Alliance des États du Sahel réunit le Burkina Faso, le Mali et le Niger."},
   {q:'Date d\'effet du retrait de la CEDEAO',
-   o:['28 janvier 2024','29 janvier 2025','1ᵉʳ juillet 2024','16 septembre 2023'],i:1,d:'Institutions et AES'},
+   o:['28 janvier 2024','29 janvier 2025','1ᵉʳ juillet 2024','16 septembre 2023'],i:1,d:'Institutions et AES',e:'Le retrait de la CEDEAO est devenu effectif le 29 janvier 2025.'},
   {q:'La glycogénolyse est',
-   o:['la synthèse du glycogène','la dégradation du glycogène','l\'absorption du glucose','la formation de lipides'],i:1,d:'Sciences de la vie et de la Terre'},
+   o:['la synthèse du glycogène','la dégradation du glycogène','l\'absorption du glucose','la formation de lipides'],i:1,d:'Sciences de la vie et de la Terre',e:"La glycogénolyse est la dégradation du glycogène en glucose. La synthèse du glycogène s'appelle la glycogénogenèse."},
   {q:'Hormone qui fait baisser la glycémie',
-   o:['Le glucagon','L\'insuline','L\'adrénaline','Le cortisol'],i:1,d:'Sciences de la vie et de la Terre'},
+   o:['Le glucagon','L\'insuline','L\'adrénaline','Le cortisol'],i:1,d:'Sciences de la vie et de la Terre',e:"L'insuline fait baisser la glycémie. Le glucagon, lui, la fait monter."},
   {q:'Capitale économique du Burkina Faso',
-   o:['Ouagadougou','Bobo-Dioulasso','Koudougou','Banfora'],i:1,d:'Culture générale'},
+   o:['Ouagadougou','Bobo-Dioulasso','Koudougou','Banfora'],i:1,d:'Culture générale',e:'Bobo-Dioulasso est la capitale économique. Ouagadougou est la capitale politique.'},
   {q:'Solution de l\'équation 2x + 6 = 0',
-   o:['x = 3','x = −3','x = 12','x = −12'],i:1,d:'Logique et calcul'}
+   o:['x = 3','x = −3','x = 12','x = −12'],i:1,d:'Logique et calcul',e:'2x + 6 = 0 donne 2x = −6, donc x = −3.'}
 ];
 /* --- 1 sur 3 : l'engagement --- */
 function ecranEngagement(){
@@ -685,7 +686,8 @@ function remettreTest(){
   const corps = document.getElementById('tcorps');
   if(corps){
     const s=document.createElement('div'); s.className='scan'; corps.appendChild(s);
-    setTimeout(()=>{ s.remove(); pister('DIAGNOSTIC_RESULT_VIEWED', { note: S.testNote }); aller('resultat'); }, 1600);
+    setTimeout(()=>{ s.remove(); pister('DIAGNOSTIC_RESULT_VIEWED', { note: S.testNote, parcours: S.parcours });
+      if(S.parcours === 'B' && !S.util.connecte){ pister('RESULT_LOCKED'); aller('verrou'); } else aller('resultat'); }, 1600);
   }
 }
 
@@ -765,7 +767,49 @@ function ecranResultat(){
       </ol>
     </div>
 
-    <button class="cta" style="margin-top:18px" data-entrer="1">Entrer dans l'application<small>Actualité · révisions · composition · erreurs</small></button>
+    ${S.parcours === 'B' ? feuilleTestCorrigee() : ''}
+    <button class="cta" style="margin-top:18px" data-entrer="1">${S.parcours === 'B' ? 'Continuer dans l\'application' : 'Entrer dans l\'application'}<small>Actualité · révisions · composition · erreurs</small></button>
+  </div>`;
+}
+
+/* --- parcours B : la note reste cachée jusqu'à l'inscription --- */
+function ecranVerrou(){
+  vue().innerHTML = `
+  <div class="pad" style="padding-top:20px">
+    <div class="marquehero">${logoSvg(38)}
+      <div><div class="mot">MON <i>CONCOURS</i></div>
+        <div class="devise">Prépare ton concours, un jour après l'autre.</div></div></div>
+    <div class="progression"><i class="on"></i><i class="on"></i><i class="on"></i></div>
+    <div class="pastille-etape" style="margin:14px 0 10px">Ta copie est corrigée</div>
+    <div class="bloc-note">
+      <div class="marque-note"><span class="v num">?</span><span class="d num">/10</span></div>
+      <div class="note-legende">
+        <div class="l1">Ta note est prête</div>
+        <div class="l2">Dix questions corrigées</div>
+        <div class="l3">Inscris-toi pour la voir</div>
+      </div>
+    </div>
+    <div class="verdict fragile"><b>Inscris-toi gratuitement pour voir ta réponse.</b>
+      Tu découvres ta note, ta feuille corrigée avec l'explication de chaque question, et les matières à travailler en premier.</div>
+    <button class="cta" style="margin-top:18px" data-modal="inscription">Voir ma note : inscription gratuite<small>30 secondes, sans e-mail</small></button>
+    <button class="lien" style="display:block;margin:12px auto 0" data-modal="connexion">J'ai déjà un compte</button>
+  </div>`;
+}
+function feuilleTestCorrigee(){
+  return `<div class="bloc">
+    <div class="libelle">Ta feuille corrigée</div>
+    ${TEST.map((g,qi) => {
+      const r = S.testRep[qi] || [];
+      const juste = r.length === 1 && r[0] === g.i;
+      const mien = r.length ? r.map(x => g.o[x]).join(' + ') : 'sans réponse';
+      return `<div class="carte" style="margin-bottom:10px">
+        <div class="eyebrow">${String(qi+1).padStart(2,'0')} · ${E(g.d)} · ${juste ? 'juste' : 'faux'}</div>
+        <p style="margin:6px 0;font-weight:600;font-size:14px">${E(g.q)}</p>
+        <p class="sous" style="margin:0">Ta réponse : ${E(mien)}</p>
+        <p class="sous" style="margin:2px 0 0"><b>Bonne réponse : ${E(g.o[g.i])}</b></p>
+        <p class="sous" style="margin:6px 0 0">${E(g.e || '')}</p>
+      </div>`;
+    }).join('')}
   </div>`;
 }
 
@@ -6540,7 +6584,7 @@ function basculerPleinEcran(){
 document.addEventListener('fullscreenchange', () => { if(S.ecran === 'grille' && !S.corrige) ecranGrille(); });
 
 /* ---------- tirer vers le bas pour actualiser, comme sur les autres applications ---------- */
-const SANS_ACTUALISER = ['grille','qcm','test','testIntro','engagement','reprise','pourtoi','defi','lecteur','resultat','paiement','inscription','connexion','proposer','lecture'];
+const SANS_ACTUALISER = ['grille','qcm','test','testIntro','engagement','reprise','pourtoi','defi','lecteur','resultat','verrou','paiement','inscription','connexion','proposer','lecture'];
 async function actualiserTout(){
   const tout = [];
   const lance = f => { try{ const r = f(); if(r && r.then) tout.push(r.catch(() => {})); }catch(e){} };
@@ -6699,7 +6743,7 @@ document.addEventListener('click', ev => {
 /* =====================================================================
    RENDU + ÉVÉNEMENTS
    ===================================================================== */
-const SANS_TETE = ['test','grille','engagement','testIntro','resultat'];
+const SANS_TETE = ['test','grille','engagement','testIntro','resultat','verrou'];
 /* raccourci caché vers l'administration : cinq touchers rapides sur le logo */
 let touchesLogo = [];
 document.addEventListener('click', ev => {
@@ -6881,7 +6925,7 @@ function rendre(){
     profondeurVue = 0;
     pister('SCREEN_VIEWED');
   }
-  const dessiner = ({engagement:ecranEngagement, testIntro:ecranTestIntro, test:ecranTest, resultat:ecranResultat,
+  const dessiner = ({engagement:ecranEngagement, testIntro:ecranTestIntro, test:ecranTest, resultat:ecranResultat, verrou:ecranVerrou,
     inscription:ecranInscription, connexion:ecranConnexion,
     abonnement:ecranAbonnement, paiement:ecranPaiement,
     apparence:ecranApparence,
@@ -6948,7 +6992,7 @@ document.addEventListener('click', ev=>{
         ecrireMemoire({ nom:f.nom.trim(), tel:tel, niveauProfil:S.niveauProfil });
         pister('ACCOUNT_CREATED', { niveau: S.niveau });
         S.modal = null; chargerProgression();
-        if(S.defi && S.defi.etat === 'connexion') ouvrirDefi(S.defi.id); else aller('aujourdhui');
+        if(S.defi && S.defi.etat === 'connexion') ouvrirDefi(S.defi.id); else if(S.ecran === 'verrou' && S.testNote !== null) aller('resultat'); else aller('aujourdhui');
       });
       return;
     }
@@ -6985,7 +7029,7 @@ document.addEventListener('click', ev=>{
       S.modal = null;
       await reprendreSession();
       await chargerProgression();
-      if(S.defi && S.defi.etat === 'connexion') ouvrirDefi(S.defi.id); else aller('aujourdhui');
+      if(S.defi && S.defi.etat === 'connexion') ouvrirDefi(S.defi.id); else if(S.ecran === 'verrou' && S.testNote !== null) aller('resultat'); else aller('aujourdhui');
     })();
     return;
   }
@@ -7316,7 +7360,7 @@ function bienvenue(){
   if(S.bienvenueDite) return; S.bienvenueDite = true;
   setTimeout(() => { if(!S.modal && ['aujourdhui','actualite'].includes(S.ecran)) signalCandidat('Bienvenue sur Mon Concours. Prenez le temps de regarder.'); }, 1800);
 }
-const ECRANS_CALMES = ['grille','qcm','test','testIntro','engagement','reprise','pourtoi','defi','resultat','lecture','paiement','lecteur'];
+const ECRANS_CALMES = ['grille','qcm','test','testIntro','engagement','reprise','pourtoi','defi','resultat','verrou','lecture','paiement','lecteur'];
 function peutInviter(){ return !ECRANS_CALMES.includes(S.ecran) && !S.modal && !document.getElementById('invitation') && !enComposition(); }
 function fenetreInvitation(o){
   const z = document.createElement('div');
@@ -7402,3 +7446,17 @@ planifierInvitations();
 
 ouvrirLienDirect();
 rendre();
+
+/* Deux parcours en alternance, par blocs de 20 nouveaux visiteurs (le serveur compte) */
+async function assignerParcours(){
+  if(S.parcours){ pister('PARCOURS_ASSIGNE', { parcours: S.parcours, deja: true }); return; }
+  if(testDejaFait() || S.util.connecte || !base) return;
+  try{
+    const { data } = await base.rpc('attribuer_parcours');
+    if(data === 'A' || data === 'B'){
+      S.parcours = data; ecrireReglage('parcours', data);
+      pister('PARCOURS_ASSIGNE', { parcours: data });
+    }
+  }catch(e){}
+}
+setTimeout(assignerParcours, 1500);
