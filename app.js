@@ -227,7 +227,7 @@ function toast(message, duree){
 }
 
 window.addEventListener('offline', () =>
-  { toast('Réseau perdu. Vos réponses partiront au retour. Pour réviser sans réseau : Mes cours, « Réviser sans réseau ».', 6500); if(S.ecran === 'aujourdhui') rendre(); });
+  { toast('Réseau perdu. Vos réponses partiront au retour. Pour réviser sans connexion : « Réviser sans connexion » dans Réviser.', 6500); if(S.ecran === 'aujourdhui') rendre(); });
 window.addEventListener('online', () => { toast('Réseau retrouvé.'); if(['aujourdhui','horsligne'].includes(S.ecran)) rendre(); });
 const mmss = s => String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');
 const PALIERS = [3, 7, 21];               // jours entre deux reprises
@@ -487,6 +487,7 @@ function aller(e){
   if(e === 'resultat' && testDejaFait() && S.testNote === null) e = 'aujourdhui';
   if(S.gratuit && (e === 'abonnement' || e === 'paiement')) e = 'compte';   // pas de formules pendant la phase gratuite
   if(['revisions','qcm'].includes(e)){ progressionMemo(); chargerQuestions(); }
+  if(e === 'horsligne'){ S.packOuvert = false; if(!S.ressources) chargerRessources(); }
   if(e !== 'lecture'){ S.matiereOuverte = null; S.lectureReprise = null; }
   if(S.timer && e!=='grille'){clearInterval(S.timer);S.timer=null;}
   if(S.testTimer && e!=='test'){clearInterval(S.testTimer);S.testTimer=null;}
@@ -2014,7 +2015,6 @@ function ecranAbonnement(){
         ${f.reco ? '<span class="ruban">recommandé</span>' : ''}
         <div class="haut"><span class="nom">${f.n}</span>
           <span class="prix">${f.prix} <em>${f.per}</em></span></div>
-        <p class="sous" style="margin:6px 0 0;font-size:12.5px">${f.jour}</p>
         <button class="mini" style="margin-top:12px" data-pass="${k}">Prendre le ${f.n}</button>
       </div>`;
     }).join('')}
@@ -2097,7 +2097,6 @@ function ecranPaiement(){
         <div class="eyebrow">numéro à créditer</div>
         <div class="code">+226 ${fmtTel(numPaie(op))}</div>
         <button class="mini" style="margin-top:8px" data-copier-num="${E(numPaie(op))}">Copier le numéro</button>
-        ${op === 'orange' ? `<p style="margin-top:12px">Ou composez : <b>*144*4*6*${f.montant}#</b></p>` : ''}
       </div>
       <button class="cta" style="margin-top:18px" data-paiefin="1">J'ai payé<small>Je vais envoyer ma capture</small></button>
       <button class="lien" data-paieannul="1">Annuler</button>
@@ -2209,7 +2208,6 @@ function ecranRevisions(){
         </div>
         <div class="mr-actions">
           ${chap.length ? `<button data-matiere="${encodeURIComponent(nom)}">${ico('lire',16)}<span>${lecturePos()[nom] ? 'Reprendre le cours' : 'Lire le cours'}</span></button>` : ''}
-          ${chap.length || fich.length ? `<button data-telecharger-mat="${encodeURIComponent(nom)}">${ico('telecharger',16)}<span>Télécharger</span></button>` : ''}
           ${nb ? `<button class="plein" data-mat="${E(nom)}">${ico('revisions',16)}<span>${faites > 0 ? 'Continuer' : 'Faire les QCM'}</span></button>` : ''}
         </div>
       </div>`;
@@ -2743,7 +2741,7 @@ async function sortirDocument(titre, fabrique){
   const nom = nomFichier(titre);
   let poignee = null;
   try{ poignee = await demanderEmplacement(nom); }catch(e){ return; }
-  toast('Préparation du document…', 6000);
+  toast('Préparation du document…', 2500);
   let html = null;
   try{ html = await fabrique(); }catch(e){ html = null; }
   if(!html){ return; }
@@ -2762,7 +2760,7 @@ async function sortirDocument(titre, fabrique){
 async function telechargerUrl(url, nom){
   let poignee = null;
   try{ poignee = await demanderEmplacement(nom); }catch(e){ return; }
-  toast('Téléchargement…', 5000);
+  toast('Téléchargement…', 2500);
   try{
     const r = await fetch(url); if(!r.ok) throw new Error('http');
     await enregistrerBlob(await r.blob(), nom, poignee);
@@ -2839,11 +2837,11 @@ function htmlFeuilleComposition(source){
 '.sceau{width:52px;height:52px;border-radius:13px;background:#EDE4D3;border:1px solid #C9BEA9;display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:7px;flex:0 0 auto}' +
 '.sceau i{border-radius:50%;background:#FBFAF7;border:1px solid #C9BEA9}.sceau i:nth-child(2),.sceau i:nth-child(3){background:#1C1C1C;border-color:#1C1C1C}' +
 'h1{font-size:15px;letter-spacing:.2em;text-transform:uppercase;margin:16px 0 10px;border-bottom:1px solid #111;padding-bottom:5px;break-after:avoid}' +
-'.ident{display:flex;gap:10px;flex-wrap:wrap}.ident div{flex:1 1 120px;border:1px solid #bbb;padding:7px 10px}' +
-'.ident b{display:block;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:#666;font-weight:normal}.ident span{font-size:14px}' +
-'.resultat{display:flex;gap:14px;align-items:stretch;margin-top:14px}.note{border:2px solid #111;padding:12px 20px;text-align:center;min-width:150px}' +
-'.note .n{font-size:40px;font-weight:bold;line-height:1}.note .l{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#555;margin-top:5px}' +
-'.rec{flex:1;border-collapse:collapse;font-size:13px}.rec td{border:1px solid #bbb;padding:5px 9px}.rec td:last-child{text-align:right;font-weight:bold;width:70px}' +
+'.ident{display:flex;gap:6px;flex-wrap:wrap}.ident div{flex:1 1 90px;border:1px solid #bbb;padding:3px 7px}' +
+'.ident b{display:block;font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:#666;font-weight:normal}.ident span{font-size:12px}' +
+'.resultat{display:flex;gap:10px;align-items:stretch;margin-top:8px}.note{border:2px solid #111;padding:6px 12px;text-align:center;min-width:110px}' +
+'.note .n{font-size:28px;font-weight:bold;line-height:1}.note .l{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#555;margin-top:5px}' +
+'.rec{flex:1;border-collapse:collapse;font-size:11.5px}.rec td{border:1px solid #bbb;padding:2px 8px}.rec td:last-child{text-align:right;font-weight:bold;width:70px}' +
 'ol.recos{margin:6px 0 0 18px;font-size:13px}ol.recos li{margin-bottom:5px}' +
 '.saut-page{break-before:page;page-break-before:always}' +
 '.q{break-inside:avoid;margin:0 0 9px;font-size:12.5px}.q ol{margin:3px 0 0 22px;padding:0}.q li{margin:1px 0}' +
@@ -2895,13 +2893,6 @@ function htmlFeuilleComposition(source){
   '</table>' +
 '</div>' +
 
-(matsFeuille.length ? '<h1>Résultats par matière</h1><table class="mats">' +
-  matsFeuille.map(x => '<tr><td>' + E(x.nom) + '</td><td class="n">' + x.j + ' / ' + x.n + '</td><td class="n">' + Math.round(x.j / x.n * 100) + ' %</td></tr>').join('') + '</table>' : '') +
-'<h1>Recommandations</h1><ol class="recos">' + recommandations.map(r => '<li>' + E(r) + '</li>').join('') + '</ol>' +
-
-'<div class="saut-page"></div>' +
-'<h1>Le sujet corrigé</h1>' + sujetHtml +
-
 '<h1>Votre feuille de réponses</h1>' +
 '<div class="grille">' + grilleHtml + '</div>' +
 '<div class="legende">' +
@@ -2910,6 +2901,13 @@ function htmlFeuilleComposition(source){
   '<span><i style="border:2px solid #B4231C"></i> Noirci à tort</span>' +
   '<span><i style="border:1px solid #ccc"></i> Non noirci</span>' +
 '</div>' +
+
+(matsFeuille.length ? '<h1>Résultats par matière</h1><table class="mats">' +
+  matsFeuille.map(x => '<tr><td>' + E(x.nom) + '</td><td class="n">' + x.j + ' / ' + x.n + '</td><td class="n">' + Math.round(x.j / x.n * 100) + ' %</td></tr>').join('') + '</table>' : '') +
+'<h1>Recommandations</h1><ol class="recos">' + recommandations.map(r => '<li>' + E(r) + '</li>').join('') + '</ol>' +
+
+'<div class="saut-page"></div>' +
+'<h1>Le sujet corrigé</h1>' + sujetHtml +
 '<div class="pied"><span><b>monconcoursbf.com</b> · WhatsApp <b>' + telAffiche() + '</b></span><span>Document remis le ' + quand + '</span></div>' +
 '<div class="noimp"><button onclick="window.print()">Enregistrer en PDF ou imprimer</button></div>' +
 '<scr' + 'ipt>setTimeout(function(){window.print();},600);<\/scr' + 'ipt>' +
@@ -3257,7 +3255,7 @@ async function telechargerRessource(id){
     const { data, error } = await base.storage.from('cours').createSignedUrl(r.fichier_chemin, 3600);
     if(error || !data) throw error || new Error('lien indisponible');
     pister('COURSE_DOWNLOADED', { titre: r.titre });
-    toast('Téléchargement…', 5000);
+    toast('Téléchargement…', 2500);
     try{
       const rep = await fetch(data.signedUrl); if(!rep.ok) throw new Error('http');
       await enregistrerBlob(await rep.blob(), nom, poignee);
@@ -3383,7 +3381,7 @@ function blocPoint2(){
     <div class="carte" style="text-align:left;margin:0 0 14px">
       ${moy !== null ? `<p class="sous" style="margin:0 0 6px">Ta moyenne sur tes deux compositions : <b>${moy}/50</b>.</p>` : ''}
       ${rest !== null && rest > 0 ? `<p class="sous" style="margin:0 0 6px">Il te reste <b>${rest} sujet${rest > 1 ? 's' : ''}</b> à composer.</p>` : ''}
-      ${offre ? `<p class="sous" style="margin:0">Pass Mois : 1 000 F pour 30 jours, soit 33 F par jour.</p>` : ''}
+      ${offre ? `<p class="sous" style="margin:0">Pass Mois : 1 000 F pour 30 jours.</p>` : ''}
     </div>
     ${offre ? `<button class="cta" data-pass="mensuelle">Pass Mois · 1 000 F</button>
       <button class="cta creux" style="margin-top:9px" data-pass="semaine">Pass Semaine · 500 F</button>
@@ -3428,7 +3426,7 @@ function decompteDepart(){
     if(i >= etapes.length){
       d.remove();
       const c = document.getElementById('chrono');
-      if(c){ c.classList.add('chrono-allume'); setTimeout(() => c.classList.remove('chrono-allume'), 2600); }
+      if(c){ c.classList.add('chrono-allume'); setTimeout(() => c.classList.remove('chrono-allume'), 9000); }
       return;
     }
     d.innerHTML = `<span class="${i === 3 ? 'parti' : ''}">${etapes[i]}</span>`;
@@ -4580,9 +4578,10 @@ async function inscrireNationale(id, depuisPopup){
         <div class="pn-ok">${ico('coche',28)}</div>
         <h3 style="text-align:center">Inscrit</h3>
         <p class="intro" style="text-align:center">Rendez-vous ${E(dateLongue(S.epreuve.debut_le))} à ${heureH(S.epreuve.debut_le)}. Vous recevrez un rappel avant le début.</p>
+        <p class="intro" style="text-align:center;margin-top:-6px">Bonne chance pour la composition. Nous espérons vous voir parmi les meilleurs.</p>
         <button class="cta" data-fermer-partage="1">D'accord</button>
       </div>`;
-    } else toast('Inscrit. Rendez-vous ' + dateLongue(S.epreuve.debut_le) + ' à ' + heureH(S.epreuve.debut_le) + '.');
+    } else toast('Inscrit. Rendez-vous ' + dateLongue(S.epreuve.debut_le) + ' à ' + heureH(S.epreuve.debut_le) + '. Bonne chance, que vous soyez parmi les meilleurs !', 6000);
     if(S.ecran === 'aujourdhui') rendre();
   }catch(e){ toast('Inscription impossible. Vérifiez votre connexion.'); }
 }
@@ -6058,6 +6057,7 @@ function ecrirePack(p){ try{ if(p) localStorage.setItem(CLE_PACK, JSON.stringify
 const enAttentePack = p => p ? Object.keys(p.faites || {}).filter(id => !(p.envoyees || []).includes(id)) : [];
 async function telechargerPack(){
   if(!S.util.connecte){ S.modal = 'inscription'; S.erreur = ''; return surcouche(); }
+  if(!(S.gratuit || estAbonne())){ toast('Les QCM sans connexion font partie du Pass.'); return aller('abonnement'); }
   if(!navigator.onLine){ toast('Il faut du réseau (ou du Wi-Fi) pour télécharger le pack.'); return; }
   const ancien = lirePack();
   if(ancien && enAttentePack(ancien).length) await envoyerPack();
@@ -6094,6 +6094,44 @@ function questionPack(p){
   const i = (p.questions || []).findIndex(q => !p.faites[q.id]);
   return i < 0 ? null : { q:p.questions[i], i };
 }
+/* Les cours, gratuits : lus sans réseau, ou téléchargés en PDF */
+function blocCoursHL(){
+  const liste = (S.ressources || []).filter(r => r.texte && r.type_ressource !== 'annale');
+  const mats = []; liste.forEach(r => { if(!mats.includes(r.matiere)) mats.push(r.matiere); });
+  const pret = lireReglages().cours_hors_ligne;
+  return `<div class="bloc">
+    <div class="libelle">Les cours · gratuit</div>
+    <div class="carte">
+      <p class="sous" style="margin:0 0 10px">${mats.length
+        ? 'Tous les cours de votre niveau sont gardés sur le téléphone dès que vous êtes en ligne : vous les lisez sans réseau. Vous pouvez aussi en télécharger un en PDF.'
+        : (S.ressources ? 'Aucun cours n\'est encore publié pour ce niveau.' : 'Chargement des cours…')}</p>
+      ${pret || mats.length ? `<p class="sous" style="margin:0 0 10px;font-size:12.5px"><b>${mats.length ? '✓ Cours disponibles hors ligne' : ''}</b></p>` : ''}
+      ${mats.map(nom => {
+        const n = liste.filter(r => r.matiere === nom).length;
+        return `<div class="mat"><div class="nom">${E(nom)}<em>${n} chapitre${n > 1 ? 's' : ''}</em></div>
+          <div class="paire" style="display:flex;gap:6px"><button class="mini" data-matiere="${encodeURIComponent(nom)}">Lire</button>
+          <button class="mini" data-telecharger-mat="${encodeURIComponent(nom)}">PDF</button></div></div>`;
+      }).join('')}
+    </div>
+  </div>`;
+}
+/* Les QCM sans connexion : réservés au Pass */
+function blocQcmHL(p, enLigne, termine){
+  const libre = S.gratuit || estAbonne();
+  if(!libre) return `<div class="bloc">
+    <div class="libelle">Les QCM sans connexion · avec le Pass</div>
+    <div class="carte">
+      <p class="sous" style="margin:0 0 12px">Gardez 50 questions corrigées sur le téléphone et faites-les sans réseau, même sans forfait. Vos réponses partent au retour du réseau. Cette option fait partie du Pass.</p>
+      <button class="cta" data-go="abonnement">Voir le Pass</button>
+    </div></div>`;
+  return `<div class="bloc">
+    <div class="libelle">Les QCM sans connexion</div>
+    <div class="carte">
+      <p class="sous" style="margin:0 0 10px">${termine ? 'Votre pack est terminé.' : 'Téléchargez un pack de 50 questions de votre niveau, avec leurs corrections, quand vous avez du réseau. Vos réponses partent toutes seules au retour du réseau.'}</p>
+      <button class="cta" data-pack-telecharger="1" ${S.packEtat === 'chargement' || !enLigne ? 'disabled' : ''}>${S.packEtat === 'chargement' ? '<span class="spin"></span> Téléchargement…' : ico('telecharger',16) + (termine ? ' Télécharger un nouveau pack' : ' Télécharger mon pack')}</button>
+      ${!enLigne ? '<p class="sous" style="margin-top:10px">Vous êtes hors ligne : le pack se télécharge quand vous avez du réseau.</p>' : ''}
+    </div></div>`;
+}
 function ecranHorsLigne(){
   const p = lirePack();
   const enLigne = navigator.onLine;
@@ -6102,14 +6140,10 @@ function ecranHorsLigne(){
     vue().innerHTML = `<div class="pad">
       <button class="retourhaut" data-go="revisions">Retour</button>
       <div class="eyebrow">Révision hors ligne</div>
-      <h1 class="titre">Réviser sans réseau</h1>
-      <p class="sous" style="margin-top:8px">Téléchargez un pack de 50 questions de votre niveau, avec leurs corrections, quand vous avez du réseau ou du Wi-Fi. Ensuite, révisez où vous voulez, même sans forfait. Vos réponses partent toutes seules au retour du réseau.</p>
-      <div class="carte" style="margin-top:14px">
-        <div class="mat"><div class="nom">Taille du pack<em>Environ 40 Ko, moins qu'une photo</em></div><div class="val num">50</div></div>
-        <div class="mat"><div class="nom">Packs par jour<em>Un nouveau pack remplace le précédent</em></div><div class="val num">3</div></div>
-      </div>
-      <button class="cta" style="margin-top:14px" data-pack-telecharger="1" ${S.packEtat === 'chargement' ? 'disabled' : ''}>${S.packEtat === 'chargement' ? '<span class="spin"></span> Téléchargement…' : ico('telecharger',16) + ' Télécharger mon pack'}</button>
-      ${!enLigne ? '<p class="sous" style="margin-top:10px">Vous êtes hors ligne : revenez ici quand vous aurez du réseau.</p>' : ''}
+      <h1 class="titre">Réviser sans connexion</h1>
+      <p class="sous" style="margin-top:8px">Une partie du travail se fait sans réseau : lire les cours, et faire des QCM.</p>
+      ${blocCoursHL()}
+      ${blocQcmHL(null, enLigne, false)}
     </div>`;
     return;
   }
@@ -6119,6 +6153,21 @@ function ecranHorsLigne(){
   const cur = ci >= 0 && p.faites[cid] ? { q:p.questions[ci], i:ci } : questionPack(p);
   const etat = `<div class="pack-etat"><span><b class="num">${faites}</b> / ${total} faites · <b class="num">${justes}</b> juste${justes > 1 ? 's' : ''}</span>
     <span class="${enLigne ? 'en-ligne' : 'hors-ligne'}">${enLigne ? (attente ? attente + ' à envoyer' : 'Tout est envoyé') : 'Hors ligne' + (attente ? ' · ' + attente + ' en attente' : '')}</span></div>`;
+  if(cur && !S.packOuvert){
+    const reste = total - faites;
+    vue().innerHTML = `<div class="pad">
+      <button class="retourhaut" data-go="revisions">Retour</button>
+      <div class="eyebrow">Révision hors ligne</div>
+      <h1 class="titre">Réviser sans connexion</h1>
+      <p class="sous" style="margin-top:8px">Une partie du travail se fait sans réseau : lire les cours, et faire des QCM.</p>
+      ${blocCoursHL()}
+      <div class="bloc"><div class="libelle">Les QCM sans connexion</div><div class="carte">
+        ${etat}
+        <button class="cta" style="margin-top:12px" data-pack-ouvrir="1">Continuer mon pack<small>${reste} question${reste > 1 ? 's' : ''} restante${reste > 1 ? 's' : ''}</small></button>
+      </div></div>
+    </div>`;
+    return;
+  }
   if(!cur){
     vue().innerHTML = `<div class="pad">
       <button class="retourhaut" data-go="revisions">Retour</button>
@@ -6127,7 +6176,8 @@ function ecranHorsLigne(){
       ${etat}
       <div class="cachet-note ${justes / total >= .5 ? 'admis' : ''}" style="margin-top:14px"><div class="n num">${justes} / ${total}</div><div class="l">bonnes réponses</div></div>
       <p class="sous" style="margin-top:12px">${attente ? (enLigne ? 'Vos réponses partent maintenant.' : 'Vos réponses partiront au retour du réseau : vos erreurs rejoindront « Mes erreurs ».') : 'Vos réponses sont enregistrées : vos erreurs sont dans « Mes erreurs ».'}</p>
-      <button class="cta" style="margin-top:14px" data-pack-telecharger="1" ${!enLigne ? 'disabled' : ''}>${ico('telecharger',16)} Télécharger un nouveau pack</button>
+      ${blocQcmHL(p, enLigne, true)}
+      ${blocCoursHL()}
       ${attente && enLigne ? '<button class="cta creux" style="margin-top:9px" data-pack-envoyer="1">Envoyer mes réponses</button>' : ''}
     </div>`;
     if(attente && enLigne) envoyerPack();
@@ -6167,14 +6217,15 @@ function carteHorsLigne(){
   const reste = p ? p.questions.length - Object.keys(p.faites).length : 0;
   return `<button class="hl-carte" data-go="horsligne">
     <span class="ic">${ico('telecharger',18)}</span>
-    <span class="co"><b>Réviser sans réseau</b><span>${p ? (reste ? reste + ' question' + (reste > 1 ? 's' : '') + ' de votre pack, utilisables hors ligne' : 'Pack terminé : téléchargez-en un nouveau') : 'Gardez 50 questions sur le téléphone, sans forfait'}</span></span>
+    <span class="co"><b>Réviser sans connexion</b><span>${p && reste ? reste + ' question' + (reste > 1 ? 's' : '') + ' de votre pack, utilisables hors ligne' : 'Les cours et les QCM, même sans réseau'}</span></span>
   </button>`;
 }
 document.addEventListener('click', ev => {
-  const t = ev.target.closest('[data-pack-telecharger],[data-pack-rep],[data-pack-suivante],[data-pack-envoyer],[data-attestation]');
+  const t = ev.target.closest('[data-pack-telecharger],[data-pack-ouvrir],[data-pack-rep],[data-pack-suivante],[data-pack-envoyer],[data-attestation]');
   if(!t) return;
   const d = t.dataset;
   if(d.packTelecharger) return telechargerPack();
+  if(d.packOuvrir){ S.packOuvert = true; rendre(); window.scrollTo(0, 0); return; }
   if(d.packRep !== undefined) return repondrePack(Number(d.packRep));
   if(d.packSuivante){ S.packCourant = null; S.packDebut = Date.now(); rendre(); window.scrollTo(0, 0); return; }
   if(d.packEnvoyer) return envoyerPack();
@@ -7149,7 +7200,7 @@ document.addEventListener('click', ev=>{
    Rien ne tombe d'un coup : le candidat a le temps de découvrir l'application.
    La fenêtre d'inscription vient après 30 secondes, l'installation après 3 minutes,
    les notifications après 5 minutes et demie. Un « Plus tard » repousse de 3 jours. */
-const DELAI_INSCRIPTION = 20000;
+const DELAI_INSCRIPTION = 35000;
 function bienvenue(){
   if(S.bienvenueDite) return; S.bienvenueDite = true;
   setTimeout(() => { if(!S.modal && ['aujourdhui','actualite'].includes(S.ecran)) signalCandidat('Bienvenue sur Mon Concours. Prenez le temps de regarder.'); }, 1800);
@@ -7235,7 +7286,7 @@ planifierInvitations();
     ecrireReglage('inscription_vue', Date.now());
     S.modal = 'inscription'; surcouche();
   };
-  setTimeout(() => tente(0), 25000);
+  setTimeout(() => tente(0), 40000);
 })();
 
 ouvrirLienDirect();
