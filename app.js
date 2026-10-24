@@ -1088,6 +1088,7 @@ async function chargerOffre(creer){
     return data;
   }catch(e){ return null; }
 }
+const jourOffre = () => (S.offre && new Date(S.offre.fin_le).toDateString() === new Date().toDateString()) ? 'ce soir' : 'demain';
 function resteOffre(){
   const ms = S.offre ? Math.max(0, new Date(S.offre.fin_le) - Date.now()) : 0;
   const h = Math.floor(ms / 3600000), m = Math.floor(ms % 3600000 / 60000), sec = Math.floor(ms % 60000 / 1000);
@@ -1117,11 +1118,11 @@ function afficherOffre(){
   const c = document.createElement('div');
   c.className = 'offre-carte';
   c.setAttribute('role', 'dialog');
-  c.setAttribute('aria-label', 'Offre flash de 24 heures');
+  c.setAttribute('aria-label', 'Offre flash du jour');
   c.innerHTML = `<button class="offre-x" aria-label="Fermer l'offre">×</button>
-    <div class="offre-kicker">Offre flash · 24 heures seulement</div>
+    <div class="offre-kicker">Offre flash · valable aujourd'hui seulement</div>
     <div class="offre-prix"><s>${E(f.ancien || '')}</s> <b>${E(f.prix)}</b></div>
-    <div class="offre-texte">Le Pass Année, 12 mois sans limite, à moitié prix. Cette offre s'arrête dans <b data-offre-reste="1">${resteOffre()}</b>.</div>
+    <div class="offre-texte">Le Pass Année, 12 mois sans limite, à moitié prix. L'offre expire ${jourOffre()} à minuit : il reste <b data-offre-reste="1">${resteOffre()}</b>.</div>
     <button class="cta offre-go">Profiter de l'offre</button>`;
   c.querySelector('.offre-x').onclick = fermerOffre;
   c.querySelector('.offre-go').onclick = () => {
@@ -1135,7 +1136,7 @@ function afficherOffre(){
   setTimeout(() => c.classList.add('vu'), 30);
   pister('FLASH_OFFER_SHOWN');
 }
-/* dix minutes d'utilisation réelle, puis l'offre apparaît (une fois créée, elle ne revient pas à zéro) */
+/* l'offre naît dès la connexion (avec sa notification) ; la fiche apparaît après dix minutes d'utilisation réelle */
 const OFFRE_ATTENTE_S = 600;
 async function suiviOffre(){
   if(document.visibilityState !== 'visible' || !S.util.connecte || !base || S.gratuit || estAbonne()) return;
@@ -2110,7 +2111,7 @@ function ecranAbonnement(){
         ${f.ancien ? '<span class="ruban">offre flash</span>' : f.reco ? '<span class="ruban">recommandé</span>' : ''}
         <div class="haut"><span class="nom">${f.n}</span>
           <span class="prix">${f.ancien ? `<s class="barre">${f.ancien}</s> ` : ''}${f.prix} <em>${f.per}</em></span></div>
-        ${f.ancien ? `<div class="flash-reste">Il reste <b data-offre-reste="1">${resteOffre()}</b></div>` : ''}
+        ${f.ancien ? `<div class="flash-reste">Expire ${jourOffre()} à minuit · il reste <b data-offre-reste="1">${resteOffre()}</b></div>` : ''}
         <button class="mini" style="margin-top:12px" data-pass="${k}">Prendre le ${f.n}</button>
       </div>`;
     }).join('')}

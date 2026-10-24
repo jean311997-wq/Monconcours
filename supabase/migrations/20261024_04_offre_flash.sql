@@ -1,4 +1,4 @@
--- Offre flash : le Pass Année à 2 000 FCFA pendant 24 heures, une seule fois par candidat.
+-- Offre flash : le Pass Année à 2 000 FCFA jusqu'à minuit, une seule fois par candidat.
 -- Le prix réduit est appliqué par le serveur au moment de la demande de paiement.
 
 create table if not exists public.offres_flash (
@@ -13,7 +13,7 @@ revoke all on public.offres_flash from anon, authenticated;
 
 create or replace function public.mon_offre_flash(p_creer boolean default false)
 returns jsonb language plpgsql security definer set search_path to 'public' as $$
-declare v_user uuid := auth.uid(); v_o public.offres_flash%rowtype; v_normal integer; v_nouvelle boolean := false;
+declare v_user uuid := auth.uid(); v_o public.offres_flash%rowtype; v_normal integer; v_nouvelle boolean := false; v_fin timestamptz; v_jour text;
 begin
   if v_user is null then return jsonb_build_object('actif', false); end if;
   if public.plateforme_gratuite() then return jsonb_build_object('actif', false); end if;
@@ -24,14 +24,18 @@ begin
   select * into v_o from public.offres_flash where user_id = v_user;
   if not found then
     if not coalesce(p_creer, false) then return jsonb_build_object('actif', false); end if;
+    /* l'offre expire à minuit (heure du Burkina = UTC) ; s'il reste moins de 6 h, elle court jusqu'à demain minuit */
+    v_fin := date_trunc('day', now() at time zone 'UTC') at time zone 'UTC' + interval '1 day';
+    if v_fin - now() < interval '6 hours' then v_fin := v_fin + interval '1 day'; end if;
+    v_jour := case when v_fin - now() > interval '24 hours' then 'demain à minuit' else 'ce soir à minuit' end;
     insert into public.offres_flash (user_id, formule, montant_fcfa, debut_le, fin_le)
-    values (v_user, 'annuelle', 2000, now(), now() + interval '24 hours')
+    values (v_user, 'annuelle', 2000, now(), v_fin)
     on conflict (user_id) do nothing;
     select * into v_o from public.offres_flash where user_id = v_user;
     v_nouvelle := true;
     insert into public.notifications (user_id, type, titre, message, cle_unicite, lien)
-    values (v_user, 'paiement', 'Offre flash : 24 heures seulement',
-            'Le Pass Année à 2 000 FCFA au lieu de 4 000, uniquement pendant 24 heures. Touchez pour en profiter.',
+    values (v_user, 'paiement', 'Offre flash : valable aujourd''hui seulement',
+            'Le Pass Année à 2 000 FCFA au lieu de 4 000. L''offre expire ' || v_jour || '. Touchez pour en profiter.',
             'offre-flash', 'offre')
     on conflict (user_id, cle_unicite) where cle_unicite is not null do nothing;
   end if;
