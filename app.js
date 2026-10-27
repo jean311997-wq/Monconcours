@@ -1766,6 +1766,7 @@ function reinitialiserComposition(){
   if(S.sync){ clearInterval(S.sync); S.sync = null; }
   S.reponses = {}; S.corrige = false; S.grilleNote = null; S.corrigeServeur = null; effacerEpreuve();
   S.compoTab = 'feuille'; S.sujetVu = false; S.apercu = null; S.compositionId = null; S.remiseEtat = null;
+  S.derniereQ = null; S.qRef = null; S.poseScroll = null; S.cibleQuestion = null; S.ongletRendu = null;
   S.grille.length = 0; S.compoEtat = null; S.epreuveCompo = null; S.correctionLe = null; S.compoLent = false;
 }
 
@@ -3983,30 +3984,54 @@ function brancherSwipeComposition(){
   ecouteursSwipeCompo = { zone, debut, bouge, fin };
 }
 
-/* La question où le candidat s'est arrêté : la dernière noircie si elle est à l'écran,
-   sinon la première visible. Le sujet et la feuille s'ouvrent tous deux sur elle. */
+/* La question où le candidat s'est arrêté, retrouvée à l'identique dans l'autre onglet.
+   On travaille toujours avec une « ligne d'ancrage » : la question posée sur cette ligne
+   est celle qu'on lit, et l'autre onglet pose la même question sur sa propre ligne.
+   Sans cette règle commune, chaque aller-retour décalait la position de deux questions. */
+const ANCRE_FEUILLE = 56, ANCRE_SUJET = 10;
 function questionCourante(){
   const c = document.getElementById('corps');
   if(!c) return null;
-  const sel = S.compoTab === 'feuille' ? '.ligne-op' : '.sujet-q';
-  const els = c.querySelectorAll(sel);
+  const feuille = S.compoTab === 'feuille';
+  const els = c.querySelectorAll(feuille ? '.ligne-op' : '.sujet-q');
   if(!els.length) return null;
   const zr = c.getBoundingClientRect();
-  const visible = i => { const r = els[i] && els[i].getBoundingClientRect(); return !!r && r.bottom > zr.top + 4 && r.top < zr.bottom - 4; };
-  if(S.derniereQ != null && S.derniereQ < els.length && visible(S.derniereQ)) return S.derniereQ;
-  for(let i = 0; i < els.length; i++){ if(els[i].getBoundingClientRect().bottom > zr.top + 8) return i; }
-  return 0;
+  const ligne = zr.top + (feuille ? ANCRE_FEUILLE : ANCRE_SUJET) + 4;
+  if(!feuille){
+    for(let i = 0; i < els.length; i++){ if(els[i].getBoundingClientRect().bottom > ligne) return i; }
+    return els.length - 1;
+  }
+  /* la feuille est courte : la question visée ne peut pas toujours monter jusqu'à l'ancre.
+     Tant que le candidat n'a pas fait défiler la feuille, la question visée reste la bonne. */
+  if(S.qRef != null && S.poseScroll != null && Math.abs(c.scrollTop - S.poseScroll) < 6 && S.qRef < els.length) return S.qRef;
+  /* sur la feuille : la dernière question noircie, si elle est encore à l'écran */
+  if(S.derniereQ != null && S.derniereQ < els.length){
+    const r = els[S.derniereQ].getBoundingClientRect();
+    if(r.bottom > zr.top + 4 && r.top < zr.bottom - 4) return S.derniereQ;
+  }
+  /* la feuille est rangée en colonnes (1-25 à gauche, 26-50 à droite) : à une même hauteur
+     il y a une question par colonne. On garde la colonne où le candidat travaillait. */
+  const gauche = els[0].getBoundingClientRect().left;
+  let lignes = 0;
+  while(lignes < els.length && Math.abs(els[lignes].getBoundingClientRect().left - gauche) < 3) lignes++;
+  let l = 0;
+  for(; l < lignes - 1; l++){ if(els[l].getBoundingClientRect().bottom > ligne) break; }
+  const ref = S.qRef != null ? S.qRef : 0;
+  const colonne = Math.min(Math.floor(ref / Math.max(1, lignes)), Math.floor((els.length - 1) / Math.max(1, lignes)));
+  return Math.min(els.length - 1, colonne * lignes + l);
 }
 function placerSurQuestion(corps, feuille, i){
   const els = corps.querySelectorAll(feuille ? '.ligne-op' : '.sujet-q');
   const el = els[Math.min(i, els.length - 1)];
   if(!el) return;
   const dy = el.getBoundingClientRect().top - corps.getBoundingClientRect().top;
-  corps.scrollTop = Math.max(0, corps.scrollTop + dy - (feuille ? 56 : 6));
+  corps.scrollTop = Math.max(0, corps.scrollTop + dy - (feuille ? ANCRE_FEUILLE : ANCRE_SUJET));
+  S.poseScroll = corps.scrollTop;
 }
 function basculerCompoTab(cible){
   if(S.compoTab === cible) return;
   S.cibleQuestion = questionCourante();
+  if(S.cibleQuestion != null) S.qRef = S.cibleQuestion;
   const zone = document.getElementById('corps');
   if(zone) zone.classList.add(cible === 'feuille' ? 'glisse-gauche' : 'glisse-droite');
   S.compoTab = cible;
@@ -7553,7 +7578,7 @@ document.addEventListener('click', ev=>{
     const l = S.reponses[q] || [];
     if(l.includes(i)) return;              // définitif : pas de retour en arrière
     S.reponses[q] = [...l, i].sort();
-    S.derniereQ = q;
+    S.derniereQ = q; S.qRef = q; S.poseScroll = null;
     sauverEpreuve();
     pister('COMPOSITION_ANSWER_SELECTED', { question: q + 1, total: S.grille.length });
     ecranGrille();
