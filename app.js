@@ -27,6 +27,19 @@ const CONTACT = {
   playStore: ''              /* le lien Play Store de Mon Concours, dès qu'il est publié */
 };
 
+/* « Mot de passe oublié » : le message part vers l'un des deux numéros, en alternance.
+   Le candidat n'a rien à choisir. */
+function ouvrirWhatsappOubli(){
+  const tels = [CONTACT.adminTel, CONTACT.adminTel2];
+  let i = 0;
+  try{
+    i = (parseInt(localStorage.getItem('mc.oubli.alt') || '0', 10) + 1 + Math.floor(Math.random() * 2)) % 2;
+    localStorage.setItem('mc.oubli.alt', String(i));
+  }catch(e){ i = Math.floor(Math.random() * 2); }
+  const msg = "Bonjour, j'ai oublié mon mot de passe Mon Concours. Mon numéro : " + ((S.form && S.form.tel) || '');
+  window.open('https://wa.me/226' + tels[i] + '?text=' + encodeURIComponent(msg), '_blank', 'noopener');
+}
+
 const REGLAGES = 'monconcours.reglages';
 
 function lireReglages(){
@@ -76,7 +89,7 @@ const S = {
   voirClassement:false, voirDiagnostic:false, voirDefi:false, voirBadges:false,
   util:{nom:'', tel:'', pin:'', connecte:false},
   form:{nom:'', tel:'', pin:'', pin2:'', couleur:''}, codeVisible:false, erreur:'',
-  abo:{actif:false, formule:null, jours_restants:0, echeance:'formule gratuite'},
+  abo:{actif:false, formule:null, jours_restants:0, echeance:'abonnement gratuit'},
   gratuit:true,             // phase de lancement : tout est gratuit (le serveur fait foi)
   theme:'clair', sessionCounter:0, cahierDepuisGrille:false,
   modal:null, modalDejaVu:false, matiereOuverte:null, sync:null, bloque:false, qcmPos:{}, rechercheCours:'', compositions:[], niveauConnu:false, notifications:[], notifCharge:false, dateConcours:null, nomConcours:null, typeEpreuve:'Concours direct · épreuve écrite',
@@ -86,7 +99,7 @@ const S = {
   repriseCorrection:null, paiementEtat:null,
   cahier:[],
   grille:[],
-  ressources:null, ressourceOuverte:null, erreurCours:'', classement:null, stats:null, compoReprise:null, compositionId:null, reponses:{}, sujetVu:false, apercu:null, corrige:false, chrono:1500, timer:null, compoTab:'feuille',
+  ressources:null, ressourceOuverte:null, erreurCours:'', classement:null, stats:null, compoReprise:null, compositionId:null, reponses:{}, sujetVu:false, apercu:null, corrige:false, chrono:1800, timer:null, compoTab:'feuille',
   grilleNote:null
 };
 
@@ -224,6 +237,12 @@ function toast(message, duree){
   z.classList.add('on');
   clearTimeout(minuteurToast);
   minuteurToast = setTimeout(() => z.classList.remove('on'), duree || 3800);
+}
+
+function masquerToast(){
+  const z = document.getElementById('toast');
+  if(z) z.classList.remove('on');
+  clearTimeout(minuteurToast);
 }
 
 window.addEventListener('offline', () =>
@@ -506,6 +525,8 @@ function aller(e){
   if(e === 'top') chargerTop();
   if(['recherche','defi','proposer'].includes(e) && !S.banque) chargerQuestions();
   if(e === 'qdj' && S.qdj && S.qdj.jourLocal !== new Date().toDateString()){ S.qdj = null; S.qdjRep = undefined; S.qdjCorrection = null; }
+  if(e === 'grille' && S.ecran !== 'grille') pleinEcranAuto();
+  if(e !== 'grille' && S.ecran === 'grille' && document.fullscreenElement){ try{ document.exitFullscreen(); }catch(err){} }
   S.ecran = e; rendre(); vue().scrollTop = 0;
   try{ vue().focus({preventScroll:true}); }catch(err){}
 }
@@ -548,7 +569,7 @@ function nav(){
       ? 'Accès gratuit à tout le site pendant le lancement'
       : S.abo.actif
       ? nomFormule(S.abo.formule) + ' · ' + E(S.abo.echeance)
-      : 'Formule gratuite · l\'actualité du matin reste gratuite à vie'}</div>`;
+      : 'Abonnement gratuit · l\'actualité du matin reste gratuite à vie'}</div>`;
 }
 
 /* =====================================================================
@@ -800,7 +821,7 @@ function ecranResultat(){
       <ol class="actions-diag">
         <li><b>Reprendre tes fautes de ce test.</b> Elles sont déjà dans « Mes erreurs » et reviendront jusqu'à être acquises.</li>
         <li><b>${faibles.length ? 'Réviser ' + E(faibles[0]) : 'Garder ton avance'}.</b> ${faibles.length ? 'C\'est là que tu as perdu le plus de points : dix questions par jour suffisent pour commencer.' : 'Aucune matière faible sur ce test : passe directement aux questions du niveau de ton concours.'}</li>
-        <li><b>Faire ta première composition.</b> 50 questions en 25 minutes, sur la vraie feuille : tu verras ton niveau en conditions réelles.</li>
+        <li><b>Faire ta première composition.</b> 50 questions en 30 minutes, sur la vraie feuille : tu verras ton niveau en conditions réelles.</li>
       </ol>
     </div>
 
@@ -828,10 +849,10 @@ function blocPlanPaiement(faibles){
     <h2>Ton plan pour rattraper ${cible}</h2>
     <p class="sous" style="margin:0 0 10px">La première séance est ouverte pour toi dans l'application. Le plan complet se débloque avec un pass.</p>
     ${S.offre ? `<div class="offre-kicker" style="margin:0 0 8px">Offre du jour · valable aujourd'hui seulement · il reste <b data-offre-reste="1">${resteOffre()}</b></div>` : ''}
-    ${S.offre ? ligne('annuelle', 'Pass Année', '12 mois sans limite, à moitié prix. L\'offre expire ' + jourOffre() + ' à minuit.') : ''}
-    ${ligne('mensuelle', 'Pass Mois', '30 jours pour travailler chaque jour.')}
-    ${ligne('semaine', 'Pass Semaine', '7 jours pour essayer, le plus petit prix.')}
-    ${S.offre ? '' : ligne('annuelle', 'Pass Année', '12 mois sans limite.')}
+    ${S.offre ? ligne('annuelle', 'Abonnement Année', '12 mois sans limite, à moitié prix. L\'offre expire ' + jourOffre() + ' à minuit.') : ''}
+    ${ligne('mensuelle', 'Abonnement Mois', '30 jours pour travailler chaque jour.')}
+    ${ligne('semaine', 'Abonnement Semaine', '7 jours pour essayer, le plus petit prix.')}
+    ${S.offre ? '' : ligne('annuelle', 'Abonnement Année', '12 mois sans limite.')}
   </div>`;
 }
 
@@ -856,7 +877,7 @@ function ecranVerrouD(){
     </div>
     <div class="verdict fragile"><b>Inscris-toi gratuitement pour voir ta réponse.</b>
       Tu découvres ta note, ta feuille corrigée avec l'explication de chaque question, et les matières à travailler en premier.</div>
-    <button class="cta" style="margin-top:18px" data-modal="inscription">Voir ma note : inscription gratuite<small>30 secondes, sans e-mail</small></button>
+    <button class="cta" style="margin-top:18px" data-modal="inscription">Voir ma note et mes erreurs : inscription gratuite<small>30 secondes, sans e-mail</small></button>
     <button class="lien" style="display:block;margin:12px auto 0" data-modal="connexion">J'ai déjà un compte</button>`;
   } else if(etapeD === 2){
     contenu = `
@@ -909,7 +930,7 @@ function ecranVerrou(){
     </div>
     <div class="verdict fragile"><b>Inscris-toi gratuitement pour voir ta réponse.</b>
       Tu découvres ta note, ta feuille corrigée avec l'explication de chaque question, et les matières à travailler en premier.</div>
-    <button class="cta" style="margin-top:18px" data-modal="inscription">Voir ma note : inscription gratuite<small>30 secondes, sans e-mail</small></button>
+    <button class="cta" style="margin-top:18px" data-modal="inscription">Voir ma note et mes erreurs : inscription gratuite<small>30 secondes, sans e-mail</small></button>
     <button class="lien" style="display:block;margin:12px auto 0" data-modal="connexion">J'ai déjà un compte</button>
   </div>`;
 }
@@ -1044,7 +1065,9 @@ async function chargerNotifications(){
     if(!memes) rendre();
     if(neuves.length && !enComposition()){
       ecrireReglage('notifVues', S.notifications.slice(0, 60).map(n => n.id));
-      bandeauNotif(neuves[0], neuves.length);
+      /* une décision de l'administrateur sur un abonnement s'affiche dans une vraie fenêtre */
+      const evt = neuves.find(n => n.type === 'paiement' && (!n.cree_le || Date.now() - new Date(n.cree_le) < 3 * 86400000));
+      if(evt) fenetreEvenement(evt); else bandeauNotif(neuves[0], neuves.length);
     }
   }catch(e){}
 }
@@ -1134,6 +1157,44 @@ function bandeauNotif(n, combien){
   setTimeout(() => b.classList.add('vu'), 30);
   armer(7000);
 }
+/* La fenêtre qui s'ouvre quand l'administrateur valide ou rejette un abonnement :
+   « Félicitations » avec une petite fête, ou « Abonnement rejeté » avec la suite à donner. */
+function fenetreEvenement(n){
+  const refus = /rejet|refus/i.test(n.titre || '');
+  sonNotif();
+  document.querySelectorAll('.fenetre-evt').forEach(x => x.remove());
+  const f = document.createElement('div');
+  f.className = 'fenetre-evt ' + (refus ? 'refus' : 'ok');
+  f.setAttribute('role', 'dialog'); f.setAttribute('aria-modal', 'true');
+  f.setAttribute('aria-label', refus ? 'Abonnement rejeté' : 'Félicitations');
+  const msgWa = "Bonjour, mon abonnement Mon Concours a été rejeté. Mon numéro : " + ((S.util && S.util.tel) || '');
+  f.innerHTML = `<div class="fe-carte">
+    <div class="fe-badge" aria-hidden="true">${refus ? '✕' : '✓'}</div>
+    ${refus ? '' : '<div class="fe-confettis" aria-hidden="true">' + Array.from({ length:16 }, (_, i) => `<i style="--i:${i}"></i>`).join('') + '</div>'}
+    <h2 class="fe-titre">${refus ? 'Abonnement rejeté' : 'Félicitations !'}</h2>
+    ${refus ? '' : '<p class="fe-sous">Votre abonnement est actif</p>'}
+    <p class="fe-texte">${E(n.message || '')}</p>
+    ${refus
+      ? `<button class="cta" data-fe="abonnement">Renvoyer une capture</button>
+         <a class="cta creux" style="display:block;margin-top:9px;text-decoration:none" href="https://wa.me/226${CONTACT.adminTel}?text=${encodeURIComponent(msgWa)}" target="_blank" rel="noopener">Écrire sur WhatsApp</a>`
+      : `<button class="cta" data-fe="fermer">Continuer</button>`}
+  </div>`;
+  const fermer = suite => {
+    f.classList.remove('vu'); setTimeout(() => f.remove(), 300);
+    if(!n.lue) marquerNotifsLues(n.id);
+    if(suite === 'abonnement') aller('abonnement');
+  };
+  f.addEventListener('click', e => {
+    const b = e.target.closest('[data-fe]');
+    if(b) fermer(b.dataset.fe);
+    else if(e.target === f) fermer();
+  });
+  f.addEventListener('keydown', e => { if(e.key === 'Escape') fermer(); });
+  document.body.appendChild(f);
+  setTimeout(() => { f.classList.add('vu'); const b = f.querySelector('button'); if(b) b.focus(); }, 30);
+  chargerAbonnement().then(() => { if(['abonnement','compte','aujourdhui'].includes(S.ecran)) rendre(); }, () => {});
+  pister(refus ? 'PAYMENT_REJECTED_POPUP' : 'PAYMENT_CONFIRMED_POPUP', {});
+}
 /* toucher une notification mène à ce dont elle parle */
 function ouvrirNotif(n){
   if(!n) return;
@@ -1215,7 +1276,7 @@ async function chargerAbonnement(){
         echeance: data.jours_restants + ' jour' + (data.jours_restants > 1 ? 's' : '') + ' restant' + (data.jours_restants > 1 ? 's' : '')
       };
     } else {
-      S.abo = {actif:false, formule:null, jours_restants:0, echeance:'formule gratuite'};
+      S.abo = {actif:false, formule:null, jours_restants:0, echeance:'abonnement gratuit'};
     }
     /* la dernière demande de paiement : en attente, confirmée (reçu), refusée */
     const { data: dem } = await base.rpc('mon_paiement_en_cours');
@@ -1228,7 +1289,7 @@ async function chargerAbonnement(){
 }
 
 /* =====================================================================
-   OFFRE FLASH : le Pass Année à moitié prix pendant 24 heures.
+   OFFRE FLASH : le Abonnement Année à moitié prix pendant 24 heures.
    Le serveur fixe le prix et la fin ; l'écran ne fait que l'afficher.
    ===================================================================== */
 let _annuelleBase = null;
@@ -1242,6 +1303,8 @@ function appliquerOffre(o){
     : Object.assign({}, annuelleBase());
 }
 async function chargerOffre(creer){
+  /* l'offre flash est terminée pour tout le monde : plus aucun prix barré */
+  appliquerOffre(null); return null;
   if(!base || !S.util.connecte || S.gratuit || estAbonne()){ appliquerOffre(null); return null; }
   try{
     const { data, error } = await base.rpc('mon_offre_flash', { p_creer: !!creer });
@@ -1284,7 +1347,7 @@ function afficherOffre(){
   c.innerHTML = `<button class="offre-x" aria-label="Fermer l'offre">×</button>
     <div class="offre-kicker">Offre flash · valable aujourd'hui seulement</div>
     <div class="offre-prix"><s>${E(f.ancien || '')}</s> <b>${E(f.prix)}</b></div>
-    <div class="offre-texte">Le Pass Année, 12 mois sans limite, à moitié prix. L'offre expire ${jourOffre()} à minuit : il reste <b data-offre-reste="1">${resteOffre()}</b>.</div>
+    <div class="offre-texte">Le Abonnement Année, 12 mois sans limite, à moitié prix. L'offre expire ${jourOffre()} à minuit : il reste <b data-offre-reste="1">${resteOffre()}</b>.</div>
     <button class="cta offre-go">Profiter de l'offre</button>`;
   c.querySelector('.offre-x').onclick = fermerOffre;
   c.querySelector('.offre-go').onclick = () => {
@@ -1415,8 +1478,8 @@ const MESSAGES_FR = [
   [/banned|suspendu/i, "Ce compte est suspendu. Pour en savoir plus, écrivez à l'administrateur sur WhatsApp."],
   [/rate limit|too many requests|429/i, "Trop d'essais en peu de temps. Attendez quelques minutes, puis réessayez."],
   [/already registered|already been registered|already exists|duplicate key/i, "Ce numéro a déjà un compte. Choisissez « J'ai déjà un compte »."],
-  [/invalid login|invalid credentials|invalid grant/i, "Numéro ou code secret incorrect."],
-  [/password should be|password is too short|weak password/i, "Le code secret doit comporter 4 chiffres."],
+  [/invalid login|invalid credentials|invalid grant/i, "Numéro ou mot de passe incorrect."],
+  [/password should be|password is too short|weak password/i, "Le mot de passe doit comporter 4 chiffres."],
   [/email not confirmed/i, "Votre compte n'est pas encore activé. Écrivez à l'administrateur sur WhatsApp."],
   [/signups? not allowed|signup is disabled/i, "Les inscriptions sont fermées pour le moment."],
   [/user not found/i, "Aucun compte avec ce numéro."],
@@ -1757,7 +1820,7 @@ async function ouvrirComposition(){
       S.sujetRef = data.sujet || '';
       S.concours = data.concours || 'Concours direct';
       S.seuil = (typeof data.seuil === 'number') ? data.seuil : null;
-      S.dureeCompo = data.duree || 1500;
+      S.dureeCompo = data.duree || 1800;
       S.epreuveCompo = data.epreuve || null;
       S.grille.length = 0;
       (data.questions || []).forEach(q => S.grille.push({ id:q.id, q:q.enonce, o:q.options || [], i:null, m:q.matiere || null }));
@@ -1798,7 +1861,7 @@ async function cloturerComposition(){
   S.remiseEtat = 'envoi';
   try{
     const { data, error } = await base.rpc('remettre_composition', {
-      p_composition: S.compositionId, p_reponses: S.reponses, p_duree: (S.dureeCompo || 1500) - S.chrono
+      p_composition: S.compositionId, p_reponses: S.reponses, p_duree: (S.dureeCompo || 1800) - S.chrono
     });
     if(error) throw error;
     if(data && data.ok){
@@ -1938,7 +2001,7 @@ function ecranAujourdhui(){
           <div class="puce">${S.taches[1]?'✓':'2'}</div>
           <div><h3>Composer</h3>
             <p>Une épreuve chronométrée sur la feuille de réponses.</p>
-            <span class="dur">25 min</span>${S.taches[1] ? '<span class="etat-tache fait">✓ Déjà effectué</span>' : '<span class="etat-tache">Pas encore effectué</span>'}</div>
+            <span class="dur">30 min</span>${S.taches[1] ? '<span class="etat-tache fait">✓ Déjà effectué</span>' : '<span class="etat-tache">Pas encore effectué</span>'}</div>
           <span class="fl-tache" aria-hidden="true">→</span>
         </button>
         <button class="etape ${S.taches[2]?'fait':(S.taches[1]?'actif':'')}${tacheNeuve(2)}" data-cahierfreq="1">
@@ -2116,7 +2179,7 @@ function ecranInscription(){
       <div class="aide">C'est ce numéro qui servira aussi pour l'abonnement. Pas d'adresse e-mail à retenir.</div>
     </div>
     <div class="champ">
-      <label for="f-pin">Code secret à 4 chiffres</label>
+      <label for="f-pin">Ton mot de passe (4 chiffres)</label>
       <input id="f-pin" type="password" inputmode="numeric" maxlength="4" value="${E(S.form.pin)}" placeholder="••••" oninput="maj('pin',this.value)">
     </div>
 
@@ -2143,13 +2206,13 @@ function ecranConnexion(){
       </div>
     </div>
     <div class="champ">
-      <label for="c-pin">Code secret</label>
+      <label for="c-pin">Mot de passe</label>
       <input id="c-pin" type="password" inputmode="numeric" maxlength="4" value="${E(S.form.pin)}" placeholder="••••" oninput="maj('pin',this.value)">
     </div>
 
     <button class="cta" style="margin-top:6px" data-connecter="1">Me connecter</button>
     <button class="lien" data-go="inscription">Créer un compte</button>
-    <button class="lien" data-oubli="1">Code oublié ?</button>
+    <button class="lien" data-oubli="1">Mot de passe oublié ?</button>
 
     ${S.bloque ? `
     <div class="carte" style="margin-top:14px;text-align:left">
@@ -2166,12 +2229,12 @@ function ecranConnexion(){
 /* =====================================================================
    ABONNEMENT ET PAIEMENT
    ===================================================================== */
-const nomFormule = f => ({ semaine:'Pass Semaine', mensuelle:'Pass Mois', annuelle:'Pass Année', essai:'Essai gratuit' })[f] || 'Pass';
-/* Trois Pass, jamais quatre. Aucun chiffre inventé : le prix par jour est un simple calcul. */
+const nomFormule = f => ({ semaine:'Abonnement Semaine', mensuelle:'Abonnement Mois', annuelle:'Abonnement Année', essai:'Essai gratuit' })[f] || 'Abonnement';
+/* Trois abonnements, jamais quatre. Aucun chiffre inventé : le prix par jour est un simple calcul. */
 const FORMULES = {
-  semaine:  { cle:'semaine',  n:'Pass Semaine', prix:'500 FCFA',   montant:500,  per:'7 jours',  jour:'71 F par jour', reco:false },
-  mensuelle:{ cle:'mensuelle', n:'Pass Mois',    prix:'1 000 FCFA', montant:1000, per:'30 jours', jour:'33 F par jour', reco:true },
-  annuelle: { cle:'annuelle', n:'Pass Année',   prix:'4 000 FCFA', montant:4000, per:'12 mois',  jour:'11 F par jour', reco:false }
+  semaine:  { cle:'semaine',  n:'Abonnement Semaine', prix:'500 FCFA',   montant:500,  per:'7 jours',  jour:'71 F par jour', reco:false },
+  mensuelle:{ cle:'mensuelle', n:'Abonnement Mois',    prix:'1 000 FCFA', montant:1000, per:'30 jours', jour:'33 F par jour', reco:true },
+  annuelle: { cle:'annuelle', n:'Abonnement Année',   prix:'4 000 FCFA', montant:4000, per:'12 mois',  jour:'11 F par jour', reco:false }
 };
 const OPERATEURS = {
   orange:{ nom:'Orange Money', pastille:'OM', cls:'om' },
@@ -2209,7 +2272,7 @@ function messageProche(cle){
   const f = FORMULES[cle] || FORMULES.mensuelle;
   const tel = (S.util && S.util.tel) ? S.util.tel : '';
   return 'Salut, je prépare mon concours sur Mon Concours (' + CONTACT.site.replace('https://', '') + '). ' +
-    'Tu peux m\'offrir le ' + f.n + ' (' + f.prix + ') ? ' +
+    'Tu peux m\'offrir l\'' + f.n + ' (' + f.prix + ') ? ' +
     'Paye par Orange Money au +226 ' + fmtTel(CONTACT.paiement.orange) + ', Moov Money au +226 ' + fmtTel(CONTACT.paiement.moov) + ' ou Wave au +226 ' + fmtTel(CONTACT.paiement.wave) +
     ', puis envoie la capture sur WhatsApp au +226 ' + fmtTel(CONTACT.adminTel) + ' ' +
     'en écrivant mon numéro de compte : ' + (tel || '(mon numéro)') + '. Mon compte sera activé. Merci !';
@@ -2227,12 +2290,12 @@ async function validerCode(){
     pister('CODE_REDEEMED', { formule: data.formule });
     S.codeOuvert = false; S.codeSaisi = '';
     await chargerAbonnement(); chargerNotifications();
-    signalCandidat((data.libelle || 'Votre Pass') + ' est actif. Bon courage !');
+    signalCandidat((data.libelle || 'Votre abonnement') + ' est actif. Bon courage !');
     aller('abonnement');
   }catch(e){ S.codeEnvoi = false; S.codeErreur = enFrancais(e, 'Vérifiez votre connexion et réessayez.'); rendre(); }
 }
 
-/* La page « Mon Pass » : trois cartes, deux boutons dessous */
+/* La page « Mon abonnement » : trois cartes, deux boutons dessous */
 function ecranAbonnement(){
   const abo = S.abo;
   const paiement = S.paieEnAttente;
@@ -2242,11 +2305,11 @@ function ecranAbonnement(){
 
     ${abo && abo.actif ? `
     <div class="carte" style="text-align:center;padding:22px 16px">
-      <div class="eyebrow">Mon Pass</div>
+      <div class="eyebrow">Mon abonnement</div>
       <h1 class="titre" style="font-size:22px;margin:8px 0">${E(nomFormule(abo.formule))}</h1>
       <p class="sous">${abo.jours_restants} jour${abo.jours_restants>1?'s':''} restant${abo.jours_restants>1?'s':''}, jusqu'au ${new Date(abo.fin_le).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'})}</p>
     </div>
-    <p class="sous" style="margin:14px 0 4px">Pour prolonger, choisissez un Pass : il s'ajoute à la fin du vôtre.</p>` : `
+    <p class="sous" style="margin:14px 0 4px">Pour prolonger, choisissez un abonnement : il s'ajoute à la fin du vôtre.</p>` : `
     <h1 class="titre">Prépare ton concours<br>sans limite</h1>
     <p class="sous" style="margin:10px 0 18px">Corrections illimitées, compositions illimitées, feuille corrigée détaillée, plan de révision et mode hors ligne.</p>`}
 
@@ -2266,7 +2329,7 @@ function ecranAbonnement(){
       <div class="eyebrow">Capture reçue</div>
       <p class="sous" style="margin:6px 0 0">Votre paiement du ${new Date(paiement.cree_le).toLocaleDateString('fr-FR')} est en cours de vérification : deux heures au plus. Vous recevrez une notification dès que c'est confirmé.</p>
     </div>` : `
-    <div class="libelle" style="margin-top:6px">Choisissez votre Pass</div>
+    <div class="libelle" style="margin-top:6px">Choisissez votre abonnement</div>
     ${Object.keys(FORMULES).map(k => {
       const f = FORMULES[k];
       return `<div class="formule ${f.reco ? 'reco' : ''} ${f.ancien ? 'flash' : ''}">
@@ -2274,7 +2337,7 @@ function ecranAbonnement(){
         <div class="haut"><span class="nom">${f.n}</span>
           <span class="prix">${f.ancien ? `<s class="barre">${f.ancien}</s> ` : ''}${f.prix} <em>${f.per}</em></span></div>
         ${f.ancien ? `<div class="flash-reste">Expire ${jourOffre()} à minuit · il reste <b data-offre-reste="1">${resteOffre()}</b></div>` : ''}
-        <button class="mini" style="margin-top:12px" data-pass="${k}">Prendre le ${f.n}</button>
+        <button class="mini" style="margin-top:12px" data-pass="${k}">Choisir cet abonnement</button>
       </div>`;
     }).join('')}
     ${blocAlternatives()}`}
@@ -2293,7 +2356,7 @@ function ecranPaiement(){
 
   /* Étape 3 : la capture du paiement, dans l'application ou par WhatsApp. */
   if(S.paieEtape === 3){
-    const msgWa = 'Bonjour, j\'ai payé le ' + f.n + ' (' + f.prix + ') par ' + O.nom + '. Mon numéro de compte Mon Concours : ' + ((S.util && S.util.tel) || S.paieTel) + '. Je vous envoie ma capture.';
+    const msgWa = 'Bonjour, j\'ai payé l\'' + f.n + ' (' + f.prix + ') par ' + O.nom + '. Mon numéro de compte Mon Concours : ' + ((S.util && S.util.tel) || S.paieTel) + '. Je vous envoie ma capture.';
     vue().innerHTML = `
     <div class="pad">
       <button class="retourhaut" data-paieretour="1">Retour</button>
@@ -2338,7 +2401,7 @@ function ecranPaiement(){
       <p class="sous" style="margin:12px 0 6px">Nous vérifions votre capture, au plus tard dans les 2 heures. Vous recevrez une notification : paiement confirmé, ou rejeté avec la raison.</p>
       <div class="carte" style="margin-top:16px;text-align:left">
         <div class="mat"><div class="nom">Moyen de paiement<em>${O.nom} · au +226 ${E(S.paieTel)}</em></div><div class="val">✓</div></div>
-        <div class="mat"><div class="nom">Pass demandé<em>${f.n} · ${f.per}</em></div><div class="val num">${f.prix}</div></div>
+        <div class="mat"><div class="nom">Abonnement demandé<em>${f.n} · ${f.per}</em></div><div class="val num">${f.prix}</div></div>
       </div>
       <button class="cta" style="margin-top:18px" data-go="revisions">Ouvrir mes révisions</button>
       <button class="cta creux" style="margin-top:9px" data-go="compte">Retour à mon compte</button>
@@ -2477,7 +2540,7 @@ function ecranRevisions(){
     ${!S.util.connecte ? `<div class="carte" style="margin-top:12px">
       <p class="sous">${S.gratuit ? "Sans compte, tu peux lire les questions. Pour voir la correction et garder tes erreurs, crée ton compte : c'est gratuit." : "Sans compte, tu peux lire les questions. Pour voir la correction, crée ton compte gratuit : 20 corrections par jour, sans limite avec l'abonnement."}</p>
     </div>` : (!S.abo.actif && !S.gratuit ? `<div class="carte" style="margin-top:12px">
-      <p class="sous">Formule gratuite : 10 corrections par jour. L'abonnement les rend illimitées et ouvre les compositions.</p>
+      <p class="sous">Abonnement gratuit : 10 corrections par jour. L'abonnement les rend illimitées et ouvre les compositions.</p>
     </div>` : '')}
   </div>`;
 }
@@ -2947,7 +3010,7 @@ function proposerOuverture(blob, nom){
     const url = URL.createObjectURL(blob);
     z = document.createElement('div');
     z.id = 'ouvrir-fichier'; z.setAttribute('role', 'status');
-    z.innerHTML = '<span>Fichier enregistré dans vos téléchargements.</span><button type="button" class="ouvrir">Ouvrir le fichier</button><button type="button" class="fermer" aria-label="Fermer">×</button>';
+    z.innerHTML = '<button type="button" class="ouvrir">Ouvrir le fichier</button><button type="button" class="fermer" aria-label="Fermer">×</button>';
     document.body.appendChild(z);
     const fermer = () => { z.remove(); setTimeout(() => URL.revokeObjectURL(url), 120000); };
     z.querySelector('.ouvrir').onclick = () => { if(!window.open(url, '_blank')) location.href = url; fermer(); };
@@ -2958,7 +3021,7 @@ function proposerOuverture(blob, nom){
 async function enregistrerBlob(blob, nom, poignee){
   if(poignee){
     const w = await poignee.createWritable(); await w.write(blob); await w.close();
-    toast('Fichier enregistré : ' + nom);
+    masquerToast();
     proposerOuverture(blob, nom);
     return;
   }
@@ -2967,7 +3030,7 @@ async function enregistrerBlob(blob, nom, poignee){
   a.href = url; a.download = nom; a.rel = 'noopener';
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60000);
-  toast('Téléchargement lancé : ' + nom, 4500);
+  masquerToast();
   proposerOuverture(blob, nom);
 }
 
@@ -3000,10 +3063,10 @@ async function sortirDocument(titre, fabrique){
   const nom = nomFichier(titre);
   let poignee = null;
   try{ poignee = await demanderEmplacement(nom); }catch(e){ return; }
-  toast('Préparation du document…', 2500);
+  toast('Téléchargement en cours…', 60000);
   let html = null;
   try{ html = await fabrique(); }catch(e){ html = null; }
-  if(!html){ return; }
+  if(!html){ masquerToast(); return; }
   try{
     const blob = await htmlVersPdf(html);
     await enregistrerBlob(blob, nom, poignee);
@@ -3019,7 +3082,7 @@ async function sortirDocument(titre, fabrique){
 async function telechargerUrl(url, nom){
   let poignee = null;
   try{ poignee = await demanderEmplacement(nom); }catch(e){ return; }
-  toast('Téléchargement…', 2500);
+  toast('Téléchargement en cours…', 60000);
   try{
     const r = await fetch(url); if(!r.ok) throw new Error('http');
     await enregistrerBlob(await r.blob(), nom, poignee);
@@ -3028,7 +3091,7 @@ async function telechargerUrl(url, nom){
 
 function feuilleBloquee(){
   if(peutFeuilleDetaillee()) return false;
-  toast('La feuille détaillée fait partie du Pass.', 4500);
+  toast('La feuille détaillée fait partie de l\'abonnement.', 4500);
   aller('abonnement'); return true;
 }
 function feuilleComposition(source){
@@ -3039,7 +3102,7 @@ function htmlFeuilleComposition(source){
   /* source : { grille:[{q, o, bonnes}], reponses:{}, note, duree, date, sujet, concours }
      Sans source, on imprime la composition qui vient d'être corrigée. */
   const S0 = source || { grille:S.grille, reponses:S.reponses, note:S.grilleNote,
-    duree:S.dureeUtilisee ?? ((S.dureeCompo || 1500) - S.chrono), date:new Date(),
+    duree:S.dureeUtilisee ?? ((S.dureeCompo || 1800) - S.chrono), date:new Date(),
     sujet:S.sujetRef, concours:S.concours, seuil:S.seuil };
   if(!S0.grille.length || !S0.grille.some(g => g.bonnes)){ toast("La copie n'est pas encore corrigée."); return; }
   const total = S0.grille.length, note = S0.note ?? 0;
@@ -3234,42 +3297,50 @@ async function basculerMusique(){
   }catch(e){ toast("Touchez à nouveau pour lancer la musique."); }
 }
 
-/* Le reçu d'abonnement, après confirmation par l'administrateur. */
-async function telechargerRecu(id){
-  if(!base) return toast('Connexion nécessaire.');
-  const f = window.open('', '_blank');
-  if(!f){ toast("Autorisez les fenêtres pour télécharger votre reçu."); return; }
-  f.document.write('<p style="font-family:sans-serif">Préparation du reçu…</p>');
-  try{
+/* Le reçu d'abonnement, après confirmation par l'administrateur : un vrai document,
+   avec l'en-tête Mon Concours, le QR code, le numéro et le cachet « PAYÉ ». */
+function telechargerRecu(id){
+  if(!base){ toast('Connexion nécessaire.'); return; }
+  return sortirDocument('Recu ' + (S.util.nom || 'abonnement'), async () => {
     const { data, error } = await base.rpc('mon_recu', { p_id: id });
-    if(error || !data || !data.ok) throw new Error((data && data.message) || 'Reçu indisponible.');
+    if(error || !data || !data.ok){ toast((data && data.message) || 'Reçu indisponible.'); return null; }
     const r = data.recu;
     const d = iso => iso ? new Date(iso).toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' }) : '—';
-    const ligne = (l, v) => '<tr><td>' + E(l) + '</td><td>' + E(v) + '</td></tr>';
-    f.document.open();
-    f.document.write('<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Reçu ' + E(r.numero) + '</title>' +
-      '<style>@page{size:A5;margin:12mm}body{font-family:Georgia,serif;color:#111;margin:0}' +
-      '.tete{display:flex;align-items:center;gap:12px;border-bottom:3px double #111;padding-bottom:10px}' +
-      '.sceau{width:46px;height:46px;border-radius:12px;background:#EDE4D3;border:1px solid #C9BEA9;display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:6px}' +
-      '.sceau i{border-radius:50%;background:#FBFAF7;border:1px solid #C9BEA9}.sceau i:nth-child(2),.sceau i:nth-child(3){background:#1C1C1C}' +
-      'h1{font-size:15px;letter-spacing:.18em;text-transform:uppercase;margin:16px 0 8px}table{width:100%;border-collapse:collapse;font-size:13px}' +
-      'td{border-bottom:1px solid #ccc;padding:6px 4px}td:last-child{text-align:right;font-weight:bold}.merci{margin-top:16px;font-style:italic;font-size:13px}' +
-      '.noimp{text-align:center;margin:18px 0}@media print{.noimp{display:none}}</style></head><body>' +
-      '<div class="tete"><div class="sceau"><i></i><i></i><i></i><i></i></div><div><b style="letter-spacing:.05em">MON CONCOURS</b><br><small>Préparation aux concours directs du Burkina Faso</small></div></div>' +
-      '<h1>Reçu de paiement</h1><table>' +
-      ligne('Numéro', r.numero) + ligne('Émis le', d(r.emis_le)) + ligne('Candidat', r.candidat || '—') +
-      ligne('Offre', r.offre) + ligne('Durée', (r.duree_jours || '—') + ' jours') +
-      ligne('Valable du', d(r.debut_le)) + ligne('Jusqu\'au', d(r.fin_le)) +
-      ligne('Payé par', (r.operateur || '') + ' · +226 ' + (r.telephone || '')) +
-      ligne('Montant', (r.montant_fcfa || 0).toLocaleString('fr-FR') + ' FCFA') + '</table>' +
-      '<p class="merci">' + E(r.remerciement || '') + '</p>' +
-      '<div class="noimp"><button onclick="window.print()">Enregistrer en PDF ou imprimer</button></div>' +
-      '</body></html>');
-    f.document.close();
+    const ligne = (l, v) => '<tr><td class="k">' + E(l) + '</td><td class="v">' + E(v) + '</td></tr>';
+    const montant = (r.montant_fcfa || 0).toLocaleString('fr-FR').replace(/ | /g, ' ') + ' FCFA';
+    const gratuit = !(r.montant_fcfa > 0);
     pister('RECEIPT_DOWNLOADED');
-  }catch(e){
-    f.document.body.innerHTML = '<p style="font-family:sans-serif">' + E(enFrancais(e, 'Reçu indisponible.')) + '</p>';
-  }
+    const css =
+      '.rc-meta{display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;margin:22px 0 4px;font-family:Helvetica,Arial,sans-serif;font-size:12.5px;color:#333}' +
+      '.rc-titre{font-size:22px;letter-spacing:.2em;text-transform:uppercase;margin:6px 0 16px;text-align:center}' +
+      'table.rc{width:100%;border-collapse:collapse;font-family:Helvetica,Arial,sans-serif;font-size:14px;border:1px solid #111}' +
+      'table.rc td{padding:9px 12px;border-bottom:1px solid #ccc}table.rc td.k{width:38%;color:#444;background:#f6f3ec}table.rc td.v{font-weight:bold;text-align:right}' +
+      '.rc-total{display:flex;justify-content:space-between;align-items:center;margin-top:18px;border:2px solid #111;padding:14px 18px;font-family:Helvetica,Arial,sans-serif}' +
+      '.rc-total .l{font-size:13px;letter-spacing:.14em;text-transform:uppercase}.rc-total .m{font-size:26px;font-weight:bold}' +
+      '.rc-bas{display:flex;justify-content:space-between;align-items:flex-end;margin-top:26px;gap:16px}' +
+      '.rc-cachet{display:inline-block;border:3px solid #1d6b3a;color:#1d6b3a;padding:6px 20px;font:bold 22px Helvetica,Arial,sans-serif;letter-spacing:.2em;transform:rotate(-8deg);border-radius:6px;opacity:.85}' +
+      '.rc-sign{text-align:center;font:12px Helvetica,Arial,sans-serif;color:#333;min-width:200px}.rc-sign .tr{border-top:1px solid #111;margin-top:46px;padding-top:4px}' +
+      '.rc-note{margin-top:22px;font-size:12px;color:#444;line-height:1.5;font-style:italic}';
+    const corps =
+      docEntete('Scannez pour réviser gratuitement') +
+      '<div class="rc-meta"><span>Reçu n° <b>' + E(r.numero) + '</b></span><span>Émis le <b>' + E(d(r.emis_le)) + '</b></span></div>' +
+      '<h1 class="rc-titre">Reçu de paiement</h1>' +
+      '<table class="rc">' +
+        ligne('Candidat', r.candidat || '—') +
+        ligne('Numéro du compte', r.telephone ? '+226 ' + r.telephone : '—') +
+        ligne('Abonnement', r.offre) +
+        ligne('Durée', (r.duree_jours || '—') + ' jours') +
+        ligne('Valable du', d(r.debut_le)) +
+        ligne('Jusqu\'au', d(r.fin_le)) +
+        ligne('Moyen de paiement', r.operateur || '—') +
+      '</table>' +
+      '<div class="rc-total"><span class="l">' + (gratuit ? 'Abonnement offert' : 'Montant payé') + '</span><span class="m">' + E(montant) + '</span></div>' +
+      '<div class="rc-bas"><span class="rc-cachet">' + (gratuit ? 'ACTIVÉ' : 'PAYÉ') + '</span>' +
+        '<div class="rc-sign">Mon Concours<br>Service des abonnements<div class="tr">Cachet et signature</div></div></div>' +
+      '<p class="rc-note">' + E(r.remerciement || 'Merci de votre confiance.') + ' Ce reçu atteste de l\'activation de votre abonnement. Il n\'y a pas de renouvellement automatique : à la fin de la période, vous choisissez librement de continuer.</p>' +
+      docPied();
+    return docComplet('Reçu ' + r.numero, css, corps);
+  });
 }
 
 /* Rejoue une composition déjà remise pour en réimprimer la feuille. */
@@ -3641,7 +3712,7 @@ function blocPoint2(){
       ${moy !== null ? `<p class="sous" style="margin:0 0 6px">Ta moyenne sur tes trois compositions : <b>${moy}/50</b>.</p>` : ''}
       ${rest !== null && rest > 0 ? `<p class="sous" style="margin:0 0 6px">Il te reste <b>${rest} sujet${rest > 1 ? 's' : ''}</b> à composer.</p>` : ''}
     </div>
-    ${offre ? `<p class="sous" style="margin:0 0 12px"><b>Vous avez atteint vos limites d'essai gratuit.</b> Faites l'abonnement, puis choisissez le Pass qui vous convient.</p>
+    ${offre ? `<p class="sous" style="margin:0 0 12px"><b>Vous avez atteint vos limites d'essai gratuit.</b> Faites l'abonnement, puis choisissez l'abonnement qui vous convient.</p>
       <button class="cta" data-go="abonnement">Faire l'abonnement</button>
       <button class="lien-mini" style="margin-top:8px" data-proche="mensuelle">${ico('partage',13)} Un proche paie pour moi</button>` : ''}
     <p class="sous" style="margin:12px 0 0;font-size:12.5px">La composition nationale du samedi reste gratuite.</p>`;
@@ -3705,6 +3776,10 @@ function ecranGrille(){
   const rep = Object.keys(S.reponses).length;
   const nbQ = S.grille.length;
   const feuille = S.compoTab === 'feuille';
+  /* le redessin ne doit jamais ramener le candidat en haut de la page */
+  const corpsAvant = document.getElementById('corps');
+  const hautAvant = corpsAvant ? corpsAvant.scrollTop : null;
+  const ongletAvant = S.ongletRendu;
   vue().innerHTML = `
   <div class="grille">
     <div class="gr-tete">
@@ -3715,7 +3790,7 @@ function ecranGrille(){
           <button class="gr-outil" data-plein-ecran="1" aria-label="Plein écran">${ico('examen',14)}<span>${document.fullscreenElement ? 'Quitter le plein écran' : 'Plein écran'}</span></button>
         </div></div>
       <div style="text-align:right">
-        <div class="gr-chrono ${couleurChrono(S.chrono, S.dureeCompo || 1500)}" id="chrono">${mmss(S.chrono)}</div>
+        <div class="gr-chrono ${couleurChrono(S.chrono, S.dureeCompo || 1800)}" id="chrono">${mmss(S.chrono)}</div>
         <div class="eyebrow" style="color:#B5AC96">temps restant</div></div>
     </div>
     <div class="sonnerie" id="sonnerie" role="status" aria-live="polite"></div>
@@ -3753,6 +3828,12 @@ function ecranGrille(){
       <button class="remettre" data-remettre="1">Remettre la copie</button>
     </div>
   </div>`;
+  const corpsNeuf = document.getElementById('corps');
+  if(corpsNeuf){
+    if(S.cibleQuestion != null){ placerSurQuestion(corpsNeuf, feuille, S.cibleQuestion); S.cibleQuestion = null; }
+    else if(hautAvant !== null && ongletAvant === S.compoTab) corpsNeuf.scrollTop = hautAvant;
+  }
+  S.ongletRendu = S.compoTab;
   brancherScrub();
   brancherSwipeComposition();
   brancherEnteteRepliable();
@@ -3765,7 +3846,7 @@ function ecranGrille(){
     synchroniserChrono();
     if(S.sync) clearInterval(S.sync);
     S.sync = setInterval(synchroniserChrono, 60000);
-    const total = S.dureeCompo || 1500;
+    const total = S.dureeCompo || 1800;
     const mi = Math.floor(total / 2);
     /* sonnerie de départ : une seule fois par copie, au vrai début */
     if(S.compositionId && S.chrono >= total - 20 && S.departSonne !== S.compositionId){
@@ -3902,8 +3983,30 @@ function brancherSwipeComposition(){
   ecouteursSwipeCompo = { zone, debut, bouge, fin };
 }
 
+/* La question où le candidat s'est arrêté : la dernière noircie si elle est à l'écran,
+   sinon la première visible. Le sujet et la feuille s'ouvrent tous deux sur elle. */
+function questionCourante(){
+  const c = document.getElementById('corps');
+  if(!c) return null;
+  const sel = S.compoTab === 'feuille' ? '.ligne-op' : '.sujet-q';
+  const els = c.querySelectorAll(sel);
+  if(!els.length) return null;
+  const zr = c.getBoundingClientRect();
+  const visible = i => { const r = els[i] && els[i].getBoundingClientRect(); return !!r && r.bottom > zr.top + 4 && r.top < zr.bottom - 4; };
+  if(S.derniereQ != null && S.derniereQ < els.length && visible(S.derniereQ)) return S.derniereQ;
+  for(let i = 0; i < els.length; i++){ if(els[i].getBoundingClientRect().bottom > zr.top + 8) return i; }
+  return 0;
+}
+function placerSurQuestion(corps, feuille, i){
+  const els = corps.querySelectorAll(feuille ? '.ligne-op' : '.sujet-q');
+  const el = els[Math.min(i, els.length - 1)];
+  if(!el) return;
+  const dy = el.getBoundingClientRect().top - corps.getBoundingClientRect().top;
+  corps.scrollTop = Math.max(0, corps.scrollTop + dy - (feuille ? 56 : 6));
+}
 function basculerCompoTab(cible){
   if(S.compoTab === cible) return;
+  S.cibleQuestion = questionCourante();
   const zone = document.getElementById('corps');
   if(zone) zone.classList.add(cible === 'feuille' ? 'glisse-gauche' : 'glisse-droite');
   S.compoTab = cible;
@@ -4132,7 +4235,7 @@ function ecranCopie(){
   const pos = Math.min(100, total ? n/total*100 : 0);
   const { fausses, blancs } = bilanCopie(S.grille, S.reponses);
   const analyse = analyseCopie(S.grille, S.reponses);
-  const utilise = S.dureeUtilisee ?? ((S.dureeCompo || 1500) - S.chrono);
+  const utilise = S.dureeUtilisee ?? ((S.dureeCompo || 1800) - S.chrono);
   vue().innerHTML = `
   <div class="copie">
     <button class="retourhaut" data-go="aujourdhui">Retour</button>
@@ -4176,7 +4279,7 @@ function ecranCopie(){
       <div class="libelle">Ce que dit la copie</div>
       <div class="carte">
         <div class="mat"><div class="nom">Questions noircies<em>Sur ${total} · les blanches ne rapportent rien</em></div><div class="val num">${Object.keys(S.reponses).length}</div></div>
-        <div class="mat"><div class="nom">Temps utilisé<em>Sur ${Math.round((S.dureeCompo || 1500)/60)} minutes accordées</em></div><div class="val num">${mmss(Math.max(0, utilise))}</div></div>
+        <div class="mat"><div class="nom">Temps utilisé<em>Sur ${Math.round((S.dureeCompo || 1800)/60)} minutes accordées</em></div><div class="val num">${mmss(Math.max(0, utilise))}</div></div>
         <div class="mat"><div class="nom">Fautes ajoutées à « Mes erreurs »<em>Elles reviennent jusqu'à être acquises</em></div><div class="val num">${fausses.length}</div></div>
         ${blancs.length ? `<div class="mat"><div class="nom">Questions laissées blanches</div><div class="val num">${blancs.length}</div></div>` : ''}
         ${analyse ? `<div class="copie-retenir"><b>${E(analyse.titre)}</b><p>${E(analyse.texte)}</p></div>` : ''}
@@ -4204,7 +4307,7 @@ function blocPoint3(seuil, n, admis){
       <p class="sous" style="margin:0 0 10px"><b>Vous avez atteint vos limites d'essai gratuit.</b> Faites l'abonnement pour débloquer la feuille détaillée : ${mats.length ? E(mats.join(' et ')) : 'tes matières faibles'}, question par question, avec l'explication de chaque faute.</p>
       <button class="cta" data-go="abonnement">Faire l'abonnement</button>
       <button class="cta creux" style="margin-top:8px" data-copie-plus-tard="1">Plus tard</button>
-    </div>` : (bloquee ? `<p class="sous" style="margin-top:14px;font-size:12.5px">La feuille détaillée fait partie du Pass. <button class="lien-mini" data-go="abonnement">Voir mon Pass</button></p>` : '')}`;
+    </div>` : (bloquee ? `<p class="sous" style="margin-top:14px;font-size:12.5px">La feuille détaillée fait partie de l'abonnement. <button class="lien-mini" data-go="abonnement">Voir mon abonnement</button></p>` : '')}`;
 }
 
 /* =====================================================================
@@ -4323,12 +4426,14 @@ function ecranReprise(){
   <div class="qzone">
     <button class="retourhaut" data-sortir-reprise="1" style="margin-bottom:12px">Retour</button>
     <div class="qmeta"><span>REPRISE · CAHIER</span><span>RATÉE ${e.rate} FOIS</span></div>
+    <div class="rep-bloc ${juste && e.suite >= 3 ? 'dissout' : ''}">
     <div class="qtexte">${E(e.q)}</div>
     ${e.opts.map((o,i)=>{
       let c='';
       if(rep!==undefined){ if(i===e.i) c='juste'; else if(i===rep) c='faux'; }
       return `<button class="opt ${c}" ${rep!==undefined?'disabled':''} data-rr="${i}"><span class="lettre">${'ABCD'[i]}</span>${E(o)}</button>`;
     }).join('')}
+    </div>
     ${rep!==undefined?`
       <div class="retour ${juste?'bien':'mal'}">
         <b>${juste?(e.suite>=3?'Acquise — elle disparaît de la liste':(e.suite > 0 ? `Juste · ${e.suite} sur 3 · revient dans ${PALIERS[Math.min(e.suite-1,2)]} jours` : 'Juste')):'Encore ratée — le compteur repart à zéro, reprise aujourd\'hui'}</b>${e.note}
@@ -4383,7 +4488,7 @@ function ecranCompte(){
   <div class="pad">
     <div class="profil">
       <div class="av">${initiales}</div>
-      <h1>${E(S.util.nom || 'Candidat')}</h1>
+      <h1>${E(S.util.nom || 'Candidat')}${(S.journee && S.journee.pseudo && S.journee.pseudo.trim().toLowerCase() !== (S.util.nom || '').trim().toLowerCase()) ? ` <span class="pseudo-sep">/ ${E(S.journee.pseudo)}</span>` : ''}</h1>
       ${S.util.tel?`<span>+226 ${E(S.util.tel)}</span>`:''}
     </div>
 
@@ -4536,7 +4641,7 @@ function ecranCompte(){
       ${S.gratuit ? '' : `<div class="libelle">Mon abonnement</div>
       <button class="grande" style="margin-top:0" data-go="abonnement">
         <span class="ic">${ico('carte',19)}</span>
-        <span><b>${S.abo.actif ? nomFormule(S.abo.formule) : 'Formule gratuite'}</b><span>${E(S.abo.echeance)}</span></span>
+        <span><b>${S.abo.actif ? nomFormule(S.abo.formule) : 'Abonnement gratuit'}</b><span>${E(S.abo.echeance)}</span></span>
         <span class="fl">${S.abo.actif?'GÉRER →':'S\'ABONNER →'}</span>
       </button>`}
       <div class="carte" style="margin-top:14px;text-align:left">
@@ -4589,14 +4694,14 @@ function ecranSuppression(){
     <div class="carte suppr-carte" style="margin-top:14px">
       <p class="sous" style="margin:0 0 8px">La suppression est <b>définitive</b>. Elle efface :</p>
       <ul class="suppr-liste">
-        <li>votre compte : numéro, nom, pseudo, code secret ;</li>
+        <li>votre compte : numéro, nom, pseudo, mot de passe ;</li>
         <li>vos réponses, compositions, notes, erreurs et badges ;</li>
         <li>vos défis, classements, notifications et rappels.</li>
       </ul>
       <p class="sous" style="margin:8px 0 0">Si vous voulez seulement faire une pause, il suffit de vous déconnecter : vos progrès vous attendront.</p>
     </div>
     <div class="champ" style="margin-top:16px">
-      <label for="suppr-code">Tapez votre code secret pour confirmer</label>
+      <label for="suppr-code">Tapez votre mot de passe pour confirmer</label>
       <input id="suppr-code" type="password" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="current-password">
     </div>
     ${S.supprErreur ? `<p class="erreur-champ" style="color:var(--rouge-texte);margin:8px 0 0">${E(S.supprErreur)}</p>` : ''}
@@ -4608,7 +4713,7 @@ function ecranSuppression(){
 async function supprimerCompte(){
   const champ = document.getElementById('suppr-code');
   const code = (champ && champ.value || '').replace(/\D/g, '');
-  if(code.length !== 4){ S.supprErreur = 'Le code secret comporte 4 chiffres.'; return rendre(); }
+  if(code.length !== 4){ S.supprErreur = 'Le mot de passe comporte 4 chiffres.'; return rendre(); }
   if(!base){ S.supprErreur = 'Pas de connexion au serveur. Réessayez avec du réseau.'; return rendre(); }
   S.supprEnCours = true; S.supprErreur = ''; rendre();
   try{
@@ -4954,7 +5059,7 @@ function conseilProchaineVisite(f){
   const j = S.journee || {};
   const taux = f.liste.length ? f.justes / f.liste.length : 0;
   if((f.fautes || []).length >= 3) return 'Reviens demain : tes fautes d\'aujourd\'hui reviendront en premier, c\'est le meilleur moment pour les fixer.';
-  if(taux >= 0.8 && !j.compos_semaine) return 'Tu es prêt pour une composition complète en conditions réelles : 50 questions, 25 minutes.';
+  if(taux >= 0.8 && !j.compos_semaine) return 'Tu es prêt pour une composition complète en conditions réelles : 50 questions, 30 minutes.';
   if(taux >= 0.8) return 'Très bonne série. Demain, essaie les questions les plus ratées par tous.';
   return 'Demain, dix minutes suffisent : le fil reprendra là où tu bloques.';
 }
@@ -5795,7 +5900,7 @@ function missionDuJour(){
     pm ? { t:`Série de 10 questions en ${pm.matiere}, ta matière la plus fragile`, a:`data-cible="${E(pm.matiere)}"` } : { t:'Série de 10 questions dans une matière de ton choix', a:'data-go="revisions"' },
     { t:'Mini-test express : 5 questions sans t\'arrêter', a:'data-pourtoi="5"' },
     { t:'Lire un chapitre de cours, puis faire ses QCM', a:'data-go="revisions"' },
-    { t:'Composer en conditions réelles : 50 questions, 25 minutes', a:'data-go="grille"' },
+    { t:'Composer en conditions réelles : 50 questions, 30 minutes', a:'data-go="grille"' },
     { t:'Défier un ami : 10 questions en 5 minutes', a:'data-defi-lancer="1"' }
   ];
   return m[jourAnnee() % m.length];
@@ -6397,7 +6502,7 @@ function blocCoursHL(){
     </div>
   </div>`;
 }
-/* Les QCM sans connexion : réservés au Pass */
+/* Les QCM sans connexion : réservés à l'abonnement */
 function blocQcmHL(p, enLigne, termine){
   const libre = packGratuitDispo();
   if(!libre) return `<div class="bloc">
@@ -6414,7 +6519,7 @@ function blocQcmHL(p, enLigne, termine){
       ${!enLigne ? '<p class="sous" style="margin-top:10px">Vous êtes hors ligne : le pack se télécharge quand vous avez du réseau.</p>' : ''}
     </div></div>`;
 }
-/* Le premier pack de 30 questions est offert ; les suivants font partie du Pass. */
+/* Le premier pack de 30 questions est offert ; les suivants font partie de l'abonnement. */
 const packGratuitDispo = () => S.gratuit || estAbonne() || !lireReglages().pack_gratuit_pris;
 function ecranHorsLigne(){
   const p = lirePack();
@@ -6715,6 +6820,14 @@ function htmlCahier(){
 
 /* ---------- mode concentration et plein écran ---------- */
 function appliquerConcentration(){ document.body.classList.toggle('concentration', !!S.concentration && ['qcm','pourtoi','reprise','defi','notion'].includes(S.ecran)); }
+/* Plein écran automatique à l'entrée en composition (silencieux si le téléphone le refuse) */
+function pleinEcranAuto(){
+  try{
+    if(document.fullscreenElement || !document.documentElement.requestFullscreen) return;
+    const p = document.documentElement.requestFullscreen({ navigationUI:'hide' });
+    if(p && p.catch) p.catch(() => {});
+  }catch(e){}
+}
 function basculerPleinEcran(){
   try{
     if(document.fullscreenElement) document.exitFullscreen();
@@ -6897,7 +7010,7 @@ function apptete(){
   t.style.display='flex';
   const jr = joursAvantConcours();
   const droite = {aujourdhui: jr === null ? '' : 'J−' + jr, copie:'copie corrigée', cahier:ouvertes()+' en attente',
-    compte:S.gratuit ? '' : S.abo.actif?nomFormule(S.abo.formule).toLowerCase():'formule gratuite',
+    compte:S.gratuit ? '' : S.abo.actif?nomFormule(S.abo.formule).toLowerCase():'abonnement gratuit',
     revisions:S.niveau.toLowerCase(), qcm:S.matiere||'', abonnement:'', paiement:'sécurisé',
     inscription:'', connexion:'', resultat:'étape 3 sur 3', actualite:'ce matin',
     pourtoi:'pour toi', qdj:'question du jour', gagnants:'classement', notion:'notion du jour', defi:'défi', top:'top 10', parcours:'mon parcours'}[S.ecran] || '';
@@ -6919,7 +7032,7 @@ function apptete(){
 function annoncer(){
   const n = {aujourdhui:'Actualité', actualite:'Actualité du matin', revisions:'Mes cours',
     qcm:'Question', grille:'Composition', copie:'Copie corrigée', cahier:'Mon cahier', compte:'Mon compte',
-    inscription:'Création de compte', connexion:'Connexion', abonnement:'Formules', paiement:'Paiement',
+    inscription:'Création de compte', connexion:'Connexion', abonnement:'Abonnements', paiement:'Paiement',
     test:'Test de niveau', resultat:'Résultat', pourtoi:'Fil pour toi', qdj:'Question du jour',
     question:'Question partagée', gagnants:'Résultats de la composition nationale', notion:'Notion du jour', recherche:'Recherche de questions',
     defi:'Défi entre amis', top:'Top 10 de la semaine', proposer:'Proposer une question', parcours:'Mon parcours'}[S.ecran] || '';
@@ -6947,11 +7060,11 @@ function surcouche(){
   if(!S.modal || (S.util.connecte && S.modal !== 'oubli')){ v.hidden = true; v.innerHTML=''; return; }
 
   const mode = S.modal;                       // inscription · connexion · oubli
-  const titres = { inscription:'Inscription', connexion:'Connexion', oubli:'Code oublié' };
+  const titres = { inscription:'Crée ton compte gratuitement en 30 secondes', connexion:'Connexion', oubli:'Mot de passe oublié' };
   const intros = {
-    inscription:"Crée ton compte pour garder tes erreurs, ton classement et ta progression. C'est gratuit et ça prend trente secondes.",
-    connexion:"Entre ton numéro et ton code pour retrouver ta progression.",
-    oubli:"Donne ton numéro et la couleur choisie à l'inscription, puis choisis un nouveau code. Trois essais au plus : ensuite, l'administrateur s'en occupe sur WhatsApp."
+    inscription:"",
+    connexion:"Entre ton numéro et ton mot de passe pour retrouver ta progression.",
+    oubli:"Donne ton numéro et la couleur choisie à l'inscription, puis choisis un nouveau mot de passe. Trois essais au plus : ensuite, l'administrateur s'en occupe sur WhatsApp."
   };
 
   v.hidden = false;
@@ -6962,7 +7075,7 @@ function surcouche(){
       <span style="font-family:var(--d);font-weight:800;font-size:15px">MON <i style="font-style:normal;color:var(--laterite-txt)">CONCOURS</i></span></div>
 
     <div class="titre-panneau">${titres[mode]}</div>
-    <p class="intro">${intros[mode]}</p>
+    ${intros[mode] ? `<p class="intro">${intros[mode]}</p>` : ''}
 
     ${S.erreur?`<div class="alerte" role="alert">${E(S.erreur)}</div>`:''}
 
@@ -6981,39 +7094,35 @@ function surcouche(){
           ${COULEURS.map(c=>`<option value="${c}" ${S.form.couleur===c?'selected':''}>${c}</option>`).join('')}
         </select></div>` : ''}
 
-    <div class="champ"><label for="m-pin">${mode==='oubli'?'Nouveau code à 4 chiffres':'Code secret à 4 chiffres'}</label>
+    <div class="champ"><label for="m-pin">${mode==='oubli'?'Nouveau mot de passe (4 chiffres)':'Ton mot de passe (4 chiffres)'}</label>
       <div class="avec-oeil">
         <input id="m-pin" type="${S.codeVisible?'text':'password'}" inputmode="numeric" maxlength="4"
           value="${E(S.form.pin)}" placeholder="••••" oninput="maj('pin',this.value)">
-        <button class="oeil" data-oeil="1" aria-label="${S.codeVisible?'Masquer le code':'Afficher le code'}">${S.codeVisible?'masquer':'voir'}</button>
+        <button class="oeil" data-oeil="1" aria-label="${S.codeVisible?'Masquer le mot de passe':'Afficher le mot de passe'}">${S.codeVisible?'masquer':'voir'}</button>
       </div></div>
 
     ${(mode === 'inscription' || mode === 'oubli') ? `
-      <div class="champ"><label for="m-pin2">Confirme le code</label>
+      <div class="champ"><label for="m-pin2">Confirme le mot de passe</label>
         <input id="m-pin2" type="${S.codeVisible?'text':'password'}" inputmode="numeric" maxlength="4"
           value="${E(S.form.pin2||'')}" placeholder="••••" oninput="maj('pin2',this.value)"></div>` : ''}
 
     ${mode === 'inscription' ? `
-      <div class="champ"><label for="m-couleur">Ta couleur préférée</label>
+      <div class="champ"><label for="m-couleur">Ta couleur préférée <span style="font-weight:400">(à retenir en cas d'oubli de ton mot de passe)</span></label>
         <select id="m-couleur" onchange="maj('couleur',this.value)">
           <option value="">— choisis —</option>
           ${COULEURS.map(c=>`<option value="${c}" ${S.form.couleur===c?'selected':''}>${c}</option>`).join('')}
-        </select>
-        <div class="aide">Elle servira à retrouver ton code si tu l'oublies. Choisis-en une dont tu te souviendras.</div></div>` : ''}
+        </select></div>` : ''}
 
     <button class="cta" data-${mode === 'inscription' ? 'inscrire' : mode === 'connexion' ? 'connecter' : 'reinitialiser'}="1">
-      ${mode === 'inscription' ? 'Créer mon compte' : mode === 'connexion' ? 'Me connecter' : 'Changer mon code'}
-      ${mode === 'inscription' ? '<small>Gratuit · aucune carte bancaire</small>' : ''}</button>
+      ${mode === 'inscription' ? 'Créer mon compte' : mode === 'connexion' ? 'Me connecter' : 'Changer mon mot de passe'}</button>
 
     ${mode === 'inscription'
       ? `<button class="lien" data-bascule="connexion">J'ai déjà un compte</button>`
       : mode === 'connexion'
         ? `<button class="lien" data-bascule="inscription">Créer un compte</button>
-           <button class="lien" data-bascule="oubli">J'ai oublié mon code</button>`
+           <button class="lien" data-bascule="oubli">J'ai oublié mon mot de passe</button>`
         : `<button class="lien" data-bascule="connexion">Revenir à la connexion</button>`}
-    ${mode === 'oubli' ? `<a class="cta creux" style="display:block;margin-top:10px;text-decoration:none"
-        href="https://wa.me/226${CONTACT.adminTel}?text=${encodeURIComponent("Bonjour, j'ai oublié mon code Mon Concours. Mon numéro : " + (S.form.tel || ''))}"
-        target="_blank" rel="noopener">${S.bloque ? "Écrire à l'administrateur sur WhatsApp" : "Couleur oubliée ? Écrire à l'administrateur"}<small>Il vérifie votre identité et change votre code</small></a>` : ''}
+    ${mode === 'oubli' ? `<button class="cta creux" style="margin-top:10px" data-oubli-wa="1">${S.bloque ? "Écrire à l'administrateur sur WhatsApp" : "Couleur oubliée ? Écrire à l'administrateur"}<small>Il vérifie votre identité et change votre mot de passe</small></button>` : ''}
   </div>`;
 }
 
@@ -7097,7 +7206,7 @@ function rendre(){
 }
 
 document.addEventListener('click', ev=>{
-  const t = ev.target.closest('[data-matiere],[data-vers],[data-musique],[data-notifs],[data-notifs-tout],[data-notifs-vider],[data-notif-lire],[data-copier],[data-partage-natif],[data-fermer-partage],[data-paieretour],[data-preuve-modifier],[data-preuve-envoyer],[data-plan-faire],[data-plan-effacer],[data-copie-plus-tard],[data-pass],[data-proche],[data-code-ouvrir],[data-code-valider],[data-copier-num],[data-demain],[data-feuille],[data-lire-feuille],[data-lire-cahier],[data-lecteur-dl],[data-nivinfo],[data-archive],[data-toutes-compos],[data-partage],[data-oeil],[data-reinitialiser],[data-lire],[data-telecharger],[data-apercu],[data-saut],[data-compotab],[data-bascule-theme],[data-modal],[data-entrer],[data-bascule],[data-plustard],[data-deconnecter],[data-theme-choix],[data-erreursdusoir],[data-cible],[data-cours],[data-inscrire],[data-connecter],[data-oubli],[data-formule],[data-operateur],[data-payer],[data-paiefin],[data-paieannul],[data-go],[data-toutcahier],[data-actu],[data-actu-repli],[data-niv],[data-mat],[data-qcm],[data-qsuiv],[data-cahierfreq],[data-classement],[data-diagnostic],[data-defi],[data-duel],[data-badges],[data-phase],[data-conc],[data-dep],[data-test],[data-tb],[data-tremettre],[data-seance],[data-rep],[data-suivante],[data-b],[data-remettre],[data-recommencer],[data-reprise],[data-rr],[data-fin-reprise],[data-qcm-relancer],[data-compo-relancer],[data-remise-relancer],[data-recu]');
+  const t = ev.target.closest('[data-matiere],[data-vers],[data-musique],[data-notifs],[data-notifs-tout],[data-notifs-vider],[data-notif-lire],[data-copier],[data-partage-natif],[data-fermer-partage],[data-paieretour],[data-preuve-modifier],[data-preuve-envoyer],[data-plan-faire],[data-plan-effacer],[data-copie-plus-tard],[data-pass],[data-proche],[data-code-ouvrir],[data-code-valider],[data-copier-num],[data-demain],[data-feuille],[data-lire-feuille],[data-lire-cahier],[data-lecteur-dl],[data-nivinfo],[data-archive],[data-toutes-compos],[data-partage],[data-oeil],[data-reinitialiser],[data-lire],[data-telecharger],[data-apercu],[data-saut],[data-compotab],[data-bascule-theme],[data-modal],[data-entrer],[data-bascule],[data-plustard],[data-deconnecter],[data-theme-choix],[data-erreursdusoir],[data-cible],[data-cours],[data-inscrire],[data-connecter],[data-oubli],[data-oubli-wa],[data-formule],[data-operateur],[data-payer],[data-paiefin],[data-paieannul],[data-go],[data-toutcahier],[data-actu],[data-actu-repli],[data-niv],[data-mat],[data-qcm],[data-qsuiv],[data-cahierfreq],[data-classement],[data-diagnostic],[data-defi],[data-duel],[data-badges],[data-phase],[data-conc],[data-dep],[data-test],[data-tb],[data-tremettre],[data-seance],[data-rep],[data-suivante],[data-b],[data-remettre],[data-recommencer],[data-reprise],[data-rr],[data-fin-reprise],[data-qcm-relancer],[data-compo-relancer],[data-remise-relancer],[data-recu]');
   if(!t) return;
   const d = t.dataset;
 
@@ -7120,9 +7229,9 @@ document.addEventListener('click', ev=>{
     const pin2 = (f.pin2 || '').replace(/\D/g,'');
     if(f.nom.trim().length < 3) S.erreur = "Écris ton nom et ton prénom.";
     else if(tel.length !== 8) S.erreur = "Le numéro doit comporter 8 chiffres.";
-    else if(pin.length !== 4) S.erreur = "Le code secret doit comporter 4 chiffres.";
-    else if(pin !== pin2) S.erreur = "Les deux codes ne sont pas identiques.";
-    else if(!f.couleur) S.erreur = "Choisis ta couleur préférée : elle servira si tu oublies ton code.";
+    else if(pin.length !== 4) S.erreur = "Le mot de passe doit comporter 4 chiffres.";
+    else if(pin !== pin2) S.erreur = "Les deux mots de passe ne sont pas identiques.";
+    else if(!f.couleur) S.erreur = "Choisis ta couleur préférée : elle servira si tu oublies ton mot de passe.";
     else {
       S.erreur = 'Création du compte…'; surcouche();
       creerCompte(f.nom.trim(), tel, pin).then(r => {
@@ -7144,7 +7253,7 @@ document.addEventListener('click', ev=>{
   if(d.connecter){
     const tel = S.form.tel.replace(/\D/g,''), pin = S.form.pin.replace(/\D/g,'');
     if(tel.length !== 8 || pin.length !== 4){
-      S.erreur = "Numéro à 8 chiffres et code à 4 chiffres."; return surcouche(); }
+      S.erreur = "Numéro à 8 chiffres et mot de passe à 4 chiffres."; return surcouche(); }
     S.erreur = 'Connexion…'; surcouche();
     (async () => {
       /* Un code à quatre chiffres se devine. Au bout de huit essais ratés
@@ -7154,7 +7263,7 @@ document.addEventListener('click', ev=>{
           const { data: v } = await base.rpc('controle_connexion', { p_telephone: tel });
           if(v && v.bloque){
             S.bloque = true;
-            S.erreur = `Trop d'essais. Réessayez dans ${v.minutes} minute${v.minutes>1?'s':''}, ou utilisez « Code oublié ».`;
+            S.erreur = `Trop d'essais. Réessayez dans ${v.minutes} minute${v.minutes>1?'s':''}, ou utilisez « Mot de passe oublié ».`;
             return surcouche();
           }
         }catch(e){}
@@ -7179,7 +7288,8 @@ document.addEventListener('click', ev=>{
     })();
     return;
   }
-  if(d.oubli){ S.modal = 'oubli'; S.erreur = ''; return surcouche(); }
+  if(d.oubliWa){ pister('FORGOT_PASSWORD_WHATSAPP', {}); return ouvrirWhatsappOubli(); }
+  if(d.oubli){ S.modal = 'oubli'; S.erreur = ''; pister('FORGOT_PASSWORD_WHATSAPP', {}); ouvrirWhatsappOubli(); return surcouche(); }
   if(d.recu){ telechargerRecu(d.recu); return; }
   if(d.qcmRelancer){ const r = S.qcmRep; S.qcmRep = undefined; return repondreQcm(r); }
   if(d.compoRelancer){ S.compoEtat = null; return ouvrirComposition(); }
@@ -7321,14 +7431,14 @@ document.addEventListener('click', ev=>{
     if(el) el.scrollIntoView({ behavior:'smooth', block:'start' });
     return;
   }
-  if(d.bascule){ S.modal = d.bascule; S.erreur=''; return surcouche(); }
+  if(d.bascule){ S.modal = d.bascule; S.erreur=''; if(d.bascule === 'oubli'){ pister('FORGOT_PASSWORD_WHATSAPP', {}); ouvrirWhatsappOubli(); } return surcouche(); }
   if(d.oeil){ S.codeVisible = !S.codeVisible; return surcouche(); }
   if(d.reinitialiser){
     const tel = S.form.tel.replace(/\D/g,''), pin = S.form.pin.replace(/\D/g,''), pin2 = (S.form.pin2||'').replace(/\D/g,'');
     if(tel.length !== 8) S.erreur = "Le numéro doit comporter 8 chiffres.";
     else if(!S.form.couleur) S.erreur = "Choisis la couleur donnée à l'inscription.";
-    else if(pin.length !== 4) S.erreur = "Le nouveau code doit comporter 4 chiffres.";
-    else if(pin !== pin2) S.erreur = "Les deux codes ne sont pas identiques.";
+    else if(pin.length !== 4) S.erreur = "Le nouveau mot de passe doit comporter 4 chiffres.";
+    else if(pin !== pin2) S.erreur = "Les deux mots de passe ne sont pas identiques.";
     else {
       S.erreur = 'Vérification…'; surcouche();
       base.rpc('reinitialiser_code', { p_telephone: tel, p_couleur: S.form.couleur, p_nouveau: pin })
@@ -7337,7 +7447,7 @@ document.addEventListener('click', ev=>{
           if(!d2.ok){ S.bloque = !!d2.bloque; S.erreur = d2.message || "Impossible de changer le code."; return surcouche(); }
           S.erreur = ''; S.modal = 'connexion'; S.form.pin = ''; S.form.pin2 = '';
           surcouche();
-          signalCandidat('Code changé. Connecte-toi avec le nouveau code.');
+          signalCandidat('Mot de passe changé. Connecte-toi avec le nouveau.');
         });
       return;
     }
@@ -7427,7 +7537,6 @@ document.addEventListener('click', ev=>{
 
   if(d.compotab){
     basculerCompoTab(d.compotab);
-    const c = document.getElementById('corps'); if(c) c.scrollTop = 0;
     return;
   }
   if(d.apercu !== undefined){
@@ -7444,6 +7553,7 @@ document.addEventListener('click', ev=>{
     const l = S.reponses[q] || [];
     if(l.includes(i)) return;              // définitif : pas de retour en arrière
     S.reponses[q] = [...l, i].sort();
+    S.derniereQ = q;
     sauverEpreuve();
     pister('COMPOSITION_ANSWER_SELECTED', { question: q + 1, total: S.grille.length });
     ecranGrille();

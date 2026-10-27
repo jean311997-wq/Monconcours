@@ -1139,7 +1139,17 @@ body.en-transition *{transition:background-color .4s ease, color .4s ease, borde
   border:1px solid var(--trait);border-radius:999px;padding:4px 10px}
 
 /* ---------- ERREUR RÉCEMMENT VALIDÉE : confirmation avant disparition ---------- */
-.err-validee{opacity:.62;border-color:var(--vert-bord);background:var(--vert-fond)}
+.err-validee{border-color:var(--vert-bord);background:var(--vert-fond);overflow:hidden;max-height:700px;
+  animation:erreurDissoute 1.7s ease .9s forwards}
+/* l'erreur corrigée se dissout, puis la place se referme */
+@keyframes erreurDissoute{
+  0%{opacity:1;filter:blur(0);transform:none}
+  55%{opacity:.35;filter:blur(3px);transform:scale(.985)}
+  100%{opacity:0;filter:blur(9px);transform:scale(.95);max-height:0;margin-top:0;margin-bottom:0;padding-top:0;padding-bottom:0;border-width:0}
+}
+.rep-bloc.dissout{overflow:hidden;max-height:900px;animation:erreurDissoute 1.5s ease .8s forwards}
+.rep-bloc .opt.juste{animation:reponsePulse .5s ease}
+@keyframes reponsePulse{0%{transform:scale(1)}40%{transform:scale(1.03)}100%{transform:scale(1)}}
 .echeance.ok{color:var(--vert,#0E7A54);font-weight:700}
 
 /* Plus de lisibilité générale sur le cahier : titres, contrastes, respiration */
@@ -1710,7 +1720,7 @@ body.sans-anim .nd-barre i{transition:none}
 #ouvrir-fichier{position:fixed;left:12px;right:12px;bottom:calc(76px + env(safe-area-inset-bottom));z-index:60;display:flex;align-items:center;gap:8px;
   background:var(--ardoise2);border:1px solid var(--or);border-radius:12px;padding:10px 12px;font-size:13px;box-shadow:0 6px 24px rgba(0,0,0,.35)}
 #ouvrir-fichier span{flex:1}
-#ouvrir-fichier .ouvrir{background:var(--or);color:#1a1405;border:0;border-radius:8px;padding:8px 12px;font-weight:700;font-size:12.5px}
+#ouvrir-fichier .ouvrir{flex:1;background:var(--or);color:#1a1405;border:0;border-radius:8px;padding:8px 12px;font-weight:700;font-size:12.5px}
 #ouvrir-fichier .fermer{background:none;border:0;color:var(--craie2);font-size:20px;line-height:1;padding:0 4px}
 
 .geste-sujet .fleche{animation-name:flecheGauche}
@@ -1749,6 +1759,8 @@ body.sans-anim .nd-barre i{transition:none}
 .plan-c{flex:none;width:22px;height:22px;border-radius:50%;border:1.5px solid var(--trait);display:grid;place-items:center;font-size:13px;color:var(--or)}
 .plan-l.fait .plan-c{background:var(--cachet);border-color:var(--cachet);color:#fff}
 .plan-t{flex:1;min-width:0}
+.plan-l .mini{width:auto;flex:none;padding:8px 14px;white-space:nowrap}
+.plan-l .plan-t b{overflow-wrap:anywhere}
 .plan-t b{display:block;font-size:13.5px}
 .plan-t em{font-style:normal;font-size:12px;color:var(--craie2)}
 
@@ -1771,3 +1783,31 @@ body.sans-anim .nd-barre i{transition:none}
 .flash-reste b{font-variant-numeric:tabular-nums}
 @media(min-width:860px){.offre-carte{bottom:24px}}
 @media(prefers-reduced-motion:reduce){.offre-carte{transition:none}}
+
+.profil h1 .pseudo-sep{font-weight:500;opacity:.7}
+
+/* fenêtre « Félicitations » / « Abonnement rejeté » */
+.fenetre-evt{position:fixed;inset:0;z-index:230;display:flex;align-items:center;justify-content:center;padding:20px;
+  background:rgba(20,24,20,.55);opacity:0;transition:opacity .25s ease}
+.fenetre-evt.vu{opacity:1}
+.fe-carte{position:relative;width:100%;max-width:380px;background:var(--encre);color:var(--craie);border:1px solid var(--trait);border-radius:22px;
+  padding:34px 22px 22px;text-align:center;box-shadow:0 24px 70px rgba(0,0,0,.4);transform:translateY(18px) scale(.96);transition:transform .35s cubic-bezier(.2,1.2,.3,1);overflow:hidden}
+.fenetre-evt.vu .fe-carte{transform:none}
+body[data-theme="clair"] .fe-carte{background:#fff}
+.fe-badge{width:76px;height:76px;margin:0 auto 14px;border-radius:50%;display:grid;place-items:center;font-size:38px;font-weight:800;color:#fff;
+  animation:feBadge .6s cubic-bezier(.2,1.4,.3,1) .15s both}
+.fenetre-evt.ok .fe-badge{background:#0E7A54;box-shadow:0 0 0 10px rgba(14,122,84,.14)}
+.fenetre-evt.refus .fe-badge{background:#B23A2E;box-shadow:0 0 0 10px rgba(178,58,46,.14)}
+@keyframes feBadge{0%{transform:scale(0) rotate(-40deg)}100%{transform:scale(1) rotate(0)}}
+.fe-titre{font-family:var(--d);font-size:25px;font-weight:800;margin:0 0 4px}
+.fe-sous{font-size:15px;font-weight:700;margin:0 0 10px;color:#0E7A54}
+.fe-texte{font-size:14px;line-height:1.55;margin:0 0 20px;color:var(--craie2)}
+.fe-carte .cta{width:100%}
+.fe-confettis{position:absolute;left:50%;top:70px;width:0;height:0;pointer-events:none}
+.fe-confettis i{position:absolute;width:8px;height:12px;border-radius:2px;background:hsl(calc(var(--i)*23),80%,55%);opacity:0;
+  animation:feConfetti 1.3s ease-out .25s forwards;--a:calc(var(--i)*22.5deg)}
+@keyframes feConfetti{
+  0%{opacity:1;transform:rotate(var(--a)) translateY(0) rotate(0)}
+  100%{opacity:0;transform:rotate(var(--a)) translateY(-120px) rotate(280deg)}}
+@media(prefers-reduced-motion:reduce){.fe-badge,.fe-confettis i{animation:none}.fe-confettis{display:none}}
+.panneau .titre-panneau + .champ{margin-top:14px}
