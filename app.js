@@ -89,7 +89,7 @@ const S = {
   voirClassement:false, voirDiagnostic:false, voirDefi:false, voirBadges:false,
   util:{nom:'', tel:'', pin:'', connecte:false},
   form:{nom:'', tel:'', pin:'', pin2:'', couleur:''}, codeVisible:false, erreur:'',
-  abo:{actif:false, formule:null, jours_restants:0, echeance:'accès découverte'},
+  abo:{actif:false, formule:null, jours_restants:0, echeance:'abonnement gratuit'},
   gratuit:true,             // phase de lancement : tout est gratuit (le serveur fait foi)
   theme:'clair', sessionCounter:0, cahierDepuisGrille:false,
   modal:null, modalDejaVu:false, matiereOuverte:null, sync:null, bloque:false, qcmPos:{}, rechercheCours:'', compositions:[], niveauConnu:false, notifications:[], notifCharge:false, dateConcours:null, nomConcours:null, typeEpreuve:'Concours direct · épreuve écrite',
@@ -492,6 +492,7 @@ function prechargerOutilsPdf(){
   });
 }
 function aller(e){
+  if(e !== 'abonnement' && S.raisonAbo) S.raisonAbo = '';
   /* Une copie remise ne se noircit plus. Revenir sur « Composition »
      après avoir quitté ou terminé ouvre donc un nouveau sujet, au lieu de
      rouvrir la feuille corrigée. Si la copie n'est pas encore partie
@@ -568,7 +569,7 @@ function nav(){
       ? 'Accès gratuit à tout le site pendant le lancement'
       : S.abo.actif
       ? nomFormule(S.abo.formule) + ' · ' + E(S.abo.echeance)
-      : 'Accès découverte · l\'actualité du matin reste libre'}</div>`;
+      : 'Abonnement gratuit · l\'actualité du matin reste gratuite à vie'}</div>`;
 }
 
 /* =====================================================================
@@ -976,13 +977,20 @@ async function chargerQuestions(force){
   if(memo && memo.length){ S.banque = memo; S.banqueEtat = 'pret'; if(['revisions','qcm'].includes(S.ecran)) rendre(); }
   else S.banqueEtat = 'chargement';
   try{
-    const { data, error } = await base.from('questions')
-      .select('id, enonce, niveau, matiere_id, matieres(nom, ordre, niveaux), question_options(position, texte)')
-      .eq('statut', 'publie')
-      .or('niveau.eq.' + niv + ',niveau.is.null')
-      .order('cree_le')
-      .limit(1000);
-    if(error) throw error;
+    /* par pages de 1000 : la base en renvoie 1000 au plus d'un coup, et les dernières matières ajoutées
+       (psychotechnique) restaient dehors dès que le niveau dépassait 1000 questions. */
+    let data = [];
+    for(let a = 0; a < 8000; a += 1000){
+      const { data: page, error } = await base.from('questions')
+        .select('id, enonce, niveau, matiere_id, matieres(nom, ordre, niveaux), question_options(position, texte)')
+        .eq('statut', 'publie')
+        .or('niveau.eq.' + niv + ',niveau.is.null')
+        .order('cree_le').order('id')
+        .range(a, a + 999);
+      if(error) throw error;
+      data = data.concat(page || []);
+      if(!page || page.length < 1000) break;
+    }
     const parMatiere = {};
     (data || []).forEach(q => {
       if(!q.matieres) return;
@@ -1207,6 +1215,7 @@ function ouvrirNotif(n){
   }
   if(genre === 'defi' && id) return ouvrirDefi(id);
   if(genre === 'compte') return aller('compte');
+  if(genre === 'abonnement') return aller('abonnement');
   if(genre === 'fautes') return lancerFautes();
   if(genre === 'reprendre') return aller(repriseCible(id) || 'aujourdhui');
   if(genre === 'parcours') return aller('parcours');
@@ -1275,7 +1284,7 @@ async function chargerAbonnement(){
         echeance: data.jours_restants + ' jour' + (data.jours_restants > 1 ? 's' : '') + ' restant' + (data.jours_restants > 1 ? 's' : '')
       };
     } else {
-      S.abo = {actif:false, formule:null, jours_restants:0, echeance:'accès découverte'};
+      S.abo = {actif:false, formule:null, jours_restants:0, echeance:'abonnement gratuit'};
     }
     /* la dernière demande de paiement : en attente, confirmée (reçu), refusée */
     const { data: dem } = await base.rpc('mon_paiement_en_cours');
@@ -1531,7 +1540,7 @@ async function ouvrirSession(tel, pin){
 
 async function reprendreSession(){
   if(!base) return;
-  try{ await reprendreSession0(); }finally{ S.sessionPrete = true; chargerEpreuve(); }
+  try{ await reprendreSession0(); }finally{ S.sessionPrete = true; chargerEpreuve(); setTimeout(() => rappelFinEssai(0), 5000); }
 }
 async function reprendreSession0(){
   const { data } = await base.auth.getSession();
@@ -1969,7 +1978,7 @@ function blocFinEssai(){
   const f = FORMULES.mensuelle;
   return `<div class="carte fin-essai" role="status">
     <div class="fe-ligne"><b>Votre essai ${reste}</b></div>
-    <p class="sous" style="margin:6px 0 12px">Ensuite, l'accès découverte garde 10 corrections par jour et 3 compositions. Pour tout garder sans limite : ${E(f.n)}, ${E(f.prix)} pour 30 jours, soit ${E(f.jour)}.</p>
+    <p class="sous" style="margin:6px 0 12px">Ensuite, l'abonnement gratuit garde 10 corrections par jour et 3 compositions. Pour tout garder sans limite : ${E(f.n)}, ${E(f.prix)} pour 30 jours, soit ${E(f.jour)}.</p>
     <button class="cta" data-pass="mensuelle">Garder l'accès complet · ${E(f.prix)}</button>
     <button class="cta creux" style="margin-top:8px" data-go="abonnement">Voir tous les abonnements</button>
   </div>`;
@@ -2004,10 +2013,11 @@ function ecranAujourdhui(){
     <div class="colonnes">
     <div>
     <div class="bloc">
-      <div class="carte">
-        ${ACTU.length ? ACTU.slice(0,3).map((a,k)=>carteActu(a,k===0)).join('') : blocActuVide()}
+      <div class="carte carte-actu" id="actu-accueil">
+        ${ACTU.length ? (S.actuAccueilOuverte ? ACTU : ACTU.slice(0,3)).map((a,k)=>carteActu(a,k===0)).join('') : blocActuVide()}
+        ${ACTU.length > 3 ? barreActu(!S.actuAccueilOuverte, ACTU.length - 3, 'data-actu-accueil') : ''}
       </div>
-      ${ACTU.length > 3 ? `<button class="voir-tout" data-go="actualite"><span>Voir les ${ACTU.length} informations</span><b aria-hidden="true">→</b></button>` : ''}
+      ${ACTU.length > 3 ? `<button class="voir-tout" data-go="actualite"><span>Ouvrir la page Actualité</span><b aria-hidden="true">→</b></button>` : ''}
     </div>
     </div>
     <div>
@@ -2049,6 +2059,11 @@ function ecranAujourdhui(){
    premières informations, puis la redéploie. Rien n'est supprimé : la liste
    est seulement masquée, pour ne pas saturer l'écran quand on a fini de lire. */
 const ACTU_VISIBLES_REPLIEES = 3;
+function barreActu(replie, reste, attr){
+  return `<div class="actu-bascule"><button class="actu-barre" ${attr}="1" aria-expanded="${replie ? 'false' : 'true'}"
+    aria-label="${replie ? 'Afficher les ' + reste + ' autres informations' : 'Réduire la liste des informations'}">
+    <span class="ab-txt">${replie ? 'Voir les ' + reste + ' autres' : 'Réduire'}</span>${chevronActu(replie)}</button></div>`;
+}
 const chevronActu = replie => `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${replie ? 'M6 9l6 6 6-6' : 'M6 15l6-6 6 6'}"/></svg>`;
 
 function ecranActualite(){
@@ -2072,11 +2087,7 @@ function ecranActualite(){
     <div class="bloc" style="margin-top:12px">
       <div class="libelle">${S.actuOnglet==='national'?'Burkina Faso':'Monde et organisations'}<span class="num">${liste.length}</span></div>
       <div class="carte" id="liste-actu">${liste.length ? montrees.map(a => carteActu(a)).join('') : blocActuVide()}</div>
-      ${peutReplier ? `<div class="actu-bascule">
-        <button class="actu-chevron" data-actu-repli="1" aria-expanded="${replie ? 'false' : 'true'}"
-          aria-label="${replie ? 'Afficher les ' + (liste.length - ACTU_VISIBLES_REPLIEES) + ' autres informations' : 'Réduire la liste des informations'}">
-          ${replie ? `<span>+${liste.length - ACTU_VISIBLES_REPLIEES}</span>` : ''}${chevronActu(replie)}
-        </button></div>` : ''}
+      ${peutReplier ? barreActu(replie, liste.length - ACTU_VISIBLES_REPLIEES, 'data-actu-repli') : ''}
     </div>
 
     <button class="cta" style="margin-top:16px" data-go="aujourdhui">J'ai lu · valider ma tâche</button>
@@ -2253,7 +2264,7 @@ function ecranConnexion(){
 /* =====================================================================
    ABONNEMENT ET PAIEMENT
    ===================================================================== */
-const nomFormule = f => ({ semaine:'Abonnement Semaine', mensuelle:'Abonnement Mois', annuelle:'Abonnement Année', essai:'Essai de 7 jours' })[f] || 'Abonnement';
+const nomFormule = f => ({ semaine:'Abonnement Semaine', mensuelle:'Abonnement Mois', annuelle:'Abonnement Année', essai:'Essai gratuit' })[f] || 'Abonnement';
 /* Trois abonnements, jamais quatre. Aucun chiffre inventé : le prix par jour est un simple calcul. */
 const FORMULES = {
   semaine:  { cle:'semaine',  n:'Abonnement Semaine', prix:'500 FCFA',   montant:500,  per:'7 jours',  jour:'71 F par jour', reco:false },
@@ -2274,6 +2285,16 @@ function peutProposer(point){
   if(t && Date.now() - t < 3 * 86400000) return false;
   if(S.propositionPoint !== point){ S.propositionPoint = point; pister('PAYWALL_VIEWED', { point }); }
   return true;
+}
+/* Ce qui est payant : un seul passage. Un visiteur crée d'abord son compte ;
+   un compte sans abonnement arrive directement sur les abonnements, avec la raison. */
+function exigerAbonnement(raison, origine){
+  if(S.gratuit || estAbonne()) return true;
+  if(!S.util.connecte){ S.modal = 'inscription'; S.erreur = ''; surcouche(); return false; }
+  S.raisonAbo = raison || '';
+  pister('PAYWALL_VIEWED', { origine: origine || 'autre' });
+  aller('abonnement');
+  return false;
 }
 const peutFeuilleDetaillee = () => S.gratuit || estAbonne() || ((S.stats && S.stats.compositions) || 0) <= 2;
 
@@ -2334,6 +2355,7 @@ function ecranAbonnement(){
       <p class="sous">${abo.jours_restants} jour${abo.jours_restants>1?'s':''} restant${abo.jours_restants>1?'s':''}, jusqu'au ${new Date(abo.fin_le).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'})}</p>
     </div>
     <p class="sous" style="margin:14px 0 4px">Pour prolonger, choisissez un abonnement : il s'ajoute à la fin du vôtre.</p>` : `
+    ${S.raisonAbo ? `<div class="raison-abo"><span>${ico('cadenas',16)}</span><p>${E(S.raisonAbo)}</p></div>` : ''}
     <h1 class="titre">Prépare ton concours<br>sans limite</h1>
     <p class="sous" style="margin:10px 0 18px">Corrections illimitées, compositions illimitées, feuille corrigée détaillée, plan de révision et mode hors ligne.</p>`}
 
@@ -2366,18 +2388,16 @@ function ecranAbonnement(){
     }).join('')}
     ${blocAlternatives()}`}
 
-    <div class="bloc" style="margin-top:20px">
-      <div class="libelle">Ce que comprend chaque accès</div>
-      <div class="comparatif">
-        <div class="cp-col">
-          <b>Accès découverte</b><small>Sans payer</small>
-          <ul><li>Actualité du matin</li><li>Test de niveau</li><li>Cahier d'erreurs</li><li>10 corrections par jour</li><li>3 compositions offertes</li><li>Composition nationale du samedi</li></ul>
-        </div>
-        <div class="cp-col pay">
-          <b>Abonnement</b><small>Payant</small>
-          <ul><li>Corrections illimitées</li><li>Compositions illimitées</li><li>Feuille corrigée détaillée en PDF</li><li>Plan de révision</li><li>Packs hors ligne</li></ul>
-        </div>
-      </div>
+    <div class="bloc inclus">
+      <div class="libelle">Chaque abonnement comprend</div>
+      <ul class="inclus-liste">
+        <li>Corrections illimitées, tous les jours</li>
+        <li>Compositions illimitées</li>
+        <li>Feuille corrigée détaillée en PDF</li>
+        <li>Cours en PDF et lecture sans connexion</li>
+        <li>Packs de questions hors ligne</li>
+        <li>Plan de révision de la semaine</li>
+      </ul>
     </div>
   </div>`;
 }
@@ -2573,7 +2593,7 @@ function ecranRevisions(){
     ${!S.util.connecte ? `<div class="carte" style="margin-top:12px">
       <p class="sous">${S.gratuit ? "Sans compte, tu peux lire les questions. Pour voir la correction et garder tes erreurs, crée ton compte : c'est gratuit." : "Sans compte, tu peux lire les questions. Pour voir la correction, crée ton compte gratuit : 10 corrections par jour, sans limite avec l'abonnement."}</p>
     </div>` : (!S.abo.actif && !S.gratuit ? `<div class="carte" style="margin-top:12px">
-      <p class="sous">Accès découverte : 10 corrections par jour et 3 compositions offertes. L'abonnement (payant) les rend illimitées.</p>
+      <p class="sous">Abonnement gratuit : 10 corrections par jour et 3 compositions offertes. L'abonnement payant les rend illimitées.</p>
     </div>` : '')}
   </div>`;
 }
@@ -3400,6 +3420,7 @@ function feuilleArchive(id){
    précédée d'une page de séparation « Composition N ». */
 const corpsFeuille = html => html.slice(html.indexOf('<body>') + 6, html.indexOf('<div class="noimp">'));
 function toutesCompositions(){
+  if(!exigerAbonnement('Le PDF de toutes vos compositions fait partie de l\'abonnement.', 'compos_pdf')) return;
   if(feuilleBloquee()) return;
   if(!base){ toast('Connexion nécessaire pour réunir vos compositions.'); return; }
   const liste = ((S.journee && S.journee.compositions) || []).filter(c => c.sur > 0 && !c.collective).slice(0, 40).reverse();
@@ -3594,7 +3615,7 @@ async function chargerRessources(){
 /* Lecture sans réseau : une fois connecté, le téléphone garde en silence les cours des trois
    niveaux (troisième, terminale, licence). Les cours sont du texte : quelques dizaines de Ko. */
 async function garderCoursHorsLigne(){
-  if(!base || !navigator.onLine || garderCoursHorsLigne.enCours) return;
+  if(!base || !navigator.onLine || garderCoursHorsLigne.enCours || !(S.gratuit || estAbonne())) return;
   garderCoursHorsLigne.enCours = true;
   try{
     for(const niv of ['troisieme', 'terminale', 'licence']){
@@ -3677,7 +3698,7 @@ function ecranQcm(){
       return `
       <div class="retour mal">
         ${c.quota
-          ? `<b>Vous avez atteint la limite de l'accès découverte.</b>Vos 10 corrections du jour sont faites : elles reviennent demain. Pour continuer maintenant, faites l'abonnement.`
+          ? `<b>Vous avez atteint votre limite d'essai gratuit.</b>Vos 10 corrections du jour sont faites : elles reviennent demain. Pour continuer maintenant, faites l'abonnement.`
           : `<b>${c.connexion ? 'Compte nécessaire' : 'Correction indisponible'}</b>${E(c.message || '')}`}
       </div>
       ${offre ? `<button class="cta" style="margin-top:12px" data-go="abonnement">Faire l'abonnement</button>` : ''}
@@ -3747,7 +3768,7 @@ function blocPoint2(){
       ${moy !== null ? `<p class="sous" style="margin:0 0 6px">Ta moyenne sur tes trois compositions : <b>${moy}/50</b>.</p>` : ''}
       ${rest !== null && rest > 0 ? `<p class="sous" style="margin:0 0 6px">Il te reste <b>${rest} sujet${rest > 1 ? 's' : ''}</b> à composer.</p>` : ''}
     </div>
-    ${offre ? `<p class="sous" style="margin:0 0 12px"><b>Vous avez atteint les limites de l'accès découverte.</b> Faites l'abonnement, puis choisissez l'abonnement qui vous convient.</p>
+    ${offre ? `<p class="sous" style="margin:0 0 12px"><b>Vous avez atteint vos limites d'essai gratuit.</b> Faites l'abonnement, puis choisissez l'abonnement qui vous convient.</p>
       <button class="cta" data-go="abonnement">Faire l'abonnement</button>
       <button class="lien-mini" style="margin-top:8px" data-proche="mensuelle">${ico('partage',13)} Un proche paie pour moi</button>` : ''}
     <p class="sous" style="margin:12px 0 0;font-size:12.5px">La composition nationale du samedi reste gratuite.</p>`;
@@ -4363,7 +4384,7 @@ function blocPoint3(seuil, n, admis){
   return `
     ${manque > 0 ? `<div class="carte" style="margin-top:14px"><p class="sous" style="margin:0"><b>Il te manque ${manque} point${manque > 1 ? 's' : ''} pour le seuil.</b> Ta feuille détaillée te dit quoi réviser en premier.</p></div>` : ''}
     ${offre ? `<div class="carte" style="margin-top:14px;text-align:left">
-      <p class="sous" style="margin:0 0 10px"><b>Vous avez atteint les limites de l'accès découverte.</b> Faites l'abonnement pour débloquer la feuille détaillée : ${mats.length ? E(mats.join(' et ')) : 'tes matières faibles'}, question par question, avec l'explication de chaque faute.</p>
+      <p class="sous" style="margin:0 0 10px"><b>Vous avez atteint vos limites d'essai gratuit.</b> Faites l'abonnement pour débloquer la feuille détaillée : ${mats.length ? E(mats.join(' et ')) : 'tes matières faibles'}, question par question, avec l'explication de chaque faute.</p>
       <button class="cta" data-go="abonnement">Faire l'abonnement</button>
       <button class="cta creux" style="margin-top:8px" data-copie-plus-tard="1">Plus tard</button>
     </div>` : (bloquee ? `<p class="sous" style="margin-top:14px;font-size:12.5px">La feuille détaillée fait partie de l'abonnement. <button class="lien-mini" data-go="abonnement">Voir mon abonnement</button></p>` : '')}`;
@@ -4554,6 +4575,7 @@ function ecranCompte(){
     <div class="duo">
       <div class="stat stat-oblique" aria-label="${S.stats ? nombreFr(S.stats.questions_resolues) + ' QCM résolus et ' + nombreFr(S.stats.compositions || 0) + ' compositions' : 'Résolu'}">
         <div class="so-h"><span class="v num">${S.stats ? nombreFr(S.stats.questions_resolues) : '—'}</span><span class="l">QCM</span></div>
+        <span class="so-trait" aria-hidden="true"></span>
         <div class="so-b"><span class="v num">${S.stats ? nombreFr(S.stats.compositions || 0) : '—'}</span><span class="l">Compositions</span></div>
       </div>
       <div class="stat"><div class="v num">${S.stats ? S.stats.taux_reussite + ' %' : '—'}</div><div class="l">Taux de réussite</div></div>
@@ -4703,7 +4725,7 @@ function ecranCompte(){
       ${S.gratuit ? '' : `<div class="libelle">Mon abonnement</div>
       <button class="grande" style="margin-top:0" data-go="abonnement">
         <span class="ic">${ico('carte',19)}</span>
-        <span><b>${S.abo.actif ? nomFormule(S.abo.formule) : 'Accès découverte'}</b><span>${E(S.abo.echeance)}</span></span>
+        <span><b>${S.abo.actif ? nomFormule(S.abo.formule) : 'Abonnement gratuit'}</b><span>${E(S.abo.echeance)}</span></span>
         <span class="fl">${S.abo.actif?'GÉRER →':'S\'ABONNER →'}</span>
       </button>`}
       <div class="carte" style="margin-top:14px;text-align:left">
@@ -4959,9 +4981,63 @@ function carteEpreuve(){
 }
 
 /* À l'ouverture : « Voulez-vous participer ? » une fois par composition */
+/* Dernier jour de l'essai : une fenêtre claire à l'ouverture, une fois par jour, avec une croix pour la fermer. */
+function rappelFinEssai(essai){
+  if(S.gratuit || !S.util.connecte || !S.abo || !S.abo.actif || S.abo.formule !== 'essai' || S.abo.jours_restants > 1) return;
+  const jour = new Date().toISOString().slice(0, 10);
+  if(lireReglages().finEssaiVu === jour) return;
+  const v = document.getElementById('voile');
+  if(S.ecran !== 'aujourdhui' || S.modal || enComposition() || !v || !v.hidden || document.getElementById('invitation')){
+    if(essai < 4) setTimeout(() => rappelFinEssai(essai + 1), 6000);
+    return;
+  }
+  ecrireReglage('finEssaiVu', jour);
+  S.modal = 'finEssai'; v.hidden = false;
+  const f = FORMULES.mensuelle || {};
+  v.innerHTML = `
+  <div class="panneau pop-nat" role="dialog" aria-modal="true" aria-labelledby="pfe-titre">
+    <button class="pn-x" data-fin-essai-non="1" aria-label="Fermer">×</button>
+    <div class="eyebrow" style="color:var(--or)">Votre essai gratuit</div>
+    <h3 id="pfe-titre">${S.abo.jours_restants > 0 ? 'Il se termine demain' : 'Il se termine aujourd\'hui'}</h3>
+    <p class="intro">Ensuite, l'abonnement gratuit garde 10 corrections par jour et 3 compositions. Pour tout garder sans limite : ${E(f.n || 'Abonnement Mois')}, ${E(f.prix || '1 000 FCFA')} pour 30 jours.</p>
+    <button class="cta" data-fin-essai-oui="1">Choisir mon abonnement</button>
+  </div>`;
+  pister('TRIAL_END_POPUP');
+}
+/* La composition est terminée : une fenêtre annonce le classement à tous ceux qui ouvrent le site, une seule fois,
+   avec une croix pour la fermer. */
+function annoncerClassement(ep){
+  if(S.popNatVu || !S.sessionPrete || S.ecran !== 'aujourdhui' || S.modal || enComposition()) return;
+  const v = document.getElementById('voile');
+  if(!v || !v.hidden) return;
+  if(lireReglages()['classVu-' + ep.id]) return;
+  const moi = ep.moi, composee = !!(moi && moi.terminee), absent = !!ep.inscrit && !composee;
+  S.popNatVu = true; S.modal = 'classement';
+  v.hidden = false;
+  const texte = composee
+    ? `Vous avez composé et obtenu <b class="num">${moi.score ?? '—'}</b> sur ${moi.sur || ep.nb_questions}. Voyez votre rang et la liste des admis.`
+    : absent
+      ? `La composition s'est terminée sans vous. Voici le classement des <b class="num">${nombreFr(ep.participants || 0)}</b> candidats, pour ${ep.places} postes à pourvoir.`
+      : `<b class="num">${nombreFr(ep.participants || 0)}</b> candidat${(ep.participants||0) > 1 ? 's ont' : ' a'} composé pour ${ep.places} postes à pourvoir. Voyez qui est admis.`;
+  v.innerHTML = `
+  <div class="panneau pop-nat" role="dialog" aria-modal="true" aria-labelledby="pc-titre">
+    <button class="pn-x" data-class-fermer="${E(ep.id)}" aria-label="Fermer">×</button>
+    <div class="eyebrow" style="color:var(--or)">Composition nationale <small class="sim">(simulation)</small></div>
+    <h3 id="pc-titre">Le classement est publié</h3>
+    <p class="intro">${E(ep.concours || ep.titre)}. ${texte}</p>
+    <button class="cta" data-class-voir="${E(ep.id)}">Voir le classement</button>
+  </div>`;
+  pister('RANKING_POPUP_SHOWN', { composee, absent });
+}
+function fermerClassement(id){
+  ecrireReglage('classVu-' + id, true);
+  const v = document.getElementById('voile'); if(v) v.hidden = true;
+  S.modal = null;
+}
 function proposerNationale(){
   const ep = S.epreuve;
-  if(!ep || ep.etat === 'terminee' || ep.inscrit || ep.moi || S.popNatVu || !S.sessionPrete) return;
+  if(ep && ep.etat === 'terminee') return annoncerClassement(ep);
+  if(!ep || ep.inscrit || ep.moi || S.popNatVu || !S.sessionPrete) return;
   if(S.ecran !== 'aujourdhui' || S.modal || enComposition()) return;
   const v = document.getElementById('voile');
   if(!v || !v.hidden) return;
@@ -5747,7 +5823,7 @@ window.addEventListener('popstate', ev => {
 /* Les nouveaux boutons ont leur propre écouteur : le grand aiguillage
    plus bas reste tel quel. */
 document.addEventListener('click', ev => {
-  const t = ev.target.closest('[data-quitter],[data-quitter-oui],[data-quitter-non],[data-son],[data-correction-differee],[data-gagnants],[data-pourtoi],[data-fil-rep],[data-fil-suiv],[data-qdj-rep],[data-qp-rep],[data-signaler],[data-signal-envoi],[data-objectif],[data-rejoindre],[data-rappel-activer],[data-rappel-retirer],[data-reagir],[data-partage-question],[data-partage-qdj],[data-partage-rang],[data-carte-resultat],[data-sortir-reprise],[data-inscrire-nat],[data-correction-nat],[data-nat-oui],[data-nat-non],[data-resultats-pdf],[data-telecharger-mat],[data-rappel-heure],[data-installe-d],[data-notifs-d],[data-paiement-plus-tard]');
+  const t = ev.target.closest('[data-fin-essai-non],[data-fin-essai-oui],[data-class-fermer],[data-class-voir],[data-quitter],[data-quitter-oui],[data-quitter-non],[data-son],[data-correction-differee],[data-gagnants],[data-pourtoi],[data-fil-rep],[data-fil-suiv],[data-qdj-rep],[data-qp-rep],[data-signaler],[data-signal-envoi],[data-objectif],[data-rejoindre],[data-rappel-activer],[data-rappel-retirer],[data-reagir],[data-partage-question],[data-partage-qdj],[data-partage-rang],[data-carte-resultat],[data-sortir-reprise],[data-inscrire-nat],[data-correction-nat],[data-nat-oui],[data-nat-non],[data-resultats-pdf],[data-telecharger-mat],[data-rappel-heure],[data-installe-d],[data-notifs-d],[data-paiement-plus-tard]');
   if(!t) return;
   const d = t.dataset;
   try{ const cle = Object.keys(d)[0]; pister('BUTTON_CLICKED', { valeur: String(d[cle]).slice(0,40) }, cle); }catch(e){}
@@ -5779,6 +5855,10 @@ document.addEventListener('click', ev => {
     })();
     return;
   }
+  if(d.finEssaiNon !== undefined){ document.getElementById('voile').hidden = true; S.modal = null; return; }
+  if(d.finEssaiOui !== undefined){ document.getElementById('voile').hidden = true; S.modal = null; pister('TRIAL_END_POPUP_CLICKED'); return aller('abonnement'); }
+  if(d.classFermer){ pister('RANKING_POPUP_CLOSED'); return fermerClassement(d.classFermer); }
+  if(d.classVoir){ fermerClassement(d.classVoir); chargerClassement(d.classVoir); return aller('gagnants'); }
   if(d.gagnants){ chargerClassement(d.gagnants); return aller('gagnants'); }
   if(d.pourtoi){ return lancerFil(d.pourtoi); }
   if(d.filRep !== undefined) return repondreFil(+d.filRep);
@@ -5831,7 +5911,7 @@ document.addEventListener('click', ev => {
   if(d.natOui) return inscrireNationale(d.natOui, true);
   if(d.natNon){ ecrireReglage('nonNat-' + d.natNon, true); document.getElementById('voile').hidden = true; S.modal = null; pister('NATIONAL_DECLINED'); return; }
   if(d.resultatsPdf) return resultatsPdf();
-  if(d.telechargerMat) return telechargerCoursMatiere(decodeURIComponent(d.telechargerMat));
+  if(d.telechargerMat){ if(!exigerAbonnement('Le cours en PDF fait partie de l\'abonnement.', 'cours_pdf')) return; return telechargerCoursMatiere(decodeURIComponent(d.telechargerMat)); }
   if(d.rappelHeure){ const h = document.getElementById('rappel-h'), m = document.getElementById('rappel-m'); return activerRappel(h ? +h.value : 19, m ? +m.value : 0); }
   if(d.installeD){
     pister('PARCOURS_D_INSTALL_CLICKED');
@@ -6518,7 +6598,7 @@ function ecrirePack(p){ try{ if(p) localStorage.setItem(CLE_PACK, JSON.stringify
 const enAttentePack = p => p ? Object.keys(p.faites || {}).filter(id => !(p.envoyees || []).includes(id)) : [];
 async function telechargerPack(){
   if(!S.util.connecte){ S.modal = 'inscription'; S.erreur = ''; return surcouche(); }
-  if(!packGratuitDispo()){ toast('Vous avez atteint la limite de l\'accès découverte : faites l\'abonnement.'); return aller('abonnement'); }
+  if(!exigerAbonnement('Les packs de questions hors connexion font partie de l\'abonnement.', 'pack')) return;
   if(!navigator.onLine){ toast('Il faut du réseau (ou du Wi-Fi) pour télécharger le pack.'); return; }
   const ancien = lirePack();
   if(ancien && enAttentePack(ancien).length) await envoyerPack();
@@ -6562,17 +6642,19 @@ function blocCoursHL(){
   const mats = []; liste.forEach(r => { if(!mats.includes(r.matiere)) mats.push(r.matiere); });
   const pret = lireReglages().cours_hors_ligne;
   return `<div class="bloc">
-    <div class="libelle">Les cours · gratuit</div>
+    <div class="libelle">Les cours</div>
     <div class="carte">
       <p class="sous" style="margin:0 0 10px">${mats.length
-        ? 'Tous les cours de votre niveau sont gardés sur le téléphone dès que vous êtes en ligne : vous les lisez sans réseau. Vous pouvez aussi en télécharger un en PDF.'
+        ? (S.gratuit || estAbonne()
+            ? 'Tous les cours de votre niveau sont gardés sur le téléphone dès que vous êtes en ligne : vous les lisez sans réseau. Vous pouvez aussi en télécharger un en PDF.'
+            : 'Lisez les cours en ligne. Le PDF et la lecture sans réseau font partie de l\'abonnement.')
         : (S.ressources ? 'Aucun cours n\'est encore publié pour ce niveau.' : 'Chargement des cours…')}</p>
-      ${pret || mats.length ? `<p class="sous" style="margin:0 0 10px;font-size:12.5px"><b>${mats.length ? '✓ Cours disponibles hors ligne' : ''}</b></p>` : ''}
+      ${(pret || mats.length) && (S.gratuit || estAbonne()) ? `<p class="sous" style="margin:0 0 10px;font-size:12.5px"><b>${mats.length ? '✓ Cours disponibles hors ligne' : ''}</b></p>` : ''}
       ${mats.map(nom => {
         const n = liste.filter(r => r.matiere === nom).length;
         return `<div class="mat"><div class="nom">${E(nom)}<em>${n} chapitre${n > 1 ? 's' : ''}</em></div>
           <div class="paire" style="display:flex;gap:6px"><button class="mini" data-matiere="${encodeURIComponent(nom)}">Lire</button>
-          <button class="mini" data-telecharger-mat="${encodeURIComponent(nom)}">PDF</button></div></div>`;
+          <button class="mini" data-telecharger-mat="${encodeURIComponent(nom)}">${S.gratuit || estAbonne() ? '' : ico('cadenas',12) + ' '}PDF</button></div></div>`;
       }).join('')}
     </div>
   </div>`;
@@ -6583,19 +6665,19 @@ function blocQcmHL(p, enLigne, termine){
   if(!libre) return `<div class="bloc">
     <div class="libelle">Les QCM sans connexion · abonnement</div>
     <div class="carte">
-      <p class="sous" style="margin:0 0 12px">Vous avez atteint la limite de l'accès découverte : le premier pack de 30 questions est déjà pris. Faites l'abonnement pour garder d'autres questions corrigées sur le téléphone et les faire sans réseau.</p>
-      <button class="cta" data-go="abonnement">Faire l'abonnement</button>
+      <p class="sous" style="margin:0 0 12px">Gardez 30 questions corrigées sur votre téléphone et révisez sans réseau, dans le bus comme au village. Cette option fait partie de l'abonnement.</p>
+      <button class="cta" data-pack-telecharger="1">${ico('cadenas',16)} Débloquer les packs hors ligne</button>
     </div></div>`;
   return `<div class="bloc">
     <div class="libelle">Les QCM sans connexion</div>
     <div class="carte">
-      <p class="sous" style="margin:0 0 10px">${termine ? 'Votre pack est terminé.' : 'Téléchargez un pack de 30 questions de votre niveau, avec leurs corrections, quand vous avez du réseau. Le premier pack est gratuit. Vos réponses partent toutes seules au retour du réseau.'}</p>
+      <p class="sous" style="margin:0 0 10px">${termine ? 'Votre pack est terminé.' : 'Téléchargez un pack de 30 questions de votre niveau, avec leurs corrections, quand vous avez du réseau. Vos réponses partent toutes seules au retour du réseau.'}</p>
       <button class="cta" data-pack-telecharger="1" ${S.packEtat === 'chargement' || !enLigne ? 'disabled' : ''}>${S.packEtat === 'chargement' ? '<span class="spin"></span> Téléchargement…' : ico('telecharger',16) + (termine ? ' Télécharger un nouveau pack' : ' Télécharger mon pack')}</button>
       ${!enLigne ? '<p class="sous" style="margin-top:10px">Vous êtes hors ligne : le pack se télécharge quand vous avez du réseau.</p>' : ''}
     </div></div>`;
 }
-/* Le premier pack de 30 questions est offert ; les suivants font partie de l'abonnement. */
-const packGratuitDispo = () => S.gratuit || estAbonne() || !lireReglages().pack_gratuit_pris;
+/* Les packs hors ligne font partie de l'abonnement. */
+const packGratuitDispo = () => S.gratuit || estAbonne();
 function ecranHorsLigne(){
   const p = lirePack();
   const enLigne = navigator.onLine;
@@ -6871,6 +6953,7 @@ window.addEventListener('appinstalled', () => { S.installer = null; pister('APP_
 
 /* ---------- export du cahier d'erreurs ---------- */
 function exporterCahier(){
+  if(!exigerAbonnement('Le cahier d\'erreurs en PDF fait partie de l\'abonnement.', 'cahier_pdf')) return;
   if(!S.cahier.some(e => e.suite < 3)){ toast('Ton cahier est vide.'); return; }
   pister('ERRORS_EXPORTED', { n: S.cahier.filter(e => e.suite < 3).length });
   return sortirDocument('Cahier d erreurs ' + (S.util.nom || ''), htmlCahier);
@@ -7079,13 +7162,17 @@ document.addEventListener('click', ev => {
   const t = Date.now(); touchesLogo = touchesLogo.filter(x => t - x < 2500); touchesLogo.push(t);
   if(touchesLogo.length >= 5){ touchesLogo = []; location.href = '/admin.html'; }
 });
+function initialesCompte(){
+  const m = String((S.util && S.util.nom) || '').trim().split(/\s+/).filter(Boolean);
+  return ((m[0] || '?')[0] + (m.length > 1 ? m[m.length - 1][0] : '')).toUpperCase();
+}
 function apptete(){
   const t = document.getElementById('apptete');
   if(SANS_TETE.includes(S.ecran)){ t.style.display='none'; return; }
   t.style.display='flex';
   const jr = joursAvantConcours();
   const droite = {aujourdhui: jr === null ? '' : 'J−' + jr, copie:'copie corrigée', cahier:ouvertes()+' en attente',
-    compte:S.gratuit ? '' : S.abo.actif?nomFormule(S.abo.formule).toLowerCase():'accès découverte',
+    compte:S.gratuit ? '' : S.abo.actif?nomFormule(S.abo.formule).toLowerCase():'abonnement gratuit',
     revisions:S.niveau.toLowerCase(), qcm:S.matiere||'', abonnement:'', paiement:'sécurisé',
     inscription:'', connexion:'', resultat:'étape 3 sur 3', actualite:'ce matin',
     pourtoi:'pour toi', qdj:'question du jour', gagnants:'classement', notion:'notion du jour', defi:'défi', top:'top 10', parcours:'mon parcours'}[S.ecran] || '';
@@ -7101,7 +7188,7 @@ function apptete(){
     <button class="bouton-tete" data-bascule-theme="1" aria-label="${S.theme==='sombre'?'Passer en mode clair':'Passer en mode sombre'}">
       ${S.theme==='sombre'?ico('soleil',17):ico('lune',17)}<span>${S.theme==='sombre'?'Mode clair':'Mode sombre'}</span></button>
     ${S.util.connecte
-      ? `<button class="bouton-tete etat-tete connecte" data-go="compte" aria-label="Connecté : ouvrir mon compte"><i aria-hidden="true"></i><b>Connecté</b></button>`
+      ? `<button class="bouton-tete avatar-tete" data-go="compte" aria-label="Connecté : ouvrir mon compte" title="Connecté"><b>${E(initialesCompte())}</b><i aria-hidden="true"></i></button>`
       : `<button class="bouton-tete etat-tete inscrire" data-modal="inscription" aria-label="S'inscrire gratuitement"><b>S'inscrire</b></button>`}`;
 
 }
@@ -7282,7 +7369,7 @@ function rendre(){
 }
 
 document.addEventListener('click', ev=>{
-  const t = ev.target.closest('[data-matiere],[data-vers],[data-musique],[data-notifs],[data-notifs-tout],[data-notifs-vider],[data-notif-lire],[data-copier],[data-partage-natif],[data-fermer-partage],[data-paieretour],[data-preuve-modifier],[data-preuve-envoyer],[data-plan-faire],[data-plan-effacer],[data-copie-plus-tard],[data-pass],[data-proche],[data-code-ouvrir],[data-code-valider],[data-copier-num],[data-demain],[data-feuille],[data-lire-feuille],[data-lire-cahier],[data-lecteur-dl],[data-nivinfo],[data-archive],[data-toutes-compos],[data-partage],[data-oeil],[data-reinitialiser],[data-lire],[data-telecharger],[data-apercu],[data-saut],[data-compotab],[data-bascule-theme],[data-modal],[data-entrer],[data-bascule],[data-plustard],[data-deconnecter],[data-theme-choix],[data-erreursdusoir],[data-cible],[data-cours],[data-inscrire],[data-connecter],[data-oubli],[data-oubli-wa],[data-formule],[data-operateur],[data-payer],[data-paiefin],[data-paieannul],[data-go],[data-toutcahier],[data-actu],[data-actu-repli],[data-niv],[data-mat],[data-qcm],[data-qsuiv],[data-cahierfreq],[data-classement],[data-diagnostic],[data-defi],[data-duel],[data-badges],[data-phase],[data-conc],[data-dep],[data-test],[data-tb],[data-tremettre],[data-seance],[data-rep],[data-suivante],[data-b],[data-remettre],[data-recommencer],[data-reprise],[data-rr],[data-fin-reprise],[data-qcm-relancer],[data-compo-relancer],[data-remise-relancer],[data-recu]');
+  const t = ev.target.closest('[data-actu-accueil],[data-matiere],[data-vers],[data-musique],[data-notifs],[data-notifs-tout],[data-notifs-vider],[data-notif-lire],[data-copier],[data-partage-natif],[data-fermer-partage],[data-paieretour],[data-preuve-modifier],[data-preuve-envoyer],[data-plan-faire],[data-plan-effacer],[data-copie-plus-tard],[data-pass],[data-proche],[data-code-ouvrir],[data-code-valider],[data-copier-num],[data-demain],[data-feuille],[data-lire-feuille],[data-lire-cahier],[data-lecteur-dl],[data-nivinfo],[data-archive],[data-toutes-compos],[data-partage],[data-oeil],[data-reinitialiser],[data-lire],[data-telecharger],[data-apercu],[data-saut],[data-compotab],[data-bascule-theme],[data-modal],[data-entrer],[data-bascule],[data-plustard],[data-deconnecter],[data-theme-choix],[data-erreursdusoir],[data-cible],[data-cours],[data-inscrire],[data-connecter],[data-oubli],[data-oubli-wa],[data-formule],[data-operateur],[data-payer],[data-paiefin],[data-paieannul],[data-go],[data-toutcahier],[data-actu],[data-actu-repli],[data-niv],[data-mat],[data-qcm],[data-qsuiv],[data-cahierfreq],[data-classement],[data-diagnostic],[data-defi],[data-duel],[data-badges],[data-phase],[data-conc],[data-dep],[data-test],[data-tb],[data-tremettre],[data-seance],[data-rep],[data-suivante],[data-b],[data-remettre],[data-recommencer],[data-reprise],[data-rr],[data-fin-reprise],[data-qcm-relancer],[data-compo-relancer],[data-remise-relancer],[data-recu]');
   if(!t) return;
   const d = t.dataset;
 
@@ -7532,6 +7619,12 @@ document.addEventListener('click', ev=>{
   }
   if(d.toutcahier){ S.cahierFiltre=false; S.cahierDepuisGrille=false; return rendre(); }
   if(d.actu){ S.actuOnglet = d.actu; return rendre(); }
+  if(d.actuAccueil){
+    S.actuAccueilOuverte = !S.actuAccueilOuverte;
+    rendre();
+    if(!S.actuAccueilOuverte){ const c = document.getElementById('actu-accueil'); if(c) c.scrollIntoView({ block:'center' }); }
+    return;
+  }
   if(d.actuRepli){
     S.actuRepli = S.actuRepli || {};
     S.actuRepli[S.actuOnglet] = !S.actuRepli[S.actuOnglet];
@@ -7550,7 +7643,7 @@ document.addEventListener('click', ev=>{
     return rendre();
   }
   if(d.lire){ S.ressourceOuverte = d.lire; pister('COURSE_OPENED'); return aller('lecture'); }
-  if(d.telecharger){ telechargerRessource(d.telecharger); return; }
+  if(d.telecharger){ if(!exigerAbonnement('Le téléchargement des documents fait partie de l\'abonnement.', 'document')) return; telechargerRessource(d.telecharger); return; }
   if(d.mat){
     ecrireReglage('dernierQcm', d.mat);
     S.matiere = d.mat; S.qcmIdx = (S.qcmPos && S.qcmPos[d.mat]) || 0; S.qcmRep=undefined; S.qcmCorrection=null; S.qcmSerie=0; S.qcmDebut=Date.now(); S.ecran='qcm';
