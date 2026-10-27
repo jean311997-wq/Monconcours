@@ -1,0 +1,3 @@
+-- 24 nouveaux sujets tirés de la banque (8 par niveau), et choix du sujet qui répète le moins
+-- de questions déjà vues par le candidat (voir la migration appliquée « nouveaux_sujets_sans_repetition »).
+-- Le tirage : 50 questions publiées, les moins utilisées dans les autres sujets d'abord, puis au hasard.

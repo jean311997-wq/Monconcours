@@ -1719,8 +1719,12 @@ body.sans-anim .nd-barre i{transition:none}
 /* bandeau « Ouvrir le fichier » après un enregistrement */
 #ouvrir-fichier{position:fixed;left:12px;right:12px;bottom:calc(76px + env(safe-area-inset-bottom));z-index:60;display:flex;align-items:center;gap:8px;
   background:var(--ardoise2);border:1px solid var(--or);border-radius:12px;padding:10px 12px;font-size:13px;box-shadow:0 6px 24px rgba(0,0,0,.35)}
-#ouvrir-fichier span{flex:1}
-#ouvrir-fichier .ouvrir{flex:1;background:var(--or);color:#1a1405;border:0;border-radius:8px;padding:8px 12px;font-weight:700;font-size:12.5px}
+#ouvrir-fichier{cursor:pointer}
+#ouvrir-fichier .of-ic{flex:none;width:26px;height:26px;border-radius:50%;background:var(--or);color:#1a1405;display:grid;place-items:center;font-weight:800;font-size:14px}
+#ouvrir-fichier .of-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+#ouvrir-fichier .of-txt b{font-size:13px;font-weight:700}
+#ouvrir-fichier .of-txt small{font-size:11px;color:var(--craie2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#ouvrir-fichier .ouvrir{flex:none;background:var(--or);color:#1a1405;border:0;border-radius:8px;padding:8px 12px;font-weight:700;font-size:12.5px}
 #ouvrir-fichier .fermer{background:none;border:0;color:var(--craie2);font-size:20px;line-height:1;padding:0 4px}
 
 .geste-sujet .fleche{animation-name:flecheGauche}
@@ -1811,3 +1815,41 @@ body[data-theme="clair"] .fe-carte{background:#fff}
   100%{opacity:0;transform:rotate(var(--a)) translateY(-120px) rotate(280deg)}}
 @media(prefers-reduced-motion:reduce){.fe-badge,.fe-confettis i{animation:none}.fe-confettis{display:none}}
 .panneau .titre-panneau + .champ{margin-top:14px}
+
+.salut-accueil{margin:2px 0 6px;font-size:19px;font-weight:500;color:var(--craie);letter-spacing:-.01em}
+.salut-accueil b{font-weight:700}
+
+/* Tuile « QCM / Compositions » : un trait oblique sépare les deux totaux */
+.stat-oblique{position:relative;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;min-height:84px;padding:10px 12px;text-align:left;
+  background:linear-gradient(to top right,transparent calc(50% - .75px),var(--trait) calc(50% - .75px),var(--trait) calc(50% + .75px),transparent calc(50% + .75px)),var(--ardoise2)}
+.stat-oblique .so-h{grid-column:1;grid-row:1;display:flex;flex-direction:column;align-items:flex-start;line-height:1.1}
+.stat-oblique .so-b{grid-column:2;grid-row:2;display:flex;flex-direction:column;align-items:flex-end;line-height:1.1;align-self:end}
+.stat-oblique .v{font-size:21px;font-weight:700}
+.stat-oblique .l{font-size:10.5px;letter-spacing:.06em;color:var(--craie2);margin-top:2px}
+.actu-bascule{position:sticky;bottom:calc(72px + env(safe-area-inset-bottom));z-index:5;pointer-events:none}
+.actu-bascule .actu-chevron{pointer-events:auto;box-shadow:0 4px 16px rgba(0,0,0,.28)}
+
+.statut-nat.sn-absent .sn-tampon{color:var(--craie2);border-color:var(--trait)}
+
+/* État du compte dans l'en-tête : toujours écrit en toutes lettres, même sur téléphone */
+.bouton-tete.etat-tete b{display:inline;font-weight:700;font-size:11.5px;letter-spacing:.01em}
+.bouton-tete.inscrire{background:var(--or);border-color:var(--or);color:#1a1405}
+.bouton-tete.inscrire:hover{color:#1a1405;filter:brightness(1.06)}
+.bouton-tete.connecte{color:var(--craie)}
+.bouton-tete.connecte i{width:8px;height:8px;border-radius:50%;background:#2fb26a;box-shadow:0 0 0 3px rgba(47,178,106,.18);flex:none}
+@media(max-width:360px){.bouton-tete.etat-tete{padding:6px 8px}.bouton-tete.etat-tete b{font-size:11px}}
+
+/* Accès découverte et abonnement, côte à côte */
+.comparatif{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.comparatif .cp-col{border:1px solid var(--trait);border-radius:12px;padding:12px;background:var(--ardoise)}
+.comparatif .cp-col.pay{border-color:var(--or-bord, var(--or));background:var(--ardoise2)}
+.comparatif b{display:block;font-size:14px}
+.comparatif small{display:block;font-family:var(--m);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--craie2);margin:2px 0 8px}
+.comparatif .pay small{color:var(--or)}
+.comparatif ul{margin:0;padding:0;list-style:none;font-size:12.5px;line-height:1.35}
+.comparatif li{padding:4px 0 4px 16px;position:relative;color:var(--craie2)}
+.comparatif li::before{content:"";position:absolute;left:2px;top:9px;width:6px;height:6px;border-radius:50%;background:var(--trait)}
+.comparatif .pay li::before{background:var(--or)}
+@media(max-width:380px){.comparatif{grid-template-columns:1fr}}
+.carte.fin-essai{margin:10px 0 4px;border-color:var(--or-bord, var(--or))}
+.carte.fin-essai .fe-ligne b{font-size:14.5px}

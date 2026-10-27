@@ -3,12 +3,12 @@
    Un candidat en 2G ne doit pas repayer le chargement à chaque visite,
    et un candidat sans réseau doit pouvoir relire ses cours.
    ===================================================================== */
-const VERSION = 'mc-v42';
+const VERSION = 'mc-v43';
 const COQUE   = VERSION + '-coque';   // les fichiers de l'application
 const DONNEES = VERSION + '-donnees'; // les réponses de la base
 
 const FICHIERS = [
-  '/', '/index.html', '/app.js?v=41', '/styles.css?v=32',
+  '/', '/index.html', '/app.js?v=42', '/styles.css?v=33',
   '/supabase-js.min.js?v=13', '/manifest.webmanifest', '/favicon.png', '/icone-192.png'
 ];
 
@@ -131,7 +131,7 @@ self.addEventListener('push', e => {
     body: d.message || 'Ta séance du jour t\'attend.',
     icon: '/icone-192.png', badge: '/favicon.png',
     /* vibration et nouvelle alerte : c'est ce qui fait descendre la bannière en haut de l'écran, même dans Facebook ou WhatsApp */
-    vibrate: [220, 110, 220], renotify: true, silent: false, requireInteraction: false,
+    vibrate: [220, 110, 220], renotify: true, silent: false, requireInteraction: false, timestamp: Date.now(),
     data: { lien: d.lien || '/' }, tag: (d.lien || 'rappel').slice(0, 60)
   }));
 });

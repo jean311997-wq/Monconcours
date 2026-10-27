@@ -89,7 +89,7 @@ const S = {
   voirClassement:false, voirDiagnostic:false, voirDefi:false, voirBadges:false,
   util:{nom:'', tel:'', pin:'', connecte:false},
   form:{nom:'', tel:'', pin:'', pin2:'', couleur:''}, codeVisible:false, erreur:'',
-  abo:{actif:false, formule:null, jours_restants:0, echeance:'abonnement gratuit'},
+  abo:{actif:false, formule:null, jours_restants:0, echeance:'accès découverte'},
   gratuit:true,             // phase de lancement : tout est gratuit (le serveur fait foi)
   theme:'clair', sessionCounter:0, cahierDepuisGrille:false,
   modal:null, modalDejaVu:false, matiereOuverte:null, sync:null, bloque:false, qcmPos:{}, rechercheCours:'', compositions:[], niveauConnu:false, notifications:[], notifCharge:false, dateConcours:null, nomConcours:null, typeEpreuve:'Concours direct · épreuve écrite',
@@ -525,7 +525,6 @@ function aller(e){
   if(e === 'top') chargerTop();
   if(['recherche','defi','proposer'].includes(e) && !S.banque) chargerQuestions();
   if(e === 'qdj' && S.qdj && S.qdj.jourLocal !== new Date().toDateString()){ S.qdj = null; S.qdjRep = undefined; S.qdjCorrection = null; }
-  if(e === 'grille' && S.ecran !== 'grille') pleinEcranAuto();
   if(e !== 'grille' && S.ecran === 'grille' && document.fullscreenElement){ try{ document.exitFullscreen(); }catch(err){} }
   S.ecran = e; rendre(); vue().scrollTop = 0;
   try{ vue().focus({preventScroll:true}); }catch(err){}
@@ -569,7 +568,7 @@ function nav(){
       ? 'Accès gratuit à tout le site pendant le lancement'
       : S.abo.actif
       ? nomFormule(S.abo.formule) + ' · ' + E(S.abo.echeance)
-      : 'Abonnement gratuit · l\'actualité du matin reste gratuite à vie'}</div>`;
+      : 'Accès découverte · l\'actualité du matin reste libre'}</div>`;
 }
 
 /* =====================================================================
@@ -844,7 +843,7 @@ function blocPlanPaiement(faibles){
       <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
         <b>${nom}</b><span class="num">${f[k].ancien ? '<s style="opacity:.55;font-weight:400">' + E(f[k].ancien) + '</s> ' : ''}<b>${E(f[k].prix)}</b></span></div>
       <p class="sous" style="margin:4px 0 8px">${sous}</p>
-      <button class="mini" data-pass="${k}">Prendre le ${f[k].n}</button></div>`;
+      <button class="mini" data-pass="${k}">Choisir cet abonnement</button></div>`;
   return `<div class="bonne-nouvelle" style="margin-top:18px">
     <h2>Ton plan pour rattraper ${cible}</h2>
     <p class="sous" style="margin:0 0 10px">La première séance est ouverte pour toi dans l'application. Le plan complet se débloque avec un pass.</p>
@@ -1276,7 +1275,7 @@ async function chargerAbonnement(){
         echeance: data.jours_restants + ' jour' + (data.jours_restants > 1 ? 's' : '') + ' restant' + (data.jours_restants > 1 ? 's' : '')
       };
     } else {
-      S.abo = {actif:false, formule:null, jours_restants:0, echeance:'abonnement gratuit'};
+      S.abo = {actif:false, formule:null, jours_restants:0, echeance:'accès découverte'};
     }
     /* la dernière demande de paiement : en attente, confirmée (reçu), refusée */
     const { data: dem } = await base.rpc('mon_paiement_en_cours');
@@ -1953,11 +1952,35 @@ function tacheNeuve(k){
   ecrireReglage('tachesVues', { j:jour, l:vues.concat(k) });
   return ' vient';
 }
+/* Un salut sobre en tête de l'accueil, pour un candidat connu seulement */
+function salutAccueil(){
+  const nom = ((S.util && S.util.connecte && S.util.nom) || (lireMemoire() || {}).nom || '').trim();
+  if(!nom || /^candidat$/i.test(nom)) return '';
+  const prenom = nom.split(/\s+/)[0];
+  const h = new Date().getHours();
+  const mot = h < 5 || h >= 18 ? 'Bonsoir' : 'Bonjour';
+  return `<p class="salut-accueil">${mot} <b>${E(prenom)}</b></p>`;
+}
+/* Les derniers jours de l'essai de 7 jours : une carte calme, sur l'accueil seulement, jamais en pleine question */
+function blocFinEssai(){
+  const a = S.abo || {};
+  if(S.gratuit || !S.util.connecte || !a.actif || a.formule !== 'essai' || a.jours_restants > 2) return '';
+  const reste = a.jours_restants <= 0 ? 'se termine aujourd\'hui' : a.jours_restants === 1 ? 'se termine demain' : 'se termine dans 2 jours';
+  const f = FORMULES.mensuelle;
+  return `<div class="carte fin-essai" role="status">
+    <div class="fe-ligne"><b>Votre essai ${reste}</b></div>
+    <p class="sous" style="margin:6px 0 12px">Ensuite, l'accès découverte garde 10 corrections par jour et 3 compositions. Pour tout garder sans limite : ${E(f.n)}, ${E(f.prix)} pour 30 jours, soit ${E(f.jour)}.</p>
+    <button class="cta" data-pass="mensuelle">Garder l'accès complet · ${E(f.prix)}</button>
+    <button class="cta creux" style="margin-top:8px" data-go="abonnement">Voir tous les abonnements</button>
+  </div>`;
+}
 function ecranAujourdhui(){
   const f = S.taches.filter(Boolean).length;
   const enCours = !S.corrige && Object.keys(S.reponses).length > 0;
   vue().innerHTML = `
   <div class="pad">
+    ${salutAccueil()}
+    ${blocFinEssai()}
     <div class="tete-jour">
       <span class="eyebrow">${dateDuJour()}</span>
       ${compteARebours()}
@@ -2230,7 +2253,7 @@ function ecranConnexion(){
 /* =====================================================================
    ABONNEMENT ET PAIEMENT
    ===================================================================== */
-const nomFormule = f => ({ semaine:'Abonnement Semaine', mensuelle:'Abonnement Mois', annuelle:'Abonnement Année', essai:'Essai gratuit' })[f] || 'Abonnement';
+const nomFormule = f => ({ semaine:'Abonnement Semaine', mensuelle:'Abonnement Mois', annuelle:'Abonnement Année', essai:'Essai de 7 jours' })[f] || 'Abonnement';
 /* Trois abonnements, jamais quatre. Aucun chiffre inventé : le prix par jour est un simple calcul. */
 const FORMULES = {
   semaine:  { cle:'semaine',  n:'Abonnement Semaine', prix:'500 FCFA',   montant:500,  per:'7 jours',  jour:'71 F par jour', reco:false },
@@ -2344,8 +2367,17 @@ function ecranAbonnement(){
     ${blocAlternatives()}`}
 
     <div class="bloc" style="margin-top:20px">
-      <div class="libelle">Toujours gratuit</div>
-      <div class="carte"><p class="sous" style="margin:0">Avec ton inscription : l'actualité du matin, le test de niveau, le cahier d'erreurs, des corrections chaque jour, des compositions pour t'essayer et la composition nationale du samedi.</p></div>
+      <div class="libelle">Ce que comprend chaque accès</div>
+      <div class="comparatif">
+        <div class="cp-col">
+          <b>Accès découverte</b><small>Sans payer</small>
+          <ul><li>Actualité du matin</li><li>Test de niveau</li><li>Cahier d'erreurs</li><li>10 corrections par jour</li><li>3 compositions offertes</li><li>Composition nationale du samedi</li></ul>
+        </div>
+        <div class="cp-col pay">
+          <b>Abonnement</b><small>Payant</small>
+          <ul><li>Corrections illimitées</li><li>Compositions illimitées</li><li>Feuille corrigée détaillée en PDF</li><li>Plan de révision</li><li>Packs hors ligne</li></ul>
+        </div>
+      </div>
     </div>
   </div>`;
 }
@@ -2476,7 +2508,7 @@ const PROGRAMME = {
 };
 const SIGLE = { 'Français':'FR', 'Mathématiques':'MA', 'Sciences de la vie et de la Terre':'SVT', 'Sciences de la vie':'SVT', 'Sciences physiques':'PC',
   'Histoire':'HI', 'Géographie':'GE', 'Culture générale':'CG', 'Institutions et AES':'IN',
-  'Géopolitique':'GP', 'Droit':'DR', 'Économie':'EC' };
+  'Géopolitique':'GP', 'Droit':'DR', 'Économie':'EC', 'Tests psychotechniques':'PT' };
 const sigle = nom => SIGLE[nom] || (nom || '?').slice(0, 2).toUpperCase();
 
 function ecranRevisions(){
@@ -2539,9 +2571,9 @@ function ecranRevisions(){
 
     <button class="lien-mini" style="margin-top:14px" data-go="cours">${ico('lire',13)} Anciens sujets et recherche dans les cours</button>
     ${!S.util.connecte ? `<div class="carte" style="margin-top:12px">
-      <p class="sous">${S.gratuit ? "Sans compte, tu peux lire les questions. Pour voir la correction et garder tes erreurs, crée ton compte : c'est gratuit." : "Sans compte, tu peux lire les questions. Pour voir la correction, crée ton compte gratuit : 20 corrections par jour, sans limite avec l'abonnement."}</p>
+      <p class="sous">${S.gratuit ? "Sans compte, tu peux lire les questions. Pour voir la correction et garder tes erreurs, crée ton compte : c'est gratuit." : "Sans compte, tu peux lire les questions. Pour voir la correction, crée ton compte gratuit : 10 corrections par jour, sans limite avec l'abonnement."}</p>
     </div>` : (!S.abo.actif && !S.gratuit ? `<div class="carte" style="margin-top:12px">
-      <p class="sous">Abonnement gratuit : 10 corrections par jour. L'abonnement les rend illimitées et ouvre les compositions.</p>
+      <p class="sous">Accès découverte : 10 corrections par jour et 3 compositions offertes. L'abonnement (payant) les rend illimitées.</p>
     </div>` : '')}
   </div>`;
 }
@@ -3011,12 +3043,14 @@ function proposerOuverture(blob, nom){
     const url = URL.createObjectURL(blob);
     z = document.createElement('div');
     z.id = 'ouvrir-fichier'; z.setAttribute('role', 'status');
-    z.innerHTML = '<button type="button" class="ouvrir">Ouvrir le fichier</button><button type="button" class="fermer" aria-label="Fermer">×</button>';
+    z.innerHTML = '<span class="of-ic" aria-hidden="true">✓</span><span class="of-txt"><b>Votre fichier a été téléchargé</b><small>' + E(nom || '') + '</small></span><button type="button" class="ouvrir">Ouvrir le fichier</button><button type="button" class="fermer" aria-label="Fermer">×</button>';
     document.body.appendChild(z);
     const fermer = () => { z.remove(); setTimeout(() => URL.revokeObjectURL(url), 120000); };
-    z.querySelector('.ouvrir').onclick = () => { if(!window.open(url, '_blank')) location.href = url; fermer(); };
-    z.querySelector('.fermer').onclick = fermer;
-    setTimeout(() => { if(z.isConnected) fermer(); }, 20000);
+    const ouvrir = () => { if(!window.open(url, '_blank')) location.href = url; fermer(); };
+    z.querySelector('.ouvrir').onclick = e => { e.stopPropagation(); ouvrir(); };
+    z.querySelector('.fermer').onclick = e => { e.stopPropagation(); fermer(); };
+    z.onclick = ouvrir;   /* toucher la notification ouvre aussi le fichier */
+    setTimeout(() => { if(z.isConnected) fermer(); }, 30000);
   }catch(e){}
 }
 async function enregistrerBlob(blob, nom, poignee){
@@ -3643,7 +3677,7 @@ function ecranQcm(){
       return `
       <div class="retour mal">
         ${c.quota
-          ? `<b>Vous avez atteint votre limite d'essai gratuit.</b>Vos 10 corrections du jour sont faites : elles reviennent demain. Pour continuer maintenant, faites l'abonnement.`
+          ? `<b>Vous avez atteint la limite de l'accès découverte.</b>Vos 10 corrections du jour sont faites : elles reviennent demain. Pour continuer maintenant, faites l'abonnement.`
           : `<b>${c.connexion ? 'Compte nécessaire' : 'Correction indisponible'}</b>${E(c.message || '')}`}
       </div>
       ${offre ? `<button class="cta" style="margin-top:12px" data-go="abonnement">Faire l'abonnement</button>` : ''}
@@ -3713,7 +3747,7 @@ function blocPoint2(){
       ${moy !== null ? `<p class="sous" style="margin:0 0 6px">Ta moyenne sur tes trois compositions : <b>${moy}/50</b>.</p>` : ''}
       ${rest !== null && rest > 0 ? `<p class="sous" style="margin:0 0 6px">Il te reste <b>${rest} sujet${rest > 1 ? 's' : ''}</b> à composer.</p>` : ''}
     </div>
-    ${offre ? `<p class="sous" style="margin:0 0 12px"><b>Vous avez atteint vos limites d'essai gratuit.</b> Faites l'abonnement, puis choisissez l'abonnement qui vous convient.</p>
+    ${offre ? `<p class="sous" style="margin:0 0 12px"><b>Vous avez atteint les limites de l'accès découverte.</b> Faites l'abonnement, puis choisissez l'abonnement qui vous convient.</p>
       <button class="cta" data-go="abonnement">Faire l'abonnement</button>
       <button class="lien-mini" style="margin-top:8px" data-proche="mensuelle">${ico('partage',13)} Un proche paie pour moi</button>` : ''}
     <p class="sous" style="margin:12px 0 0;font-size:12.5px">La composition nationale du samedi reste gratuite.</p>`;
@@ -4329,7 +4363,7 @@ function blocPoint3(seuil, n, admis){
   return `
     ${manque > 0 ? `<div class="carte" style="margin-top:14px"><p class="sous" style="margin:0"><b>Il te manque ${manque} point${manque > 1 ? 's' : ''} pour le seuil.</b> Ta feuille détaillée te dit quoi réviser en premier.</p></div>` : ''}
     ${offre ? `<div class="carte" style="margin-top:14px;text-align:left">
-      <p class="sous" style="margin:0 0 10px"><b>Vous avez atteint vos limites d'essai gratuit.</b> Faites l'abonnement pour débloquer la feuille détaillée : ${mats.length ? E(mats.join(' et ')) : 'tes matières faibles'}, question par question, avec l'explication de chaque faute.</p>
+      <p class="sous" style="margin:0 0 10px"><b>Vous avez atteint les limites de l'accès découverte.</b> Faites l'abonnement pour débloquer la feuille détaillée : ${mats.length ? E(mats.join(' et ')) : 'tes matières faibles'}, question par question, avec l'explication de chaque faute.</p>
       <button class="cta" data-go="abonnement">Faire l'abonnement</button>
       <button class="cta creux" style="margin-top:8px" data-copie-plus-tard="1">Plus tard</button>
     </div>` : (bloquee ? `<p class="sous" style="margin-top:14px;font-size:12.5px">La feuille détaillée fait partie de l'abonnement. <button class="lien-mini" data-go="abonnement">Voir mon abonnement</button></p>` : '')}`;
@@ -4518,7 +4552,10 @@ function ecranCompte(){
     </div>
 
     <div class="duo">
-      <div class="stat"><div class="v num">${S.stats ? nombreFr(S.stats.questions_resolues) : '—'}</div><div class="l">Questions résolues</div></div>
+      <div class="stat stat-oblique" aria-label="${S.stats ? nombreFr(S.stats.questions_resolues) + ' QCM résolus et ' + nombreFr(S.stats.compositions || 0) + ' compositions' : 'Résolu'}">
+        <div class="so-h"><span class="v num">${S.stats ? nombreFr(S.stats.questions_resolues) : '—'}</span><span class="l">QCM</span></div>
+        <div class="so-b"><span class="v num">${S.stats ? nombreFr(S.stats.compositions || 0) : '—'}</span><span class="l">Compositions</span></div>
+      </div>
       <div class="stat"><div class="v num">${S.stats ? S.stats.taux_reussite + ' %' : '—'}</div><div class="l">Taux de réussite</div></div>
     </div>
 
@@ -4544,7 +4581,7 @@ function ecranCompte(){
         <div class="admis" style="width:${(S.classement.places / S.classement.population * 100).toFixed(1)}%"></div>
         <div class="curseur" style="left:${Math.min(100, S.classement.rang / S.classement.population * 100).toFixed(1)}%"></div>
       </div>
-      <div class="legende-places"><span>${nombreFr(S.classement.places)} places</span><span>${nombreFr(S.classement.population)}ᵉ</span></div>
+      <div class="legende-places"><span>${nombreFr(S.classement.places)} postes</span><span>${nombreFr(S.classement.population)}ᵉ</span></div>
       <p class="sous" style="margin-top:9px">${
         S.classement.dans_les_admis
           ? 'Vous êtes dans la place, tenez la position. Le seuil monte chaque semaine.'
@@ -4666,7 +4703,7 @@ function ecranCompte(){
       ${S.gratuit ? '' : `<div class="libelle">Mon abonnement</div>
       <button class="grande" style="margin-top:0" data-go="abonnement">
         <span class="ic">${ico('carte',19)}</span>
-        <span><b>${S.abo.actif ? nomFormule(S.abo.formule) : 'Abonnement gratuit'}</b><span>${E(S.abo.echeance)}</span></span>
+        <span><b>${S.abo.actif ? nomFormule(S.abo.formule) : 'Accès découverte'}</b><span>${E(S.abo.echeance)}</span></span>
         <span class="fl">${S.abo.actif?'GÉRER →':'S\'ABONNER →'}</span>
       </button>`}
       <div class="carte" style="margin-top:14px;text-align:left">
@@ -4890,7 +4927,7 @@ function carteEpreuve(){
   const ep = S.epreuve;
   if(!ep) return '';
   const moi = ep.moi;
-  const faits = `${ep.nb_questions} questions · ${Math.round(ep.duree/60)} min · <b>${ep.places} places</b>${ep.inscrits ? ` · <span class="num">${ep.inscrits}</span> inscrit${ep.inscrits>1?'s':''}` : ''}`;
+  const faits = `${ep.nb_questions} questions · ${Math.round(ep.duree/60)} min · <b>${ep.places} postes à pourvoir</b> · <b class="num">${nombreFr(ep.inscrits || 0)}</b> inscrit${(ep.inscrits||0)>1?'s':''}`;
   let corps = '', bouton = '';
   if(ep.etat === 'a_venir'){
     corps = `<p class="cn-quand">${E(dateLongue(ep.debut_le))} à ${heureH(ep.debut_le)}</p>
@@ -4907,9 +4944,10 @@ function carteEpreuve(){
       ? `<p class="sous" style="margin-top:8px">Copie remise. Les résultats sont publiés à ${heureH(ep.fin_le)}.</p>`
       : `<button class="cta" style="margin-top:12px" data-rejoindre="${E(ep.id)}">Entrer en salle de composition</button>`;
   } else {
-    corps = `<p class="cn-quand">Résultats publiés</p>
-      <p class="sous cn-faits">${ep.participants} candidat${ep.participants>1?'s':''} · ${ep.places} places${moi && moi.score !== null && moi.score !== undefined ? ` · votre note : <span class="num">${moi.score}/${moi.sur}</span>` : ''}</p>`;
-    bouton = `<button class="cta" style="margin-top:12px" data-gagnants="${E(ep.id)}">Voir les résultats et les admis</button>`;
+    const absent = ep.inscrit && !(moi && moi.terminee);
+    corps = `<p class="cn-quand">${absent ? 'Terminée sans vous' : 'Résultats publiés'}</p>
+      <p class="sous cn-faits">${ep.participants} candidat${ep.participants>1?'s':''} · ${ep.places} postes à pourvoir${moi && moi.score !== null && moi.score !== undefined ? ` · votre note : <span class="num">${moi.score}/${moi.sur}</span>` : ''}</p>`;
+    bouton = `<button class="cta" style="margin-top:12px" data-gagnants="${E(ep.id)}">${absent ? 'Voir le classement' : 'Voir les résultats et les admis'}</button>`;
   }
   return `<div class="carte nationale">
     <div class="cn-tete"><span>${ico('groupe',14)} Composition nationale <small class="sim">(simulation)</small></span><span class="cn-samedi">Samedis · 17 h</span></div>
@@ -4937,7 +4975,7 @@ function proposerNationale(){
     <div class="eyebrow" style="color:var(--or)">Composition nationale <small class="sim">(simulation)</small></div>
     <h3 id="pn-titre">${E(dateLongue(ep.debut_le).replace(/^./, x => x.toUpperCase()))} à ${heureH(ep.debut_le)}</h3>
     <p class="intro">Concours : <b>${E(ep.concours || ep.titre)}</b>. ${ep.nb_questions} questions en ${Math.round(ep.duree/60)} minutes, le même sujet pour tous les candidats, à la même heure.
-      ${ep.places} places : les ${ep.places} premiers sont admis, les ${ep.places} suivants passent sur liste d'attente.</p>
+      ${ep.places} postes à pourvoir : les ${ep.places} premiers sont admis, les ${ep.places} suivants passent sur liste d'attente. Tout le monde peut composer ; les postes ne limitent pas le nombre de participants.</p>
     ${ep.etat === 'a_venir' ? rebours(ep.debut_le) : ''}
     <p class="pn-q">Voulez-vous participer ?</p>
     ${S.util.connecte ? `<label class="pn-nom"><input type="checkbox" id="pn-nom" checked> <span>Afficher mon nom dans la liste des admis (sinon, mon pseudo)</span></label>` : ''}
@@ -5272,6 +5310,15 @@ function ecranGagnants(){
       ${m.statut !== 'admis' && dernierAdmis ? `<p style="margin-top:4px">Le dernier admis avait <b class="num">${dernierAdmis.score}/${dernierAdmis.sur}</b>${manque > 0 ? ` : il vous a manqué ${manque} point${manque>1?'s':''}` : ''}. Rendez-vous samedi prochain à 17 h.</p>` : ''}
     </div>`;
   }
+  const insc = S.epreuve && S.epreuve.id === c.id && S.epreuve.inscrit;
+  if(!m && insc){
+    statut = `<div class="statut-nat sn-absent">
+      <div class="sn-tampon">Absent</div>
+      <p class="sn-titre">La composition s'est terminée sans vous.</p>
+      <p>Vous étiez inscrit, mais vous n'avez pas composé. Voici le classement : regardez les notes des admis pour savoir où viser. Prochain rendez-vous samedi à 17 h.</p>
+    </div>`;
+  }
+  const maCompo = S.epreuve && S.epreuve.id === c.id && S.epreuve.moi && S.epreuve.moi.composition;
   const ligne = l => `<div class="ligne-rang${l.moi ? ' moi' : ''}">
       <span class="p num">${l.rang}</span>
       <span class="n">${E(l.nom)}${l.moi ? ' (vous)' : ''}<em>${mmssLong(l.duree)}</em></span>
@@ -5282,13 +5329,14 @@ function ecranGagnants(){
     ${tete}
     <div class="eyebrow">Composition nationale <small class="sim">(simulation)</small> · ${E(jourFr(c.debut_le))}</div>
     <h1 class="titre">Résultats · ${E(c.concours || c.titre)}</h1>
-    <p class="sous" style="margin-top:6px"><span class="num">${c.participants}</span> candidat${c.participants>1?'s':''} · ${c.places} places · moyenne <span class="num">${c.moyenne ?? '—'}/${c.sur}</span></p>
+    <p class="sous" style="margin-top:6px"><span class="num">${c.participants}</span> candidat${c.participants>1?'s':''} · ${c.places} postes à pourvoir · moyenne <span class="num">${c.moyenne ?? '—'}/${c.sur}</span></p>
     <div class="trio" style="margin-top:12px">
       <div><b class="num">${c.admis}</b><span>admis</span></div>
       <div><b class="num">${c.attente}</b><span>liste d'attente</span></div>
       <div><b class="num">${c.echoues}</b><span>non admis</span></div>
     </div>
     ${statut}
+    ${m && maCompo ? `<button class="cta creux" style="margin-top:10px" data-correction-nat="${E(maCompo)}">${ico('lire',16)} Voir ma correction</button>` : ''}
     ${m && peutProposer(4) ? `<div class="carte" style="margin-top:12px;text-align:left"><p class="sous" style="margin:0 0 10px">Pour préparer la prochaine nationale, faites l'abonnement.</p>
       <button class="cta" data-go="abonnement">Faire l'abonnement</button></div>` : ''}
     ${podium.length ? `<div class="felicitations">
@@ -5338,7 +5386,7 @@ function resultatsPdf(){
       '<p class="doc-titre">Composition nationale <span class="sim">(simulation)</span></p>' +
       '<p class="doc-st"><b>Résultats · ' + E(c.concours || c.titre) + '</b></p>' +
       '<p class="doc-st">Épreuve du ' + quand + ' à ' + heureH(c.debut_le) + '</p>' +
-      '<div class="chiffres"><div><b>' + c.participants + '</b><span>candidats</span></div><div><b>' + c.places + '</b><span>places</span></div>' +
+      '<div class="chiffres"><div><b>' + c.participants + '</b><span>candidats</span></div><div><b>' + c.places + '</b><span>postes</span></div>' +
         '<div><b>' + c.admis + '</b><span>admis</span></div><div><b>' + c.attente + '</b><span>liste d\'attente</span></div><div><b>' + (c.moyenne ?? '—') + '</b><span>moyenne / ' + c.sur + '</span></div></div>' +
       (podium.length ? '<div class="felic"><b class="t">Félicitations</b>Mon Concours félicite chaleureusement les trois premiers de cette composition :<ol>' +
         podium.map(l => '<li><b>' + E(l.nom) + '</b>, ' + (l.rang === 1 ? 'major' : l.rang + 'e') + ' avec ' + l.score + ' / ' + l.sur + '</li>').join('') + '</ol>' +
@@ -5473,11 +5521,11 @@ function demanderQuitter(){
   v.innerHTML = `
   <div class="panneau" role="alertdialog" aria-modal="true" aria-labelledby="q-titre">
     <div class="poignee"></div>
-    <h3 id="q-titre">Voulez-vous vraiment quitter cette épreuve ?</h3>
-    <p class="intro">Votre copie sera remise et corrigée avec les ${nb} réponse${nb>1?'s':''} déjà noircie${nb>1?'s':''}. Les questions sans réponse compteront comme blanches.</p>
+    <h3 id="q-titre">Quitter l'épreuve ?</h3>
+    <p class="intro">${nb ? `Vos ${nb} réponse${nb>1?'s sont gardées':' est gardée'}. ` : ''}Le chronomètre continue : vous pouvez reprendre depuis l'accueil tant qu'il reste du temps. La copie n'est corrigée que lorsque vous touchez « Remettre la copie ».</p>
     <div class="duo">
-      <button class="cta creux" data-quitter-non="1">Non, je continue</button>
-      <button class="cta" style="background:var(--erreur)" data-quitter-oui="1">Oui, je quitte</button>
+      <button class="cta creux" data-quitter-non="1">Rester</button>
+      <button class="cta" data-quitter-oui="1">Quitter</button>
     </div>
   </div>`;
   setTimeout(() => { const b = document.querySelector('[data-quitter-non]'); if(b) b.focus(); }, 30);
@@ -5699,17 +5747,19 @@ window.addEventListener('popstate', ev => {
 /* Les nouveaux boutons ont leur propre écouteur : le grand aiguillage
    plus bas reste tel quel. */
 document.addEventListener('click', ev => {
-  const t = ev.target.closest('[data-quitter],[data-quitter-oui],[data-quitter-non],[data-son],[data-correction-differee],[data-gagnants],[data-pourtoi],[data-fil-rep],[data-fil-suiv],[data-qdj-rep],[data-qp-rep],[data-signaler],[data-signal-envoi],[data-objectif],[data-rejoindre],[data-rappel-activer],[data-rappel-retirer],[data-reagir],[data-partage-question],[data-partage-qdj],[data-partage-rang],[data-carte-resultat],[data-sortir-reprise],[data-inscrire-nat],[data-nat-oui],[data-nat-non],[data-resultats-pdf],[data-telecharger-mat],[data-rappel-heure],[data-installe-d],[data-notifs-d],[data-paiement-plus-tard]');
+  const t = ev.target.closest('[data-quitter],[data-quitter-oui],[data-quitter-non],[data-son],[data-correction-differee],[data-gagnants],[data-pourtoi],[data-fil-rep],[data-fil-suiv],[data-qdj-rep],[data-qp-rep],[data-signaler],[data-signal-envoi],[data-objectif],[data-rejoindre],[data-rappel-activer],[data-rappel-retirer],[data-reagir],[data-partage-question],[data-partage-qdj],[data-partage-rang],[data-carte-resultat],[data-sortir-reprise],[data-inscrire-nat],[data-correction-nat],[data-nat-oui],[data-nat-non],[data-resultats-pdf],[data-telecharger-mat],[data-rappel-heure],[data-installe-d],[data-notifs-d],[data-paiement-plus-tard]');
   if(!t) return;
   const d = t.dataset;
   try{ const cle = Object.keys(d)[0]; pister('BUTTON_CLICKED', { valeur: String(d[cle]).slice(0,40) }, cle); }catch(e){}
 
-  if(d.quitter) return demanderQuitter();
+  if(d.correctionNat) return feuilleArchive(d.correctionNat);
+  if(d.quitter){ S.apresQuitter = null; return demanderQuitter(); }
   if(d.quitterNon){ document.getElementById('voile').hidden = true; S.modal = null; return; }
   if(d.quitterOui){
     document.getElementById('voile').hidden = true; S.modal = null;
     pister('COMPOSITION_QUIT', { traitees: Object.keys(S.reponses).length, restant_s: S.chrono });
-    return remettre();
+    sauverEpreuve();
+    { const dest = S.apresQuitter || 'aujourdhui'; S.apresQuitter = null; return aller(dest); }
   }
   if(d.son){
     S.sonCoupe = !S.sonCoupe; ecrireReglage('sonCoupe', S.sonCoupe);
@@ -6453,7 +6503,7 @@ function blocChances(){
   const conseil = c.statut === 'admis' ? 'Gardez ce niveau jusqu\'au jour J : refaites une composition chaque semaine.'
     : 'Chaque erreur reprise vous rapproche des places : commencez par « Mes erreurs ».';
   return `<div class="carte chances sn-${c.statut}" style="margin-top:12px"><div class="libelle" style="margin-bottom:6px">Mes chances d'admission</div>
-    <p class="chances-phrase">Avec <b class="num">${c.note}/${c.sur}</b> de moyenne sur vos ${nbc}, ${phrase}${c.concours ? ' à la composition nationale « ' + E(c.concours) + ' »' : ''} : ${c.rang}<sup>${c.rang === 1 ? 'er' : 'e'}</sup> sur ${c.participants} candidats, pour ${c.places} places.</p>
+    <p class="chances-phrase">Avec <b class="num">${c.note}/${c.sur}</b> de moyenne sur vos ${nbc}, ${phrase}${c.concours ? ' à la composition nationale « ' + E(c.concours) + ' »' : ''} : ${c.rang}<sup>${c.rang === 1 ? 'er' : 'e'}</sup> sur ${c.participants} candidats, pour ${c.places} postes à pourvoir.</p>
     <p class="sous" style="margin-top:8px">${conseil}</p>
     <p class="sous" style="font-size:12px;margin-top:6px">Une estimation, pas une promesse : elle compare votre moyenne aux notes de la dernière composition nationale.</p></div>`;
 }
@@ -6468,7 +6518,7 @@ function ecrirePack(p){ try{ if(p) localStorage.setItem(CLE_PACK, JSON.stringify
 const enAttentePack = p => p ? Object.keys(p.faites || {}).filter(id => !(p.envoyees || []).includes(id)) : [];
 async function telechargerPack(){
   if(!S.util.connecte){ S.modal = 'inscription'; S.erreur = ''; return surcouche(); }
-  if(!packGratuitDispo()){ toast('Vous avez atteint votre limite d\'essai gratuit : faites l\'abonnement.'); return aller('abonnement'); }
+  if(!packGratuitDispo()){ toast('Vous avez atteint la limite de l\'accès découverte : faites l\'abonnement.'); return aller('abonnement'); }
   if(!navigator.onLine){ toast('Il faut du réseau (ou du Wi-Fi) pour télécharger le pack.'); return; }
   const ancien = lirePack();
   if(ancien && enAttentePack(ancien).length) await envoyerPack();
@@ -6533,7 +6583,7 @@ function blocQcmHL(p, enLigne, termine){
   if(!libre) return `<div class="bloc">
     <div class="libelle">Les QCM sans connexion · abonnement</div>
     <div class="carte">
-      <p class="sous" style="margin:0 0 12px">Vous avez atteint votre limite d'essai gratuit : le premier pack de 30 questions est déjà pris. Faites l'abonnement pour garder d'autres questions corrigées sur le téléphone et les faire sans réseau.</p>
+      <p class="sous" style="margin:0 0 12px">Vous avez atteint la limite de l'accès découverte : le premier pack de 30 questions est déjà pris. Faites l'abonnement pour garder d'autres questions corrigées sur le téléphone et les faire sans réseau.</p>
       <button class="cta" data-go="abonnement">Faire l'abonnement</button>
     </div></div>`;
   return `<div class="bloc">
@@ -7035,7 +7085,7 @@ function apptete(){
   t.style.display='flex';
   const jr = joursAvantConcours();
   const droite = {aujourdhui: jr === null ? '' : 'J−' + jr, copie:'copie corrigée', cahier:ouvertes()+' en attente',
-    compte:S.gratuit ? '' : S.abo.actif?nomFormule(S.abo.formule).toLowerCase():'abonnement gratuit',
+    compte:S.gratuit ? '' : S.abo.actif?nomFormule(S.abo.formule).toLowerCase():'accès découverte',
     revisions:S.niveau.toLowerCase(), qcm:S.matiere||'', abonnement:'', paiement:'sécurisé',
     inscription:'', connexion:'', resultat:'étape 3 sur 3', actualite:'ce matin',
     pourtoi:'pour toi', qdj:'question du jour', gagnants:'classement', notion:'notion du jour', defi:'défi', top:'top 10', parcours:'mon parcours'}[S.ecran] || '';
@@ -7051,8 +7101,9 @@ function apptete(){
     <button class="bouton-tete" data-bascule-theme="1" aria-label="${S.theme==='sombre'?'Passer en mode clair':'Passer en mode sombre'}">
       ${S.theme==='sombre'?ico('soleil',17):ico('lune',17)}<span>${S.theme==='sombre'?'Mode clair':'Mode sombre'}</span></button>
     ${S.util.connecte
-      ? ''
-      : `<button class="bouton-tete" data-modal="inscription" aria-label="Se connecter">${ico('compte',17)}<span>Se connecter</span></button>`}`;
+      ? `<button class="bouton-tete etat-tete connecte" data-go="compte" aria-label="Connecté : ouvrir mon compte"><i aria-hidden="true"></i><b>Connecté</b></button>`
+      : `<button class="bouton-tete etat-tete inscrire" data-modal="inscription" aria-label="S'inscrire gratuitement"><b>S'inscrire</b></button>`}`;
+
 }
 function annoncer(){
   const n = {aujourdhui:'Actualité', actualite:'Actualité du matin', revisions:'Mes cours',
@@ -7242,7 +7293,7 @@ document.addEventListener('click', ev=>{
 
   if(d.go){
     /* pendant une épreuve, changer d'onglet demande confirmation */
-    if(enComposition() && d.go !== 'grille') return demanderQuitter();
+    if(enComposition() && d.go !== 'grille'){ S.apresQuitter = d.go; return demanderQuitter(); }
     if(d.go==='testIntro') pister('ONBOARDING_STEP_COMPLETED', {etape:1}, 'engagement');
     if(d.go==='abonnement') pister('SUBSCRIPTION_PAGE_VIEWED');
     if(d.go==='paiement'){ S.paieEtape=0; pister('PAYMENT_STARTED', {formule:S.choixFormule}); }
@@ -7265,6 +7316,7 @@ document.addEventListener('click', ev=>{
         S.niveauProfil = niveauBase();
         ecrireMemoire({ nom:f.nom.trim(), tel:tel, niveauProfil:S.niveauProfil });
         pister('ACCOUNT_CREATED', { niveau: S.niveau });
+        setTimeout(() => invitationNotifsApresInscription(), 7000);
         S.modal = null; chargerProgression();
         if(S.defi && S.defi.etat === 'connexion') ouvrirDefi(S.defi.id);
         else if(S.ecran === 'verrou' && S.testNote !== null) aller('resultat');
@@ -7626,21 +7678,9 @@ document.addEventListener('click', ev=>{
    La fenêtre d'inscription vient après 30 secondes, l'installation après 3 minutes,
    les notifications après 5 minutes et demie. Un « Plus tard » repousse de 3 jours. */
 const DELAI_INSCRIPTION = 35000;
-/* Un candidat qui revient est salué : « Bon retour, Prénom ». Une fois par visite. */
-function saluerRetour(){
-  if(S.retourDit) return;
-  const m = lireMemoire() || {};
-  if(!m.dejaVenu || !m.nom || /^candidat$/i.test(m.nom.trim())) return;
-  S.retourDit = true;
-  const prenom = m.nom.trim().split(/\s+/)[0];
-  const textes = ['Bon retour, ' + prenom + ' ! Content de vous revoir.', 'Bienvenue à nouveau, ' + prenom + '. On reprend là où vous en étiez.'];
-  setTimeout(() => { if(!S.modal && ['aujourdhui','actualite'].includes(S.ecran)) signalCandidat(textes[new Date().getDate() % 2]); }, 1600);
-}
-saluerRetour();
-function bienvenue(){
-  if(S.bienvenueDite) return; S.bienvenueDite = true;
-  setTimeout(() => { if(!S.modal && ['aujourdhui','actualite'].includes(S.ecran)) signalCandidat('Bienvenue sur Mon Concours. Prenez le temps de regarder.'); }, 1800);
-}
+/* Plus de message flottant en bas de l'écran : le salut est dans l'en-tête de l'accueil. */
+function saluerRetour(){}
+function bienvenue(){}
 const ECRANS_CALMES = ['grille','qcm','test','testIntro','engagement','reprise','pourtoi','defi','resultat','verrou','verrou_d','lecture','paiement','lecteur'];
 function peutInviter(){ return !ECRANS_CALMES.includes(S.ecran) && !S.modal && !document.getElementById('invitation') && !enComposition(); }
 function fenetreInvitation(o){
@@ -7709,6 +7749,14 @@ function planifierInvitations(){
   });
 }
 planifierInvitations();
+/* Juste après la création du compte, quand l'envie est la plus forte : la demande d'autorisation des notifications.
+   C'est ce qui permet à Mon Concours d'apparaître par-dessus Facebook ou WhatsApp. */
+function invitationNotifsApresInscription(){
+  if(!notifsAEncourager() || !peutInviter() || !invitationPossible('notifs', 60000)) return;
+  fenetreInvitation({ cle:'notifs', icone:'cloche', titre:'Être prévenu à temps',
+    texte:'Autorisez les notifications : Mon Concours s\'affiche même quand vous êtes sur Facebook ou WhatsApp, pour votre rappel du soir, vos résultats et la composition du samedi.',
+    oui:'Autoriser les notifications', rappel:0, sansFait:true, action: () => activerRappel(18, 0) });
+}
 
 /* Inscription : un visiteur qui n'a pas de compte la voit assez vite, même s'il est déjà venu.
    Une fois par visite au plus, et pas plus d'une fois toutes les 6 heures. */
