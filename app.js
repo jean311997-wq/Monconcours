@@ -1054,21 +1054,31 @@ function prechargerSuite(){
 /* =====================================================================
    RELIRE SA PROGRESSION
    ===================================================================== */
+/* messages de l'administration qui s'ouvrent en fenêtre (réponse à un avis, annonce à tous) */
+const NOTIFS_FENETRE = ['annonce_plein', 'annonce_popup', 'reponse_admin_plein'];
 async function chargerNotifications(){
   if(!base) return;
   try{
     const uid = await utilisateurCourant();
     if(!uid) return;
-    const { data } = await base.rpc('mes_notifications');
+    const { data: brut } = await base.rpc('mes_notifications');
+    const data = (brut || []).filter(n => n.type !== 'annonce_popup');   // une annonce « fenêtre seule » n'entre pas dans la cloche
     const avant = new Set((S.notifications || []).map(n => n.id));
-    const memes = pareil(data || [], S.notifications);
-    S.notifications = data || [];
+    const memes = pareil(data, S.notifications);
+    S.notifications = data;
     memoEcrire('notifications', S.notifications, true);
     /* une nouvelle notification : un son léger et un bandeau qu'on peut toucher */
     const vues = lireReglages().notifVues || [];
-    const neuves = S.notifications.filter(n => !n.lue && !vues.includes(n.id) && (S.notifCharge ? !avant.has(n.id) : true));
+    const neuves = S.notifications.filter(n => !n.lue && !vues.includes(n.id) && !NOTIFS_FENETRE.includes(n.type) && (S.notifCharge ? !avant.has(n.id) : true));
     S.notifCharge = true;
     if(!memes) rendre();
+    /* l'administration a écrit : une fenêtre plein écran, qu'on ferme d'un geste */
+    const fenetres = (brut || []).filter(n => NOTIFS_FENETRE.includes(n.type) && !n.lue && (!n.cree_le || Date.now() - new Date(n.cree_le) < 7 * 86400000));
+    if(fenetres.length && !enComposition() && !document.querySelector('.fenetre-evt')){
+      fenetreAnnonce(fenetres[fenetres.length - 1]);
+    } else if(!document.querySelector('.fenetre-evt') && !enComposition()){
+      verifierChangementCode();
+    }
     if(neuves.length && !enComposition()){
       ecrireReglage('notifVues', S.notifications.slice(0, 60).map(n => n.id));
       /* une décision de l'administrateur sur un abonnement s'affiche dans une vraie fenêtre */
@@ -1201,6 +1211,91 @@ function fenetreEvenement(n){
   chargerAbonnement().then(() => { if(['abonnement','compte','aujourdhui'].includes(S.ecran)) rendre(); }, () => {});
   pister(refus ? 'PAYMENT_REJECTED_POPUP' : 'PAYMENT_CONFIRMED_POPUP', {});
 }
+/* Les messages de l'administration qui s'ouvrent en fenêtre : voir NOTIFS_FENETRE plus haut */
+function fenetreAnnonce(n){
+  sonNotif();
+  document.querySelectorAll('.fenetre-evt').forEach(x => x.remove());
+  const reponse = n.type === 'reponse_admin_plein';
+  const f = document.createElement('div');
+  f.className = 'fenetre-evt annonce';
+  f.setAttribute('role', 'dialog'); f.setAttribute('aria-modal', 'true');
+  f.setAttribute('aria-label', n.titre || 'Message de Mon Concours');
+  const [genre] = String(n.lien || '').split(':');
+  const suite = { abonnement:'Voir mon abonnement', compte:'Ouvrir mon compte', parcours:'Ouvrir mon parcours', offre:'Voir l\'offre' }[genre];
+  f.innerHTML = `<div class="fe-carte">
+    <div class="fe-badge" aria-hidden="true">${reponse ? '✉' : '📣'}</div>
+    <div class="fe-marque">Mon Concours · ${reponse ? 'Réponse de l\'administration' : 'Message de l\'équipe'}</div>
+    <h2 class="fe-titre">${E(reponse ? 'Votre avis a été lu' : (n.titre || 'Information'))}</h2>
+    <p class="fe-texte fe-long">${E(n.message || '').replace(/\n/g, '<br>')}</p>
+    ${suite ? `<button class="cta" data-fe="suite">${suite}</button><button class="lien" style="display:block;margin:10px auto 0" data-fe="fermer">Fermer</button>`
+            : `<button class="cta" data-fe="fermer">J'ai compris</button>`}
+  </div>`;
+  const fermer = aller_ => {
+    f.classList.remove('vu'); setTimeout(() => f.remove(), 300);
+    if(!n.lue) marquerNotifsLues(n.id);
+    if(aller_) ouvrirNotif(Object.assign({}, n, { lue:true }));
+    else setTimeout(verifierChangementCode, 400);
+  };
+  f.addEventListener('click', e => {
+    const b = e.target.closest('[data-fe]');
+    if(b) fermer(b.dataset.fe === 'suite');
+    else if(e.target === f) fermer(false);
+  });
+  f.addEventListener('keydown', e => { if(e.key === 'Escape') fermer(false); });
+  document.body.appendChild(f);
+  setTimeout(() => { f.classList.add('vu'); const b = f.querySelector('button'); if(b) b.focus(); }, 30);
+  pister(reponse ? 'ADMIN_REPLY_POPUP' : 'ADMIN_ANNOUNCE_POPUP', {});
+}
+/* L'administrateur a demandé un nouveau code : à la prochaine ouverture, on le demande deux fois */
+async function verifierChangementCode(force){
+  if(!base || !S.util.connecte) return;
+  if(!force && S.codeDemandeVu) return;
+  try{
+    const { data } = await base.rpc('mon_changement_code');
+    if(data === true){ S.codeDemandeVu = true; fenetreNouveauCode(); }
+  }catch(e){}
+}
+function fenetreNouveauCode(){
+  if(document.querySelector('.fenetre-evt.nouveau-code')) return;
+  document.querySelectorAll('.fenetre-evt').forEach(x => x.remove());
+  const f = document.createElement('div');
+  f.className = 'fenetre-evt nouveau-code';
+  f.setAttribute('role', 'dialog'); f.setAttribute('aria-modal', 'true'); f.setAttribute('aria-label', 'Choisir un nouveau code secret');
+  f.innerHTML = `<div class="fe-carte">
+    <div class="fe-badge" aria-hidden="true">🔑</div>
+    <div class="fe-marque">Mon Concours · Sécurité</div>
+    <h2 class="fe-titre">Choisissez un nouveau code</h2>
+    <p class="fe-texte">L'administration a demandé le changement de votre code secret. Choisissez 4 chiffres, écrivez-les deux fois, et gardez-les en tête : ils serviront à votre prochaine connexion.</p>
+    <div class="fe-alerte" id="nc-err" role="alert" hidden></div>
+    <label class="fe-etiq" for="nc-1">Nouveau code (4 chiffres)</label>
+    <input class="fe-champ" id="nc-1" type="password" inputmode="numeric" maxlength="4" autocomplete="new-password" placeholder="••••">
+    <label class="fe-etiq" for="nc-2">Confirmez le nouveau code</label>
+    <input class="fe-champ" id="nc-2" type="password" inputmode="numeric" maxlength="4" autocomplete="new-password" placeholder="••••">
+    <button class="cta" id="nc-ok" style="margin-top:14px">Enregistrer mon nouveau code</button>
+    <button class="lien" id="nc-plus" style="display:block;margin:10px auto 0">Plus tard</button>
+  </div>`;
+  const fermer = () => { f.classList.remove('vu'); setTimeout(() => f.remove(), 300); };
+  const err = t => { const e = f.querySelector('#nc-err'); e.textContent = t; e.hidden = !t; };
+  f.querySelector('#nc-plus').onclick = fermer;
+  f.querySelectorAll('.fe-champ').forEach(c => c.addEventListener('input', () => { c.value = c.value.replace(/\D/g, '').slice(0, 4); err(''); }));
+  f.querySelector('#nc-ok').onclick = async () => {
+    const a = f.querySelector('#nc-1').value, b = f.querySelector('#nc-2').value;
+    if(a.length !== 4) return err('Le nouveau code doit comporter 4 chiffres.');
+    if(a !== b) return err('Les deux codes ne sont pas identiques.');
+    const btn = f.querySelector('#nc-ok'); btn.disabled = true; btn.textContent = 'Enregistrement…';
+    try{
+      const { data, error } = await base.rpc('changer_mon_code', { p_nouveau: a, p_confirmation: b });
+      if(error) throw error;
+      if(!data || !data.ok){ btn.disabled = false; btn.textContent = 'Enregistrer mon nouveau code'; return err((data && data.message) || 'Le code n\'a pas pu être changé.'); }
+      fermer();
+      pister('CODE_CHANGED_BY_USER', {});
+      signalCandidat('Votre nouveau code est enregistré. Utilisez-le à votre prochaine connexion.');
+      chargerNotifications();
+    }catch(e){ btn.disabled = false; btn.textContent = 'Enregistrer mon nouveau code'; err(enFrancais(e, 'Vérifiez votre connexion et réessayez.')); }
+  };
+  document.body.appendChild(f);
+  setTimeout(() => { f.classList.add('vu'); const c = f.querySelector('#nc-1'); if(c) c.focus(); }, 30);
+}
 /* toucher une notification mène à ce dont elle parle */
 function ouvrirNotif(n){
   if(!n) return;
@@ -1213,6 +1308,10 @@ function ouvrirNotif(n){
     chargerClassement(id); return aller('gagnants');
   }
   if(genre === 'defi' && id) return ouvrirDefi(id);
+  if(genre === 'nouveau-code') return verifierChangementCode(true);
+  if(genre === 'avis' || genre === 'annonce'){
+    if(NOTIFS_FENETRE.includes(n.type) || n.type === 'reponse_admin' || n.type === 'annonce') return fenetreAnnonce(Object.assign({}, n, { type: n.type === 'reponse_admin' ? 'reponse_admin_plein' : (n.type === 'annonce' ? 'annonce_plein' : n.type), lue:true, lien:'' }));
+  }
   if(genre === 'compte') return aller('compte');
   if(genre === 'abonnement') return aller('abonnement');
   if(genre === 'fautes') return lancerFautes();
@@ -1275,7 +1374,8 @@ async function chargerAbonnement(){
     if(typeof g === 'boolean' && g !== S.gratuit){ S.gratuit = g; rendre(); }
     const uid = await utilisateurCourant();
     if(!uid) return;
-    const { data } = await base.from('mon_abonnement').select('*').maybeSingle();
+    const { data: lignes } = await base.from('mon_abonnement').select('*').eq('user_id', uid).order('fin_le', { ascending:false }).limit(1);
+    const data = (lignes && lignes[0]) || null;
     if(data && data.actif){
       S.abo = {
         actif: true, formule: data.formule, fin_le: data.fin_le,
@@ -1969,6 +2069,20 @@ function salutAccueil(){
   const mot = h < 5 || h >= 18 ? 'Bonsoir' : 'Bonjour';
   return `<p class="salut-accueil">${mot} <b>${E(prenom)}</b></p>`;
 }
+/* Pour un visiteur : un bloc net en haut de l'accueil, qui dit comment s'inscrire en trois gestes */
+function blocInscriptionVisiteur(){
+  if(S.util.connecte) return '';
+  return `<div class="carte inscr-visiteur" role="region" aria-label="Créer mon compte">
+    <div class="iv-titre">Créez votre compte gratuit</div>
+    <ol class="iv-etapes">
+      <li><b>1</b><span>Touchez le bouton vert ci-dessous</span></li>
+      <li><b>2</b><span>Écrivez votre nom et votre numéro de téléphone</span></li>
+      <li><b>3</b><span>Choisissez un code de 4 chiffres : c'est tout</span></li>
+    </ol>
+    <button class="cta" data-modal="inscription">Je m'inscris gratuitement<small>30 secondes · sans e-mail · sans carte bancaire</small></button>
+    <button class="lien" style="display:block;margin:10px auto 0" data-modal="connexion">J'ai déjà un compte : me connecter</button>
+  </div>`;
+}
 /* Les derniers jours de l'essai de 7 jours : une carte calme, sur l'accueil seulement, jamais en pleine question */
 function blocFinEssai(){
   const a = S.abo || {};
@@ -1988,6 +2102,7 @@ function ecranAujourdhui(){
   vue().innerHTML = `
   <div class="pad">
     ${salutAccueil()}
+    ${blocInscriptionVisiteur()}
     ${blocFinEssai()}
     <div class="tete-jour">
       <span class="eyebrow">${dateDuJour()}</span>
@@ -2331,6 +2446,11 @@ async function validerCode(){
     if(!data || !data.ok){ S.codeErreur = (data && data.message) || 'Code refusé.'; return rendre(); }
     pister('CODE_REDEEMED', { formule: data.formule });
     S.codeOuvert = false; S.codeSaisi = '';
+    /* l'abonnement est affiché tout de suite, sans attendre la relecture */
+    if(data.fin_le){
+      const j = Math.max(0, Math.ceil((new Date(data.fin_le) - Date.now()) / 86400000));
+      S.abo = { actif:true, formule:data.formule, fin_le:data.fin_le, jours_restants:j, echeance:j + ' jour' + (j > 1 ? 's' : '') + ' restant' + (j > 1 ? 's' : '') };
+    }
     await chargerAbonnement(); chargerNotifications();
     signalCandidat((data.libelle || 'Votre abonnement') + ' est actif. Bon courage !');
     aller('abonnement');
@@ -5781,6 +5901,8 @@ function ouvrirLienDirect(){
   else if(/^[0-9a-f-]{36}$/i.test(p.get('copie') || '')){ const id = p.get('copie'); setTimeout(() => feuilleArchive(id), 1500); }
   else if(p.get('reprendre') === 'cours' || p.get('reprendre') === 'qcm') cible = repriseCible(p.get('reprendre'));
   else if(p.get('fautes')){ setTimeout(lancerFautes, 1200); }
+  else if(p.has('nouveau-code')) setTimeout(() => verifierChangementCode(true), 1500);
+  else if(p.has('avis') || p.has('annonce')) setTimeout(() => chargerNotifications(), 1200);
   else if(p.has('compte')) cible = 'compte';
   else if(p.has('abonnement')) cible = 'abonnement';
   else if(p.has('parcours')) cible = 'parcours';

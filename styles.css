@@ -1884,3 +1884,19 @@ body[data-theme="clair"] .fe-carte{background:#fff}
 .no-btn svg{flex:none}
 .no-btn.no-danger{color:var(--rouge-texte);border-color:var(--rouge-bord);background:transparent}
 body[data-theme="clair"] .no-btn.no-danger{color:var(--erreur);border-color:rgba(194,57,46,.35)}
+
+/* fenêtres de l'administration : annonce, réponse à un avis, nouveau code */
+.fenetre-evt.annonce .fe-badge,.fenetre-evt.nouveau-code .fe-badge{background:var(--or,#C79A2B);box-shadow:0 0 0 10px rgba(199,154,43,.16);font-size:34px}
+.fe-marque{font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--craie2);margin:0 0 8px}
+.fe-long{text-align:left;max-height:42vh;overflow:auto;white-space:normal;overflow-wrap:anywhere}
+.fe-etiq{display:block;text-align:left;font-size:12.5px;font-weight:700;margin:12px 0 5px;color:var(--craie2)}
+.fe-champ{width:100%;box-sizing:border-box;text-align:center;font-size:24px;letter-spacing:.5em;padding:12px;border-radius:12px;border:1.5px solid var(--trait);background:transparent;color:inherit}
+.fe-champ:focus{outline:2px solid var(--or,#C79A2B);outline-offset:1px}
+.fe-alerte{background:rgba(178,58,46,.12);color:#B23A2E;border-radius:10px;padding:9px 11px;font-size:13px;font-weight:600;margin:0 0 6px;text-align:left}
+
+/* bloc d'inscription du visiteur sur l'accueil */
+.inscr-visiteur{border:2px solid var(--or,#C79A2B);padding:18px 16px;margin-bottom:14px}
+.iv-titre{font-family:var(--d);font-size:21px;font-weight:800;margin:0 0 10px}
+.iv-etapes{list-style:none;margin:0 0 14px;padding:0;display:grid;gap:8px}
+.iv-etapes li{display:flex;align-items:center;gap:10px;font-size:14px;line-height:1.35}
+.iv-etapes b{flex:none;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:var(--or,#C79A2B);color:#fff;font-size:13px}
