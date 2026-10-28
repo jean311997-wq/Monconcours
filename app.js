@@ -507,6 +507,7 @@ function aller(e){
   if(['engagement','testIntro','test'].includes(e) && testDejaFait()) e = 'aujourdhui';
   if(e === 'resultat' && testDejaFait() && S.testNote === null) e = 'aujourdhui';
   if(S.gratuit && (e === 'abonnement' || e === 'paiement')) e = 'compte';   // pas de formules pendant la phase gratuite
+  if(['abonnement','paiement'].includes(e) && !S.gratuit) chargerPromo();
   if(['revisions','qcm'].includes(e)){ progressionMemo(); chargerQuestions(); }
   if(e === 'horsligne'){ S.packOuvert = false; if(!S.ressources) chargerRessources(); }
   if(e !== 'lecture'){ S.matiereOuverte = null; S.lectureReprise = null; }
@@ -1314,7 +1315,7 @@ function ouvrirNotif(n){
     if(NOTIFS_FENETRE.includes(n.type) || n.type === 'reponse_admin' || n.type === 'annonce') return fenetreAnnonce(Object.assign({}, n, { type: n.type === 'reponse_admin' ? 'reponse_admin_plein' : (n.type === 'annonce' ? 'annonce_plein' : n.type), lue:true, lien:'' }));
   }
   if(genre === 'compte') return aller('compte');
-  if(genre === 'abonnement') return aller('abonnement');
+  if(genre === 'abonnement'){ chargerPromo().then(() => aller('abonnement')); return; }
   if(genre === 'fautes') return lancerFautes();
   if(genre === 'reprendre') return aller(repriseCible(id) || 'aujourdhui');
   if(genre === 'parcours') return aller('parcours');
@@ -1392,11 +1393,45 @@ async function chargerAbonnement(){
     const { data: dem } = await base.rpc('mon_paiement_en_cours');
     S.paiementEtat = (dem && dem.ok && dem.statut) ? dem : null;
     S.paieEnAttente = (S.paiementEtat && S.paiementEtat.statut === 'en_attente') ? S.paiementEtat : null;
+    await chargerPromo();
     const of = await chargerOffre(true);   // l'offre naît tout de suite, avec sa notification
     if(of && of.nouvelle) chargerNotifications();
     if(['compte','abonnement','aujourdhui','resultat'].includes(S.ecran)) rendre();
   }catch(e){}
 }
+
+/* =====================================================================
+   PROMOTION : un prix réduit lancé à la main par l'administration, pour
+   tous, un groupe ou des numéros précis. Le serveur fixe le prix au
+   paiement ; l'écran ne fait que l'afficher.
+   ===================================================================== */
+let _formulesBase = null;
+const formulesBase = () => _formulesBase || (_formulesBase = { mensuelle:Object.assign({}, FORMULES.mensuelle), annuelle:Object.assign({}, FORMULES.annuelle) });
+function appliquerPromo(p){
+  const b = formulesBase();
+  const actif = !!(p && p.actif && (!p.fin_le || new Date(p.fin_le) > new Date()));
+  S.promo = actif ? p : null;
+  [['mensuelle', 30], ['annuelle', 365]].forEach(([k, j]) => {
+    const x = actif && p.prix && p.prix[k];
+    FORMULES[k] = x
+      ? Object.assign({}, b[k], { prix: fmtFcfa(x.promo), montant: x.promo, ancien: b[k].prix, jour: Math.round(x.promo / j) + ' F par jour' })
+      : Object.assign({}, b[k]);
+  });
+}
+async function chargerPromo(){
+  if(!base || !S.util.connecte || S.gratuit) { if(S.promo) appliquerPromo(null); return null; }
+  try{
+    const { data, error } = await base.rpc('ma_promotion');
+    if(error) throw error;
+    const avant = S.promo && S.promo.id, apres = data && data.actif ? data.id : null;
+    appliquerPromo(data);
+    if(avant !== apres && ['abonnement','paiement','compte','aujourdhui'].includes(S.ecran)) rendre();
+    return data;
+  }catch(e){ return null; }
+}
+const promoFin = () => (S.promo && S.promo.fin_le)
+  ? 'Jusqu\'au ' + new Date(S.promo.fin_le).toLocaleDateString('fr-FR', { day:'numeric', month:'long' }) + ' à ' + heureH(S.promo.fin_le)
+  : 'Promotion en cours';
 
 /* =====================================================================
    OFFRE FLASH : le Abonnement Année à moitié prix pendant 24 heures.
@@ -1414,7 +1449,7 @@ function appliquerOffre(o){
 }
 async function chargerOffre(creer){
   /* l'offre flash est terminée pour tout le monde : plus aucun prix barré */
-  appliquerOffre(null); return null;
+  appliquerPromo(S.promo); return null;
   if(!base || !S.util.connecte || S.gratuit || estAbonne()){ appliquerOffre(null); return null; }
   try{
     const { data, error } = await base.rpc('mon_offre_flash', { p_creer: !!creer });
@@ -2087,6 +2122,17 @@ function blocInscriptionVisiteur(){
   </div>`;
 }
 /* Les derniers jours de l'essai de 7 jours : une carte calme, sur l'accueil seulement, jamais en pleine question */
+function blocPromo(){
+  if(S.gratuit || !S.util.connecte || !S.promo || estAbonne()) return '';
+  const p = S.promo, m = FORMULES.mensuelle, a = FORMULES.annuelle;
+  const lignes = [m.ancien ? m.n + ' : <s style="opacity:.55">' + E(m.ancien) + '</s> <b>' + E(m.prix) + '</b>' : '', a.ancien ? a.n + ' : <s style="opacity:.55">' + E(a.ancien) + '</s> <b>' + E(a.prix) + '</b>' : ''].filter(Boolean);
+  return `<div class="carte fin-essai" role="status">
+    <div class="fe-ligne"><b>${E(p.nom)}</b></div>
+    <p class="sous" style="margin:6px 0 4px">${lignes.join('<br>')}</p>
+    <p class="sous" style="margin:0 0 12px;font-size:12.5px">${E(promoFin())}</p>
+    <button class="cta" data-go="abonnement">Profiter de la promotion</button>
+  </div>`;
+}
 function blocFinEssai(){
   const a = S.abo || {};
   if(S.gratuit || !S.util.connecte || !a.actif || a.formule !== 'essai' || a.jours_restants > 2) return '';
@@ -2106,6 +2152,7 @@ function ecranAujourdhui(){
   <div class="pad">
     ${salutAccueil()}
     ${blocInscriptionVisiteur()}
+    ${blocPromo()}
     ${blocFinEssai()}
     ${blocBandeauRappel()}
     <div class="tete-jour">
@@ -2501,10 +2548,10 @@ function ecranAbonnement(){
     ${Object.keys(FORMULES).map(k => {
       const f = FORMULES[k];
       return `<div class="formule ${f.reco ? 'reco' : ''} ${f.ancien ? 'flash' : ''}">
-        ${f.ancien ? '<span class="ruban">offre flash</span>' : f.reco ? '<span class="ruban">recommandé</span>' : ''}
+        ${f.ancien ? '<span class="ruban">promotion</span>' : f.reco ? '<span class="ruban">recommandé</span>' : ''}
         <div class="haut"><span class="nom">${f.n}</span>
           <span class="prix">${f.ancien ? `<s class="barre">${f.ancien}</s> ` : ''}${f.prix} <em>${f.per}</em></span></div>
-        ${f.ancien ? `<div class="flash-reste">Expire ${jourOffre()} à minuit · il reste <b data-offre-reste="1">${resteOffre()}</b></div>` : ''}
+        ${f.ancien ? `<div class="flash-reste">${E(S.promo ? promoFin() : '')}</div>` : ''}
         <button class="mini" style="margin-top:12px" data-pass="${k}">Choisir cet abonnement</button>
       </div>`;
     }).join('')}

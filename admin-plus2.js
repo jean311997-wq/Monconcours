@@ -304,6 +304,107 @@ V.diffuser = async function(){
 };
 
 /* ============================================================
+   PROMOTION : un prix réduit, lancé et arrêté à la main
+   ============================================================ */
+const CIBLES_PROMO = CIBLES.concat([['numeros', 'Des numéros précis']]);
+V.promotion = async function(){
+  const { db, A } = X();
+  const admin = !!A.admin;
+  $('#vue').innerHTML = `
+    <h2 class="titre">Promotion</h2>
+    <p class="sous">Baissez le prix des abonnements pour tout le monde, un groupe ou quelques numéros. Dès le lancement, chaque personne concernée voit une fenêtre au milieu de l'écran et la cloche. Le prix réduit est appliqué au paiement. Une seule promotion à la fois : en lancer une arrête la précédente.</p>
+    <div id="pr-actuelle"></div>
+    ${admin ? `<div class="carte" id="pr-form">
+      <div class="libelle" style="margin-bottom:8px">Lancer une promotion</div>
+      <label>Nom (vu par les candidats)<input id="pr-nom" maxlength="60" placeholder="Promotion de la semaine"></label>
+      <div class="deux-col" style="gap:10px">
+        <label>Abonnement Mois : nouveau prix (FCFA)<input id="pr-m" type="number" min="100" step="50" inputmode="numeric" placeholder="500"></label>
+        <label>Abonnement Année : nouveau prix (FCFA)<input id="pr-a" type="number" min="100" step="50" inputmode="numeric" placeholder="2000"></label>
+      </div>
+      <div id="pr-normal" class="sous" style="margin:-2px 0 8px"></div>
+      <label>Pour qui
+        <select id="pr-cible">${CIBLES_PROMO.map(c => `<option value="${c[0]}">${c[1]}</option>`).join('')}</select></label>
+      <div id="pr-nb" class="sous" style="margin:0 0 8px"></div>
+      <label id="pr-tel-zone" hidden>Numéros (un par ligne ou séparés par des virgules)
+        <textarea id="pr-tel" rows="3" placeholder="70 12 34 56&#10;76 00 11 22"></textarea></label>
+      <label>Fin de la promotion (facultatif, heure du Burkina)<input id="pr-fin" type="datetime-local"></label>
+      <p class="sous" style="margin:-2px 0 8px;font-size:12.5px">Sans date, elle dure jusqu'à ce que vous l'arrêtiez.</p>
+      <label>Message (facultatif)<textarea id="pr-msg" rows="3" maxlength="400" placeholder="Laissez vide : le message est écrit avec les prix."></textarea></label>
+      <button class="cta" id="pr-go" style="margin-top:6px">Lancer la promotion</button>
+      <p id="pr-etat" class="sous" style="margin-top:8px"></p>
+    </div>` : '<div class="carte"><div class="vide">Seule l\'administration peut lancer une promotion.</div></div>'}
+    <div class="bloc"><div class="libelle">Historique</div><div class="carte" id="pr-histo">Chargement…</div></div>`;
+
+  let normal = {};
+  const charger = async () => {
+    const { data, error } = await db.rpc('admin_promotions');
+    const h = $('#pr-histo'); if(!h) return;
+    if(error){ h.innerHTML = '<div class="vide">' + e(error.message) + '</div>'; return; }
+    normal = data.normal || {};
+    const nz = $('#pr-normal'); if(nz) nz.textContent = 'Prix normal : Mois ' + num(normal.mensuelle) + ' F · Année ' + num(normal.annuelle) + ' F.';
+    const liste = data.liste || [];
+    const prixTxt = p => [p.prix.mensuelle ? 'Mois ' + num(p.prix.mensuelle) + ' F' : '', p.prix.annuelle ? 'Année ' + num(p.prix.annuelle) + ' F' : ''].filter(Boolean).join(' · ');
+    const qui = p => p.cible === 'numeros' ? num(p.nb_numeros) + ' numéro' + (p.nb_numeros > 1 ? 's' : '') : ((CIBLES_PROMO.find(c => c[0] === p.cible) || [0, p.cible])[1]);
+    const act = liste.find(p => p.actif);
+    $('#pr-actuelle').innerHTML = act ? `<div class="carte" style="border-color:var(--cachet)">
+        <div class="libelle" style="margin-bottom:6px">Promotion en cours</div>
+        <b>${e(act.nom)}</b> <b style="color:var(--cachet)">Active</b>
+        <p class="sous" style="margin:6px 0">${e(prixTxt(act))} · ${e(qui(act))} · ${act.fin_le ? 'jusqu\'au ' + e(X().heureCourte(act.fin_le)) : 'sans date de fin'}</p>
+        <p class="sous" style="margin:0 0 10px">${num(act.destinataires)} personne${act.destinataires > 1 ? 's' : ''} prévenue${act.destinataires > 1 ? 's' : ''} · ${num(act.achats)} achat${act.achats > 1 ? 's' : ''} confirmé${act.achats > 1 ? 's' : ''} à ce prix.</p>
+        ${admin ? `<button class="cta creux" data-pr-stop="${e(act.id)}">Arrêter la promotion</button>` : ''}
+      </div>` : `<div class="carte"><div class="vide" style="margin:0">Aucune promotion en cours : tous les candidats paient le prix normal.</div></div>`;
+    h.innerHTML = liste.length ? `<div class="defile"><table><thead><tr><th>Lancée</th><th>Nom</th><th>Prix</th><th>Pour qui</th><th>Prévenus</th><th>Achats</th><th>État</th><th></th></tr></thead><tbody>${liste.map(p => `<tr>
+      <td style="white-space:nowrap">${e(X().heureCourte(p.lance_le))}</td><td><b>${e(p.nom)}</b></td><td>${e(prixTxt(p))}</td><td>${e(qui(p))}</td>
+      <td class="num">${num(p.destinataires)}</td><td class="num">${num(p.achats)}</td>
+      <td>${p.actif ? '<b style="color:var(--cachet)">Active</b>' : p.terminee ? 'Terminée' : 'Arrêtée'}</td>
+      <td>${admin && p.actif ? `<button class="mini" data-pr-stop="${e(p.id)}">Arrêter</button>` : (admin && !p.terminee ? `<button class="mini" data-pr-reprise="${e(p.id)}">Reprendre</button>` : '')}</td></tr>`).join('')}</tbody></table></div>` : '<div class="vide">Aucune promotion lancée pour le moment.</div>';
+    $$('[data-pr-stop]').forEach(b => b.onclick = async () => {
+      if(!confirm('Arrêter la promotion ? Les candidats repayent le prix normal.')) return;
+      const { data: r, error: er } = await db.rpc('admin_promotion_arreter', { p_id: b.dataset.prStop });
+      if(er || !r || !r.ok) return alert((r && r.message) || (er && er.message) || 'Échec.');
+      charger();
+    });
+    $$('[data-pr-reprise]').forEach(b => b.onclick = async () => {
+      if(!confirm('Reprendre cette promotion ? Elle remplace celle en cours, sans nouvelle notification.')) return;
+      const { data: r, error: er } = await db.rpc('admin_promotion_reprendre', { p_id: b.dataset.prReprise });
+      if(er || !r || !r.ok) return alert((r && r.message) || (er && er.message) || 'Échec.');
+      charger();
+    });
+  };
+  charger();
+  if(!admin) return;
+  const compter = async () => {
+    const c = $('#pr-cible').value;
+    $('#pr-tel-zone').hidden = c !== 'numeros';
+    const z = $('#pr-nb');
+    if(c === 'numeros'){ z.textContent = ''; return; }
+    const { data } = await db.rpc('admin_compter_cible', { p_cible: c });
+    z.innerHTML = '<b>' + num(data || 0) + '</b> personne' + (data > 1 ? 's' : '') + ' seront prévenues.';
+  };
+  $('#pr-cible').addEventListener('change', compter); compter();
+  $('#pr-go').onclick = async () => {
+    const nom = $('#pr-nom').value.trim(), m = parseInt($('#pr-m').value, 10) || null, a = parseInt($('#pr-a').value, 10) || null;
+    const etat = $('#pr-etat');
+    if(nom.length < 3) return (etat.textContent = 'Donnez un nom à la promotion.');
+    if(!m && !a) return (etat.textContent = 'Indiquez au moins un prix.');
+    if(m && normal.mensuelle && m >= normal.mensuelle) return (etat.textContent = 'Le prix du Mois doit être plus bas que ' + normal.mensuelle + ' F.');
+    if(a && normal.annuelle && a >= normal.annuelle) return (etat.textContent = 'Le prix de l\'Année doit être plus bas que ' + normal.annuelle + ' F.');
+    const cible = $('#pr-cible').value, tel = $('#pr-tel').value;
+    if(cible === 'numeros' && !tel.trim()) return (etat.textContent = 'Indiquez au moins un numéro.');
+    const fin = $('#pr-fin').value ? $('#pr-fin').value + ':00Z' : null;
+    const quoi = [m ? 'Mois à ' + m + ' F' : '', a ? 'Année à ' + a + ' F' : ''].filter(Boolean).join(' et ');
+    if(!confirm('Lancer « ' + nom + ' » ?\n\n' + quoi + '\nPour : ' + (CIBLES_PROMO.find(c => c[0] === cible) || [0, cible])[1] + '\n\nLa promotion en cours sera arrêtée. Chaque personne concernée verra la fenêtre tout de suite.')) return;
+    const b = $('#pr-go'); b.disabled = true; etat.textContent = 'Lancement…';
+    const { data, error } = await db.rpc('admin_promotion_lancer', { p_nom: nom, p_cible: cible, p_telephones: tel, p_mensuelle: m, p_annuelle: a, p_message: $('#pr-msg').value.trim() || null, p_fin_le: fin });
+    b.disabled = false;
+    if(error || !data || !data.ok) return (etat.textContent = (data && data.message) || (error && error.message) || 'Échec.');
+    etat.textContent = 'Promotion lancée : ' + num(data.destinataires) + ' personne(s) prévenue(s).' + ((data.inconnus || []).length ? ' Numéros sans compte : ' + data.inconnus.join(', ') + '.' : '');
+    $('#pr-nom').value = ''; $('#pr-m').value = ''; $('#pr-a').value = ''; $('#pr-msg').value = ''; $('#pr-tel').value = ''; $('#pr-fin').value = '';
+    charger();
+  };
+};
+
+/* ============================================================
    LE CONSEIL DES DIX : dix lectures de vos chiffres réels, puis un bilan et des actions
    ============================================================ */
 function lectures(m){
