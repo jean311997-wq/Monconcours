@@ -5790,15 +5790,16 @@ function blocRappels(){
   if(r){ const d = new Date(); d.setUTCHours(r.heure, r.minute || 0, 0, 0); h = d.getHours(); m = d.getMinutes(); }
   return `<div class="carte rappel-c" style="margin-top:14px">
     <div class="libelle" style="margin-bottom:8px"><span>${ico('cloche',14)} Mes notifications</span><button class="inter${r ? ' on' : ''}" role="switch" aria-checked="${r ? 'true' : 'false'}" aria-label="Notifications" data-rappel-inter="1"><i></i></button></div>
-    <p class="sous" style="margin:0 0 10px;font-size:12.5px">${r ? 'Chaque jour à <b>' + hm(h, m) + '</b> · prochain rappel dans ' + delaiRappel(h, m) + '.' : 'Recevez sur le téléphone les points clés de votre parcours, les leçons à réviser et vos erreurs à revoir, même application fermée. Choisissez l\'heure.'}</p>
+    <p class="sous" style="margin:0 0 10px;font-size:12.5px">${r ? 'Activées : vous recevez les informations importantes de Mon Concours.' : 'Recevez les nouveautés de Mon Concours : votre progression, vos erreurs, l\'actualité du concours.'}</p>
+    <details class="rappel-reglage"${r ? '' : ' hidden'}><summary>Heure du rappel du jour : ${hm(h, m)}</summary>
     <div class="rappel-heure">
       <label class="sr" for="rappel-h">Heure</label>
       <select id="rappel-h">${Array.from({ length:24 }, (_, i) => `<option value="${i}" ${i === h ? 'selected' : ''}>${i} h</option>`).join('')}</select>
       <label class="sr" for="rappel-m">Minutes</label>
       <select id="rappel-m">${Array.from({ length:60 }, (_, i) => `<option value="${i}" ${i === m ? 'selected' : ''}>${String(i).padStart(2, '0')}</option>`).join('')}</select>
       <button class="mini" data-rappel-heure="1">Valider</button>
-    </div>
-    ${r ? '<button class="lien" style="margin-top:8px;padding:0" data-rappel-retirer="1">Arrêter le rappel</button>' : ''}
+    </div></details>
+    ${r ? '<button class="lien" style="margin-top:8px;padding:0" data-rappel-retirer="1">Arrêter les notifications</button>' : ''}
     ${!r && ['refuse', 'impossible'].includes(etatRappel()) ? `<p class="sous rappel-wa" style="margin:10px 0 0;font-size:12.5px">${etatRappel() === 'refuse' ? 'Les notifications sont bloquées sur ce téléphone.' : 'Ce téléphone ne permet pas les rappels.'} Recevez les annonces et les rendez-vous de composition sur WhatsApp : <a href="${E(CONTACT.canal)}" target="_blank" rel="noopener" data-rappel-wa="1">rejoindre la communauté</a>.</p>` : ''}
   </div>`;
 }
@@ -5819,7 +5820,7 @@ function blocBandeauRappel(){
   if(masque && Date.now() - masque < 7 * 86400000) return '';
   return `<div class="bandeau-rappel" role="status">
     <span class="br-i">${ico('cloche', 18)}</span>
-    <div class="br-t"><b>Restez informé</b><small>Les points clés de votre parcours, les leçons à réviser, vos erreurs à revoir : sur votre téléphone, même application fermée.</small></div>
+    <div class="br-t"><b>Restez informé</b><small>Votre progression, vos erreurs, l'actualité du concours.</small></div>
     <button class="mini" data-rappel-oui="1">Activer</button>
     <button class="br-x" data-rappel-masquer="1" aria-label="Masquer ce message">×</button>
   </div>`;
@@ -5837,9 +5838,8 @@ function fenetreRappel(mode, motif){
   if(mode === 'possible'){
     const t = MOTS_RAPPEL[motif] || MOTS_RAPPEL.bandeau;
     corps = `<h3 id="pr-titre">${t[0]}</h3>
-      <p class="intro">${t[1]} Restez informé avec Mon Concours : les points clés de votre parcours, les compositions et leurs résultats, les leçons à réviser, vos erreurs à revoir. Vous pouvez changer l'heure ou arrêter à tout moment, dans « Mon compte ».</p>
-      <button class="cta" data-rappel-oui="1">Oui, me tenir informé</button>
-      <button class="cta creux" style="margin-top:8px" data-rappel-autre="1">Choisir l'heure des notifications</button>
+      <p class="intro">${t[1]} Restez informé de votre progression, de vos erreurs et de l'actualité du concours.</p>
+      <button class="cta" data-rappel-oui="1">Oui, rester informé</button>
       <button class="lien" style="display:block;margin:12px auto 0" data-rappel-plus-tard="1">Plus tard</button>`;
   } else {
     corps = `<h3 id="pr-titre">${mode === 'refuse' ? 'Pas de notifications, pas de souci' : 'Les rappels ne marchent pas sur ce téléphone'}</h3>
