@@ -450,6 +450,182 @@ V.promotion = async function(){
 };
 
 /* ============================================================
+   COMMUNAUTÉ : lire, épingler, masquer, supprimer, couper la parole, publier
+   ============================================================ */
+V.communaute = async function(){
+  const { db, A } = X();
+  const admin = !!A.admin;
+  const NOM_TYPE = { annonce:'Annonce', motivation:'Motivation', bilan:'Bilan', cours:'Cours', actualite:'Actualité', top:'Contributeurs', epreuve:'Épreuve', classement:'Classement', progres:'Progrès', resultat:'Résultat', texte:'Message', photo:'Photo' };
+  const urlImg = c => { try { return db.storage.from('communaute').getPublicUrl(c).data.publicUrl; } catch(_){ return ''; } };
+  const etat = { fin: false, avant: null, nb: 0, filtre: 'tout' };
+  $('#vue').innerHTML = `
+    <h2 class="titre">Communauté</h2>
+    <p class="sous">Tout ce qui s'écrit dans la communauté des candidats. Vous pouvez épingler, masquer, supprimer, couper la parole à quelqu'un, et publier au nom de « Administration Mon Concours ».</p>
+    <div class="carte"><div id="cm-resume" class="mini-compteurs"></div></div>
+    ${admin ? `<div class="carte" id="cm-form">
+      <div class="libelle" style="margin-bottom:8px">Publier comme « Administration Mon Concours »</div>
+      <label>Message<textarea id="cm-texte" rows="4" maxlength="1500" placeholder="Votre message aux candidats"></textarea></label>
+      <label>Photo (facultatif, 3 Mo au plus)<input id="cm-photo" type="file" accept="image/jpeg,image/png,image/webp"></label>
+      <label style="display:flex;gap:8px;align-items:center;margin:6px 0"><input type="checkbox" id="cm-epingle" style="width:auto"> Épingler en haut</label>
+      <label style="display:flex;gap:8px;align-items:center;margin:6px 0"><input type="checkbox" id="cm-notif" style="width:auto"> Prévenir tous les candidats (cloche et téléphone)</label>
+      <label id="cm-titre-zone" hidden>Titre de la notification (3 à 80 caractères)<input id="cm-titre" maxlength="80" placeholder="Nouveau dans la communauté"></label>
+      <button class="cta" id="cm-go" style="margin-top:6px">Publier</button>
+      <p id="cm-etat" class="sous" style="margin-top:8px"></p>
+    </div>` : ''}
+    <div class="bloc"><div class="libelle">Personnes à qui on a coupé la parole</div><div class="carte" id="cm-muets">Chargement…</div></div>
+    <div class="bloc"><div class="libelle">Publications</div>
+      <div class="onglets" id="cm-filtres" style="margin-bottom:10px">
+        <button data-f="tout" class="on">Toutes</button><button data-f="candidats">Candidats</button><button data-f="admin">Administration</button><button data-f="masquees">Masquées</button>
+      </div>
+      <div id="cm-liste">Chargement…</div>
+      <button class="cta creux" id="cm-plus" style="margin-top:10px" hidden>Voir plus</button></div>`;
+
+  const jours = [['1', '1 jour'], ['7', '7 jours'], ['30', '30 jours'], ['0', 'Définitivement']];
+  const fin = j => j ? 'jusqu\'au ' + X().heureCourte(j) : 'sans date de fin';
+  const agir = async (action, args, confirmation) => {
+    if(confirmation && !confirm(confirmation)) return null;
+    const { data, error } = await db.rpc('admin_communaute_action', Object.assign({ p_action: action }, args));
+    if(error || !data || !data.ok){ alert((data && data.message) || (error && error.message) || 'Échec.'); return null; }
+    return data;
+  };
+
+  const resume = r => {
+    const z = $('#cm-resume'); if(!z || !r) return;
+    const t = (n, l) => `<div><b>${num(n)}</b><span>${l}</span></div>`;
+    z.innerHTML = t(r.publications, 'publications') + t(r.aujourdhui, 'aujourd\'hui') + t(r.commentaires, 'commentaires') + t(r.coeurs, 'cœurs') +
+      t(r.auteurs_7j, 'auteurs sur 7 jours') + t(r.masquees, 'masquées') + t(r.muets, 'sans parole');
+  };
+
+  const muets = async () => {
+    const { data, error } = await db.rpc('admin_communaute_muets');
+    const z = $('#cm-muets'); if(!z) return;
+    if(error){ z.innerHTML = '<div class="vide">' + e(error.message) + '</div>'; return; }
+    z.innerHTML = (data || []).length ? `<div class="defile"><table><thead><tr><th>Candidat</th><th>Jusqu'à</th><th>Motif</th><th></th></tr></thead><tbody>${data.map(m => `<tr>
+      <td><b>${e(m.nom || 'Sans nom')}</b><br><span style="color:var(--craie2);font-size:12px">${e(m.telephone || '')}</span></td>
+      <td>${e(fin(m.jusqu_au))}</td><td>${e(m.motif || '')}</td>
+      <td>${admin ? `<button class="mini" data-parole="${e(m.user_id)}">Rendre la parole</button>` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<div class="vide" style="margin:0">Personne. Tout le monde peut écrire.</div>';
+    $$('[data-parole]').forEach(b => b.onclick = async () => {
+      if(await agir('parole', { p_user: b.dataset.parole })){ muets(); liste(true); }
+    });
+  };
+
+  const garde = p => etat.filtre === 'tout' || (etat.filtre === 'candidats' && !p.admin) || (etat.filtre === 'admin' && p.admin) || (etat.filtre === 'masquees' && p.cache);
+
+  const carte = p => {
+    const auteur = p.admin ? 'Administration Mon Concours' : (p.nom || p.nom_compte || 'Sans nom');
+    const txt = p.texte ? e(p.texte).replace(/\n/g, '<br>') : '';
+    const kind = p.carte && p.carte.kind ? (NOM_TYPE[p.carte.kind] || p.carte.kind) : (NOM_TYPE[p.type] || p.type);
+    return `<div class="carte" data-pub="${e(p.id)}" style="${p.cache ? 'opacity:.62;' : ''}${p.epingle ? 'border-color:var(--cachet);' : ''}">
+      <div style="display:flex;gap:8px;justify-content:space-between;align-items:baseline;flex-wrap:wrap">
+        <div><b>${e(auteur)}</b>${p.admin ? '' : ` <span style="color:var(--craie2);font-size:12px">${e(p.telephone || '')}</span>`}
+          ${p.muet ? ' <b style="color:var(--rouge-texte);font-size:12px">sans parole</b>' : ''}</div>
+        <span style="color:var(--craie2);font-size:12px">${e(X().heureCourte(p.cree_le))}</span>
+      </div>
+      <div style="margin:2px 0 6px;font-size:12px;color:var(--craie2)">${e(kind)}${p.epingle ? ' · <b style="color:var(--cachet)">Épinglée</b>' : ''}${p.cache ? ' · <b>Masquée</b>' : ''} · ${num(p.coeurs)} cœur${p.coeurs > 1 ? 's' : ''} · ${num(p.comms)} commentaire${p.comms > 1 ? 's' : ''}</div>
+      ${txt ? `<div style="white-space:normal;line-height:1.45">${txt}</div>` : ''}
+      ${p.image ? `<img src="${e(urlImg(p.image))}" alt="" loading="lazy" style="max-width:220px;max-height:160px;border-radius:10px;margin-top:8px;display:block">` : ''}
+      ${p.carte && p.carte.titre ? `<div class="sous" style="margin-top:6px">Carte : ${e(p.carte.titre)}</div>` : ''}
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
+        ${p.comms ? `<button class="mini" data-voir-comm="${e(p.id)}">Voir les commentaires</button>` : ''}
+        ${admin ? `<button class="mini" data-act="${p.epingle ? 'desepingler' : 'epingler'}">${p.epingle ? 'Désépingler' : 'Épingler'}</button>
+        <button class="mini" data-act="${p.cache ? 'montrer' : 'cacher'}">${p.cache ? 'Réafficher' : 'Masquer'}</button>
+        <button class="mini" data-act="supprimer">Supprimer</button>
+        ${!p.admin && p.auteur_id ? (p.muet ? `<button class="mini" data-parole="${e(p.auteur_id)}">Rendre la parole</button>` : `<button class="mini" data-muet="${e(p.auteur_id)}" data-nom="${e(p.nom || p.nom_compte || '')}">Couper la parole</button>`) : ''}` : ''}
+      </div>
+      <div class="cm-comms" hidden></div></div>`;
+  };
+
+  const brancher = zone => {
+    zone.querySelectorAll('[data-pub]').forEach(c => {
+      if(c.dataset.ok) return; c.dataset.ok = '1';
+      const id = c.dataset.pub;
+      c.querySelectorAll('[data-act]').forEach(b => b.onclick = async () => {
+        const a = b.dataset.act;
+        const ok = await agir(a, { p_id: id }, a === 'supprimer' ? 'Supprimer cette publication, ses commentaires et ses cœurs ? Impossible à annuler.' : null);
+        if(ok){ muets(); liste(true); }
+      });
+      c.querySelectorAll('[data-parole]').forEach(b => b.onclick = async () => { if(await agir('parole', { p_user: b.dataset.parole })){ muets(); liste(true); } });
+      c.querySelectorAll('[data-muet]').forEach(b => b.onclick = async () => {
+        const choix = prompt('Couper la parole à ' + (b.dataset.nom || 'cette personne') + ' pendant combien de jours ?\n1, 7, 30, ou 0 pour définitivement.', '7');
+        if(choix == null) return;
+        const j = parseInt(choix, 10);
+        if(isNaN(j) || j < 0) return alert('Indiquez un nombre de jours (0 = définitivement).');
+        const motif = prompt('Motif (facultatif, vu seulement par l\'équipe) :', '') || null;
+        if(await agir('muet', { p_user: b.dataset.muet, p_jours: j, p_motif: motif })){ muets(); liste(true); }
+      });
+      c.querySelectorAll('[data-voir-comm]').forEach(b => b.onclick = async () => {
+        const z = c.querySelector('.cm-comms');
+        if(!z.hidden){ z.hidden = true; return; }
+        z.hidden = false; z.innerHTML = '<div class="sous">Chargement…</div>';
+        const { data, error } = await db.rpc('communaute_commentaires', { p_pub: id });
+        if(error || !data || !data.ok){ z.innerHTML = '<div class="vide">Lecture impossible.</div>'; return; }
+        z.innerHTML = (data.commentaires || []).map(k => `<div style="border-top:1px solid var(--trait);padding:8px 0;display:flex;gap:8px;justify-content:space-between;align-items:flex-start">
+          <div><b>${k.admin ? 'Administration Mon Concours' : e(k.nom || '')}</b> <span style="color:var(--craie2);font-size:12px">${e(X().heureCourte(k.cree_le))}</span><br>${e(k.texte).replace(/\n/g, '<br>')}</div>
+          ${admin ? `<button class="mini" data-kc="${e(k.id)}">Supprimer</button>` : ''}</div>`).join('') || '<div class="sous">Aucun commentaire.</div>';
+        z.querySelectorAll('[data-kc]').forEach(x => x.onclick = async () => {
+          if(await agir('supprimer_commentaire', { p_id: x.dataset.kc }, 'Supprimer ce commentaire ?')){ x.closest('div[style]').remove(); liste(true); }
+        });
+      });
+    });
+  };
+
+  const liste = async (depart) => {
+    const zone = $('#cm-liste'); if(!zone) return;
+    if(depart){ etat.avant = null; etat.fin = false; zone.innerHTML = zone.innerHTML || 'Chargement…'; }
+    const { data, error } = await db.rpc('admin_communaute_liste', { p_avant: etat.avant, p_limite: 30 });
+    if(!$('#cm-liste')) return;
+    if(error || !data || !data.ok){ zone.innerHTML = '<div class="vide">' + e((error && error.message) || 'Lecture impossible.') + '</div>'; return; }
+    if(depart) resume(data.resume);
+    const L = data.publications || [];
+    etat.fin = L.length < 30;
+    if(L.length) etat.avant = L[L.length - 1].cree_le;
+    if(depart){ zone.innerHTML = ''; etat.tous = []; }
+    etat.tous = (etat.tous || []).concat(L);
+    dessiner();
+  };
+  const dessiner = () => {
+    const zone = $('#cm-liste'); if(!zone) return;
+    const L = (etat.tous || []).filter(garde);
+    zone.innerHTML = L.length ? L.map(carte).join('') : '<div class="vide">Rien à montrer ici.</div>';
+    brancher(zone);
+    const p = $('#cm-plus'); if(p) p.hidden = etat.fin;
+  };
+
+  $$('#cm-filtres [data-f]').forEach(b => b.onclick = () => {
+    etat.filtre = b.dataset.f;
+    $$('#cm-filtres [data-f]').forEach(x => x.classList.toggle('on', x === b));
+    dessiner();
+  });
+  $('#cm-plus').onclick = () => liste(false);
+  muets(); liste(true);
+
+  if(!admin) return;
+  $('#cm-notif').addEventListener('change', () => { $('#cm-titre-zone').hidden = !$('#cm-notif').checked; });
+  $('#cm-go').onclick = async () => {
+    const texte = $('#cm-texte').value.trim(), notif = $('#cm-notif').checked, titre = $('#cm-titre').value.trim();
+    const f = $('#cm-photo').files[0], z = $('#cm-etat');
+    if(!texte && !f) return (z.textContent = 'Écrivez le message ou ajoutez une photo.');
+    if(notif && (titre.length < 3 || titre.length > 80)) return (z.textContent = 'Pour prévenir tout le monde, ajoutez un titre de 3 à 80 caractères.');
+    if(f && (f.size > 3145728 || !/^image\/(jpeg|png|webp)$/.test(f.type))) return (z.textContent = 'Photo refusée : JPEG, PNG ou WebP, 3 Mo au plus.');
+    if(!confirm(notif ? 'Publier et prévenir TOUS les candidats ?\n\nLa notification ne peut pas être annulée.' : 'Publier ce message dans la communauté ?')) return;
+    const b = $('#cm-go'); b.disabled = true; z.textContent = 'Publication…';
+    let chemin = null;
+    if(f){
+      const uid = A.session && A.session.user && A.session.user.id;
+      chemin = uid + '/' + Date.now() + '.' + (f.type === 'image/png' ? 'png' : f.type === 'image/webp' ? 'webp' : 'jpg');
+      const up = await db.storage.from('communaute').upload(chemin, f, { contentType: f.type, upsert: false });
+      if(up.error){ b.disabled = false; return (z.textContent = 'Photo non envoyée : ' + up.error.message); }
+    }
+    const r = await agir('publier', { p_texte: texte, p_titre: titre || null, p_image: chemin, p_epingle: $('#cm-epingle').checked, p_notifier: notif });
+    b.disabled = false;
+    if(!r) return (z.textContent = 'Échec. Rien n\'a été publié.');
+    z.textContent = notif ? 'Publié. ' + num(r.destinataires) + ' personne(s) prévenue(s).' : 'Publié.';
+    $('#cm-texte').value = ''; $('#cm-titre').value = ''; $('#cm-photo').value = ''; $('#cm-epingle').checked = false; $('#cm-notif').checked = false; $('#cm-titre-zone').hidden = true;
+    liste(true);
+  };
+};
+
+/* ============================================================
    LE CONSEIL DES DIX : dix lectures de vos chiffres réels, puis un bilan et des actions
    ============================================================ */
 function lectures(m){

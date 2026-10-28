@@ -2722,7 +2722,7 @@ const NOMS_ECRANS = {
   recherche:'Recherche', proposer:'Proposer une question', horsligne:'Révision hors ligne', suppression:'Suppression du compte',
   engagement:'Accueil découverte', testIntro:'Test d\'entrée (début)', test:'Test d\'entrée', resultat:'Résultat du test',
   inscription:'Inscription', connexion:'Connexion', apparence:'Apparence', abonnement:'Abonnement', paiement:'Paiement',
-  question:'Question partagée'
+  question:'Question partagée', communaute:'Communauté'
 };
 const NOMS_ACTIONS = {
   COMPOSITION_SUBMITTED:'Copies remises', COMPOSITION_COMPLETED:'Compositions terminées', COMPOSITION_ANSWER_SELECTED:'Cases noircies en composition',

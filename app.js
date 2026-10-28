@@ -520,7 +520,7 @@ function aller(e){
   }
   /* on rafraîchit en arrière-plan, au plus toutes les 20 secondes : l'écran s'affiche d'abord avec ce qu'on a */
   if(e === 'aujourdhui' && pasTropSouvent('accueil', 20000)){ chargerJournee(); chargerEpreuve(); chargerDetails(); }
-  if((e === 'compte' || e === 'parcours') && pasTropSouvent('compte', 20000)){ chargerJournee(); chargerRappel(); chargerDetails(); chargerProgression(); chargerPlan(); }
+  if((e === 'compte' || e === 'parcours') && pasTropSouvent('compte', 20000)){ chargerJournee(); chargerRappel(); chargerDetails(); chargerProgression(); chargerPlan(); chargerCommInfo(); }
   if(e === 'cahier' && pasTropSouvent('cahier', 20000)){ chargerDetails(); chargerCahier(); }
   if(['copie','gagnants','cahier','revisions','defi'].includes(e)) prechargerOutilsPdf();
   if(e === 'notion' && S.notion && S.notion.jour !== new Date().toDateString()) S.notion = null;
@@ -553,7 +553,7 @@ function nav(){
   n.innerHTML = ONGLETS.map(o=>{
     const on = (o.id===S.ecran || (o.id==='grille'&&S.ecran==='copie')
       || (o.id==='aujourdhui'&&['actualite','pourtoi','qdj','gagnants','correctionnat','question','notion','recherche','defi','top','proposer'].includes(S.ecran))
-      || (o.id==='compte'&&S.ecran==='parcours')
+      || (o.id==='compte'&&(S.ecran==='parcours'||S.ecran==='communaute'))
       || (o.id==='revisions'&&(S.ecran==='qcm'||S.ecran==='cours'))) ? 'on':'';
     const p = (o.id==='cahier' && ouvertes()) ? `<i class="pastille num">${ouvertes()}</i>`:'';
     const centre = o.id === 'grille' ? ' pivot' : '';
@@ -562,6 +562,7 @@ function nav(){
   r.innerHTML = ONGLETS.map(o=>{
     const on = (o.id===S.ecran || (o.id==='grille'&&S.ecran==='copie')
       || (o.id==='aujourdhui'&&['actualite','pourtoi','qdj','gagnants','correctionnat','question','notion','recherche','defi','top','proposer'].includes(S.ecran))
+      || (o.id==='compte'&&(S.ecran==='parcours'||S.ecran==='communaute'))
       || (o.id==='revisions'&&(S.ecran==='qcm'||S.ecran==='cours'))) ? 'on':'';
     const p = (o.id==='cahier' && ouvertes()) ? `<span class="pastille num">${ouvertes()}</span>`:'';
     return `<button class="${on}" data-go="${o.id}"${on?' aria-current="page"':''}>
@@ -1223,7 +1224,7 @@ function fenetreAnnonce(n){
   f.setAttribute('role', 'dialog'); f.setAttribute('aria-modal', 'true');
   f.setAttribute('aria-label', n.titre || 'Message de Mon Concours');
   const [genre] = String(n.lien || '').split(':');
-  const suite = { abonnement:'Voir mon abonnement', compte:'Ouvrir mon compte', parcours:'Ouvrir mon parcours', offre:'Voir l\'offre' }[genre];
+  const suite = { abonnement:'Voir mon abonnement', compte:'Ouvrir mon compte', parcours:'Ouvrir mon parcours', offre:'Voir l\'offre', communaute:'Entrer dans la communauté' }[genre];
   f.innerHTML = `<div class="fe-carte">
     <div class="fe-badge" aria-hidden="true">${reponse ? '✉' : '📣'}</div>
     <div class="fe-marque">Mon Concours · ${reponse ? 'Réponse de l\'administration' : 'Message de l\'équipe'}</div>
@@ -1310,6 +1311,7 @@ function ouvrirNotif(n){
     chargerClassement(id); return aller('gagnants');
   }
   if(genre === 'defi' && id) return ouvrirDefi(id);
+  if(genre === 'communaute') return ouvrirCommunaute(id);
   if(genre === 'nouveau-code') return verifierChangementCode(true);
   if(genre === 'avis' || genre === 'annonce'){
     if(NOTIFS_FENETRE.includes(n.type) || n.type === 'reponse_admin' || n.type === 'annonce') return fenetreAnnonce(Object.assign({}, n, { type: n.type === 'reponse_admin' ? 'reponse_admin_plein' : (n.type === 'annonce' ? 'annonce_plein' : n.type), lue:true, lien:'' }));
@@ -2308,7 +2310,12 @@ function ico(n, t){
     question:'<circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.8-2.4 2.2-2.4 3.9"/><circle cx="12" cy="17" r=".6" fill="currentColor"/>',
     horloge:'<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
     coche:'<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16.5 9.5"/>',
-    corbeille:'<path d="M4 7h16"/><path d="M9 7V4.5h6V7"/><path d="M6.5 7l.8 12a1.5 1.5 0 0 0 1.5 1.4h6.4a1.5 1.5 0 0 0 1.5-1.4L17.5 7"/><path d="M10 11v6M14 11v6"/>'
+    corbeille:'<path d="M4 7h16"/><path d="M9 7V4.5h6V7"/><path d="M6.5 7l.8 12a1.5 1.5 0 0 0 1.5 1.4h6.4a1.5 1.5 0 0 0 1.5-1.4L17.5 7"/><path d="M10 11v6M14 11v6"/>',
+    coeur:'<path d="M12 20.2s-7.6-4.6-7.6-10.4A4.2 4.2 0 0 1 12 7.4a4.2 4.2 0 0 1 7.6 2.4c0 5.8-7.6 10.4-7.6 10.4z"/>',
+    bulle:'<path d="M5 4.5h14a2 2 0 0 1 2 2v8.2a2 2 0 0 1-2 2h-6.4L8 20.5v-3.8H5a2 2 0 0 1-2-2V6.5a2 2 0 0 1 2-2z"/>',
+    photo:'<rect x="3" y="5" width="18" height="14" rx="2.2"/><circle cx="9" cy="10.4" r="1.7"/><path d="M21 16.2l-5-4.7L7.5 19"/>',
+    epingle:'<path d="M12 21v-6"/><path d="M8.2 3.5h7.6l-1 5.3 3 3.2H6.2l3-3.2z"/>',
+    envoyer:'<path d="M4 12l16-7.5-5.2 15-3.1-6.2z"/><path d="M11.7 13.3L20 4.5"/>'
   }[n] || '';
   return `<svg ${o}>${p}</svg>`;
 }
@@ -2918,7 +2925,7 @@ function texteDePartage(quoi){
 /* Feuille de partage : les vrais logos, pas un bouton anonyme. */
 /* Feuille des notifications : la cloche l'ouvre, une par une ou tout
    marquer comme lu. Le badge se vide dès l'ouverture d'une ligne. */
-const ICONE_NOTIF = { resultat:'grille', paiement:'carte', nouveau_cours:'revisions', rappel:'cloche', motivation:'cloche', faiblesse:'erreurs', securite:'cadenas', defi:'duel', progression:'diagnostic', installation:'telecharger' };
+const ICONE_NOTIF = { resultat:'grille', paiement:'carte', nouveau_cours:'revisions', rappel:'cloche', motivation:'cloche', faiblesse:'erreurs', securite:'cadenas', defi:'duel', progression:'diagnostic', installation:'telecharger', communaute:'coeur', annonce_plein:'groupe' };
 
 function relatif(iso){
   const d = Date.now() - new Date(iso).getTime();
@@ -2976,6 +2983,11 @@ function ouvrirPartage(quoi){
     <div class="poignee"></div>
     <h3 style="margin:0 0 4px">Partager</h3>
     <p class="sous" style="margin:0 0 14px">${E(t)}</p>
+
+    ${S.util.connecte ? `<button class="pt-comm" data-cm-partager="${E(quoi)}">
+      <span class="ic">${ico('groupe',22)}</span>
+      <span class="tx"><b>Dans la communauté Mon Concours</b><small>Montrez-le aux autres candidats</small></span>
+      <i aria-hidden="true">→</i></button>` : ''}
 
     <div class="partages">
       <a class="pt wa" href="https://wa.me/?text=${complet}" target="_blank" rel="noopener">
@@ -4732,6 +4744,82 @@ function recompenses(){
   ];
 }
 
+/* =====================================================================
+   COMMUNAUTÉ
+   L'écran, ses styles et ses échanges avec la base sont dans
+   communaute.js et communaute.css : ils ne se téléchargent qu'à la
+   première visite, pour que ceux qui n'y vont pas ne paient rien.
+   Ici : la tuile de « Mon compte », le compteur et l'accès.
+   ===================================================================== */
+const COMM_VERSION = 1;
+const LIEN_UUID = /^[0-9a-f-]{36}$/i;
+/* « Plus de 600 candidats » : arrondi à la centaine inférieure, donc toujours vrai */
+function candidatsCommunaute(){
+  const n = S.commInfo && S.commInfo.membres;
+  if(n === undefined || n === null) return 'Plus de 600 candidats';
+  return n >= 100 ? 'Plus de ' + nombreFr(Math.floor(n / 100) * 100) + ' candidats' : 'Rejoignez les premiers candidats';
+}
+function tuileCommunaute(){
+  const i = S.commInfo, jamais = !lireReglages().commVu;
+  const neuf = jamais ? 'Nouveau' : (i && i.nouveaux > 0 ? (i.nouveaux > 99 ? '99+' : i.nouveaux) + (i.nouveaux > 1 ? ' nouveautés' : ' nouveauté') : '');
+  return `<button class="stat stat-comm" data-go="communaute" aria-label="Ouvrir la communauté. ${candidatsCommunaute()}${neuf ? '. ' + neuf : ''}">
+    <span class="sc-ic">${ico('groupe', 22)}</span>
+    <span class="sc-t">Communauté</span>
+    <span class="sc-n">${candidatsCommunaute()}</span>
+    ${neuf ? `<span class="sc-new${jamais ? ' jamais' : ''}">${neuf}</span>` : ''}
+  </button>`;
+}
+async function chargerCommInfo(){
+  if(!base || !S.util.connecte) return;
+  try{
+    const { data } = await base.rpc('communaute_info', { p_depuis: lireReglages().commVu || null });
+    if(data && data.ok && !pareil(data, S.commInfo)){ S.commInfo = data; if(S.ecran === 'compte') rendre(); }
+  }catch(e){}
+}
+function chargerModuleCommunaute(){
+  if(window.MC_COMM) return Promise.resolve(window.MC_COMM);
+  if(chargerModuleCommunaute.p) return chargerModuleCommunaute.p;
+  chargerModuleCommunaute.p = new Promise((ok, ko) => {
+    const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/communaute.css?v=' + COMM_VERSION;
+    document.head.appendChild(l);
+    const s = document.createElement('script'); s.src = '/communaute.js?v=' + COMM_VERSION;
+    s.onload = () => window.MC_COMM ? ok(window.MC_COMM) : ko(new Error('module'));
+    s.onerror = () => { chargerModuleCommunaute.p = null; ko(new Error('réseau')); };
+    document.head.appendChild(s);
+  });
+  return chargerModuleCommunaute.p;
+}
+function ecranCommunaute(){
+  if(window.MC_COMM) return window.MC_COMM.ecran();
+  vue().innerHTML = `<div class="pad"><button class="retourhaut" data-go="compte">Retour</button>
+    <h1 class="titre">Communauté</h1>
+    <div class="squelette large" style="margin-top:16px"></div><div class="squelette" style="margin-top:10px"></div><div class="squelette court" style="margin-top:10px"></div></div>`;
+  chargerModuleCommunaute().then(() => { if(S.ecran === 'communaute') rendre(); }).catch(() => {
+    if(S.ecran !== 'communaute') return;
+    vue().innerHTML = `<div class="pad"><button class="retourhaut" data-go="compte">Retour</button>
+      <h1 class="titre">Communauté</h1>
+      <p class="sous" style="margin:10px 0 16px">La communauté n'a pas pu s'ouvrir. Vérifiez votre connexion, puis réessayez.</p>
+      <button class="cta" data-comm-reessayer="1">Réessayer</button></div>`;
+  });
+}
+function ouvrirCommunaute(id){
+  if(LIEN_UUID.test(id || '')) S.commFocus = id;
+  aller('communaute');
+}
+document.addEventListener('click', ev => {
+  if(ev.target.closest('[data-comm-reessayer]')) return rendre();
+  /* « Partager » → « Dans la communauté » : on ouvre l'écran avec le message déjà prêt */
+  const t = ev.target.closest('[data-cm-partager]');
+  if(!t) return;
+  const quoi = t.dataset.cmPartager, c = S.classement, v = document.getElementById('voile');
+  if(v){ v.hidden = true; v.innerHTML = ''; } S.modal = null;
+  S.commBrouillon = { quoi,
+    texte: quoi === 'performance' && c ? `Je suis ${nombreFr(c.rang)}ᵉ sur ${nombreFr(c.population)} candidats, avec ${nombreFr(c.points)} points. Et vous, où en êtes-vous ?`
+         : quoi === 'cours' && S.matiereOuverte ? `Je révise ${S.matiereOuverte} aujourd'hui. Et vous ?` : '' };
+  pister('COMMUNITY_SHARE_STARTED', { quoi });
+  aller('communaute');
+});
+
 function ecranCompte(){
   const mots = (S.util.nom||'Candidat').trim().split(/\s+/).filter(Boolean);
   const initiales = (mots.length > 1
@@ -4751,12 +4839,16 @@ function ecranCompte(){
     </div>
 
     <div class="duo">
-      <div class="stat stat-oblique" aria-label="${S.stats ? nombreFr(S.stats.questions_resolues) + ' QCM résolus et ' + nombreFr(S.stats.compositions || 0) + ' compositions' : 'Résolu'}">
-        <div class="so-h"><span class="v num">${S.stats ? nombreFr(S.stats.questions_resolues) : '—'}</span><span class="l">QCM</span></div>
-        <span class="so-trait" aria-hidden="true"></span>
-        <div class="so-b"><span class="v num">${S.stats ? nombreFr(S.stats.compositions || 0) : '—'}</span><span class="l">Compositions</span></div>
+      <div class="stat stat-taux" aria-label="${S.stats ? S.stats.taux_reussite + ' % de réussite, ' + nombreFr(S.stats.questions_resolues) + ' QCM résolus et ' + nombreFr(S.stats.compositions || 0) + ' compositions' : 'Taux de réussite'}">
+        <div class="v num">${S.stats ? S.stats.taux_reussite + ' %' : '—'}</div>
+        <div class="l">Taux de réussite</div>
+        <div class="st-sous">
+          <span><b class="num">${S.stats ? nombreFr(S.stats.questions_resolues) : '—'}</b> QCM</span>
+          <i aria-hidden="true"></i>
+          <span><b class="num">${S.stats ? nombreFr(S.stats.compositions || 0) : '—'}</b> composition${(S.stats && (S.stats.compositions || 0) === 1) ? '' : 's'}</span>
+        </div>
       </div>
-      <div class="stat"><div class="v num">${S.stats ? S.stats.taux_reussite + ' %' : '—'}</div><div class="l">Taux de réussite</div></div>
+      ${tuileCommunaute()}
     </div>
 
     ${blocNiveau(true)}
@@ -6101,6 +6193,7 @@ function ouvrirLienDirect(){
   else if(p.get('fautes')){ setTimeout(lancerFautes, 1200); }
   else if(p.has('nouveau-code')) setTimeout(() => verifierChangementCode(true), 1500);
   else if(p.has('avis') || p.has('annonce')) setTimeout(() => chargerNotifications(), 1200);
+  else if(p.has('communaute')){ cible = 'communaute'; if(/^[0-9a-f-]{36}$/i.test(p.get('communaute') || '')) S.commFocus = p.get('communaute'); }
   else if(p.has('compte')) cible = 'compte';
   else if(p.has('abonnement')) cible = 'abonnement';
   else if(p.has('parcours')) cible = 'parcours';
@@ -7678,7 +7771,7 @@ function rendre(){
     grille:ecranGrille, copie:ecranCopie,
     cahier:ecranCahier, lecteur:ecranLecteur, compte:ecranCompte,
     pourtoi:ecranPourToi, qdj:ecranQdj, question:ecranQuestionPartagee, gagnants:ecranGagnants, correctionnat:ecranCorrectionNat,
-    notion:ecranNotion, recherche:ecranRecherche, defi:ecranDefi, top:ecranTop, proposer:ecranProposer, parcours:ecranParcours, horsligne:ecranHorsLigne, suppression:ecranSuppression}[S.ecran] || ecranAujourdhui);
+    notion:ecranNotion, recherche:ecranRecherche, defi:ecranDefi, top:ecranTop, proposer:ecranProposer, parcours:ecranParcours, communaute:ecranCommunaute, horsligne:ecranHorsLigne, suppression:ecranSuppression}[S.ecran] || ecranAujourdhui);
 
   /* FILET — une erreur dans un seul écran ne doit plus jamais laisser
      le candidat devant une page noire. On affiche ce qui s'est passé
