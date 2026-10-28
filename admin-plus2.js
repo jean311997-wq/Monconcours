@@ -120,21 +120,30 @@ X().paiementsPlus = async function(zone, recharger){
    EN DIRECT ET HISTORIQUE : rien ne disparaît au bout de 24 h
    ============================================================ */
 let minuteurDirect = null;
+/* un rafraîchissement automatique ne doit jamais avaler un clic : on ne redessine pas une zone si le contenu est identique ou si la souris est dessus */
+function majZone(z, html){
+  if(!z) return;
+  if(z._h === html) return;
+  if(z._h && z.matches(':hover')) return;
+  z._h = html; z.innerHTML = html;
+}
 const FILTRES = [['important', 'Important'], ['paiement', 'Paiements'], ['compte', 'Comptes'], ['composition', 'Compositions'], ['tout', 'Tout']];
 V.direct = async function(){
   clearTimeout(minuteurDirect);
   const { db, A } = X();
-  const auj = jourIso(new Date());
+  const auj = jourIso(Date.now());
   if(!A.hist) A.hist = { du: auj, au: auj, filtre: 'important' };
   if(A.histPlage){ A.hist.du = A.histPlage.du; A.hist.au = A.histPlage.au; A.histPlage = null; }
   const H = A.hist;
   let page = 0, cumul = [], total = 0;
-  const hier = new Date(); hier.setDate(hier.getDate() - 1);
-  const il = n => { const d = new Date(); d.setDate(d.getDate() - n); return jourIso(d); };
+  const hier = Date.now() - 86400000;
+  const il = n => jourIso(Date.now() - n * 86400000);
   $('#vue').innerHTML = `
     <h2 class="titre">En direct et historique</h2>
     <p class="sous">Ce qui se passe maintenant, et tout ce qui s'est passé avant : chaque action reste consultable, au jour près. Touchez un nom pour ouvrir sa fiche.</p>
+    <p class="sous" id="direct-horloge" style="margin:4px 0 0;font-size:12.5px"></p>
     <div id="direct-tuiles" class="compteurs" style="margin-top:12px"></div>
+    <div class="carte" style="margin-top:14px"><div class="libelle">En ligne en ce moment <span class="sous" style="font-weight:400">(actifs depuis moins de 15 min)</span></div><div id="direct-ligne" style="margin-top:6px">Chargement…</div></div>
     <div class="carte" style="margin-top:14px">
       <div class="rangee barre-periode" style="align-items:center;margin-bottom:8px">
         ${[['Aujourd\'hui', auj, auj], ['Hier', jourIso(hier), jourIso(hier)], ['7 jours', il(6), auj], ['30 jours', il(29), auj]].map(p => `<button class="cta creux petit${H.du === p[1] && H.au === p[2] ? ' choisi' : ''}" data-h-du="${p[1]}" data-h-au="${p[2]}">${p[0]}</button>`).join('')}
@@ -152,15 +161,16 @@ V.direct = async function(){
   $('#h-go').onclick = () => { const du = $('#h-du').value, au = $('#h-au').value || auj; if(!du) return X().signal('Choisissez au moins le premier jour.', 'mal'); H.du = du <= au ? du : au; H.au = du <= au ? au : du; V.direct(); };
   const su = $('#h-sans-user'); if(su) su.onclick = () => { A.histUser = null; V.direct(); };
 
-  const borne = () => ({ p_du: new Date(H.du + 'T00:00:00').toISOString(), p_au: new Date(new Date(H.au + 'T00:00:00').getTime() + 86400000).toISOString() });
+  const borne = () => ({ p_du: new Date(H.du + 'T00:00:00Z').toISOString(), p_au: new Date(new Date(H.au + 'T00:00:00Z').getTime() + 86400000).toISOString() });
   const dessiner = () => {
     const z = $('#direct-liste'); if(!z) return;
-    z.innerHTML = `<p class="sous" style="margin:0 0 8px;font-size:13px">${num(total)} action${total > 1 ? 's' : ''} · ${H.du === H.au ? e(X().jourLong(H.du)) : 'du ' + e(X().jourLong(H.du)) + ' au ' + e(X().jourLong(H.au))}</p>` +
+    const html = `<p class="sous" style="margin:0 0 8px;font-size:13px">${num(total)} action${total > 1 ? 's' : ''} · ${H.du === H.au ? e(X().jourLong(H.du)) : 'du ' + e(X().jourLong(H.du)) + ' au ' + e(X().jourLong(H.au))}</p>` +
       (cumul.length ? `<div class="defile"><table><thead><tr><th>Quand</th><th>Qui</th><th>Action</th><th>Où</th></tr></thead><tbody>${cumul.map(a => `<tr>
         <td class="num" style="white-space:nowrap;color:var(--craie2)">${e(X().heureCourte(a.quand))}</td>
         <td>${a.user_id ? `<b class="cliquable" data-fiche="${e(a.user_id)}">${e(a.personne || 'Candidat')}</b>` : '<span style="color:var(--craie2)">Visiteur</span>'}${a.telephone ? ` <span class="num cliquable" data-fiche="${e(a.user_id)}" style="font-size:11.5px;color:var(--craie2)">${e(a.telephone)}</span>` : ''}</td>
         <td class="cliquable" data-action="${e(a.nom)}">${e(X().nomAction(a.nom))}${a.element ? ' · ' + e(a.element) : ''}</td>
         <td style="color:var(--craie2)">${e(a.ecran ? X().nomEcran(a.ecran) : '')}</td></tr>`).join('')}</tbody></table></div>` : X().insuffisant('Aucune action sur cette période avec ce filtre.'));
+    majZone(z, html);
     $('#h-plus').hidden = cumul.length >= total;
   };
   const charger = async () => {
@@ -174,12 +184,28 @@ V.direct = async function(){
 
   const tuiles = async () => {
     if(A.vue !== 'direct') return;
-    const { data: t } = await db.rpc('temps_reel');
-    const z = $('#direct-tuiles'); if(!z || !t) return;
-    z.innerHTML = `<div class="compteur en-ligne"><div class="v num"><i class="pouls"></i>${t.actifs_15min}</div><div class="l">Actifs (15 min)</div></div>
-      <div class="compteur cliquable" data-vers="compositions"><div class="v num">${t.compositions_en_cours}</div><div class="l">Compositions en cours</div><div class="d">voir le détail</div></div>`;
+    const [{ data: t, error: et }, { data: ligne }] = await Promise.all([db.rpc('temps_reel'), db.rpc('en_ligne_maintenant')]);
+    if(A.vue !== 'direct') return;
+    const z = $('#direct-tuiles'), hz = $('#direct-horloge'), lz = $('#direct-ligne');
+    if(!z) return;
+    if(et || !t){ z.innerHTML = '<div class="vide">' + e(et ? et.message : 'Chiffres indisponibles pour le moment.') + '</div>'; }
+    else {
+      const heure = new Date(t.maintenant || Date.now()).toLocaleTimeString('fr-FR', { timeZone: 'Africa/Ouagadougou', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      if(hz) hz.innerHTML = `Heures du Burkina Faso (UTC). Mis à jour à <b>${e(heure)}</b>${t.derniere_action ? ' · dernière action : ' + e(X().depuis(t.derniere_action)) : ''}. Se rafraîchit toutes les 10 secondes.`;
+      const T = (v, l, d, vers) => `<div class="compteur${vers ? ' cliquable' : ''}"${vers ? ` data-vers="${vers}"` : ''}><div class="v num">${v}</div><div class="l">${l}</div>${d ? `<div class="d">${d}</div>` : ''}</div>`;
+      majZone(z, `<div class="compteur en-ligne"><div class="v num"><i class="pouls"></i>${num(t.actifs_5min)}</div><div class="l">Actifs (5 min)</div><div class="d">${num(t.actifs_15min)} sur 15 min · ${num(t.actifs_60min)} sur 1 h</div></div>` +
+        T(num(t.comptes_15min), 'Comptes connectés', num(t.visiteurs_15min) + ' visiteur' + (t.visiteurs_15min > 1 ? 's' : '') + ' sans compte') +
+        T(num(t.compositions_en_cours), 'Compositions en cours', num(t.compositions_jour) + ' lancée' + (t.compositions_jour > 1 ? 's' : '') + ' aujourd\'hui · ' + num(t.terminees_jour) + ' terminée' + (t.terminees_jour > 1 ? 's' : ''), 'compositions') +
+        T(num(t.inscrits_jour), 'Inscrits aujourd\'hui') +
+        T(num(t.questions_jour), 'Questions traitées aujourd\'hui') +
+        T(num(t.paiements_jour), 'Paiements aujourd\'hui', X().F ? X().F(t.montant_jour) : num(t.montant_jour) + ' FCFA', 'paiements'));
+    }
+    if(lz){
+      const L = ligne || [];
+      majZone(lz, L.length ? `<div class="defile" style="max-height:260px"><table><tbody>${L.map(p => `<tr><td><b class="cliquable" data-fiche="${e(p.user_id)}">${e(p.nom || 'Candidat')}</b>${p.telephone ? ` <span class="num" style="font-size:11.5px;color:var(--craie2)">${e(p.telephone)}</span>` : ''}</td><td style="color:var(--craie2)">${e(p.ecran ? X().nomEcran(p.ecran) : '')}</td><td>${e(p.action ? X().nomAction(p.action) : '')}</td><td class="num" style="white-space:nowrap;color:var(--craie2)">${e(X().depuis(p.derniere))}</td></tr>`).join('')}</tbody></table></div>` : '<div class="vide">Personne avec un compte n\'est en ligne à cet instant.</div>');
+    }
     /* la première page se rafraîchit seule quand la période inclut aujourd'hui */
-    if(H.au === jourIso(new Date()) && page === 0 && !A.histUser) await charger();
+    if(H.au === jourIso(Date.now()) && page === 0 && !A.histUser) await charger();
     minuteurDirect = setTimeout(tuiles, 10000);
   };
   tuiles();
@@ -264,6 +290,9 @@ V.diffuser = async function(){
         <div class="libelle" style="margin:14px 0 6px">Aperçu : cloche</div>
         <div class="apercu-cloche"><b id="ap-c-titre">Titre</b><span id="ap-c-texte">Message</span></div></div>
     </div>` : '<div class="carte"><div class="vide">Seule l\'administration peut envoyer un message. Vous pouvez consulter l\'historique ci-dessous.</div></div>'}
+    ${admin ? `<div class="bloc"><div class="libelle">Écrire à une seule personne</div><div class="carte">
+      <label>Son numéro ou son nom<input id="solo-q" placeholder="70 12 34 56 ou Awa" autocomplete="off"></label>
+      <div id="solo-res" class="sous" style="margin-top:6px"></div></div></div>` : ''}
     <div class="bloc"><div class="libelle">Messages déjà envoyés</div><div class="carte" id="d-histo">Chargement…</div></div>`;
 
   const histo = async () => {
@@ -277,6 +306,22 @@ V.diffuser = async function(){
   };
   histo();
   if(!admin) return;
+  let minuteur = null;
+  $('#solo-q').addEventListener('input', () => {
+    clearTimeout(minuteur);
+    minuteur = setTimeout(async () => {
+      const q = $('#solo-q').value.trim(), z = $('#solo-res'); if(!z) return;
+      if(q.length < 2){ z.textContent = ''; return; }
+      z.textContent = 'Recherche…';
+      const { data, error } = await db.rpc('chercher_candidats', { p_q: q });
+      if(error){ z.textContent = error.message; return; }
+      const l = (data || []).slice(0, 8);
+      z.innerHTML = l.length ? l.map(p => `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--trait)">
+        <span><b class="cliquable" data-fiche="${e(p.id)}">${e(p.nom || 'Candidat')}</b> <span class="num" style="color:var(--craie2);font-size:12px">${e(p.telephone || '')}</span></span>
+        <button class="mini" data-solo="${e(p.id)}" data-nom="${e(p.nom || '')}">Écrire</button></div>`).join('') : 'Personne ne correspond.';
+      $$('[data-solo]').forEach(b => b.onclick = () => X().ecrireA(b.dataset.solo, b.dataset.nom));
+    }, 300);
+  });
   const maj = () => {
     $('#ap-titre').textContent = $('#d-titre').value || 'Titre'; $('#ap-texte').textContent = $('#d-msg').value || 'Message';
     $('#ap-c-titre').textContent = $('#d-titre').value || 'Titre'; $('#ap-c-texte').textContent = $('#d-msg').value || 'Message';

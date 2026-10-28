@@ -21,9 +21,8 @@ const jourIso = d => X().isoJour(d);
 function plageActive(){
   const a = X().A;
   if(a.plage) return a.plage;
-  const n = Math.max(1, X().periode || 30), fin = new Date(), debut = new Date();
-  debut.setDate(debut.getDate() - (n - 1));
-  return { du: jourIso(debut), au: jourIso(fin) };
+  const n = Math.max(1, X().periode || 30);
+  return { du: jourIso(Date.now() - (n - 1) * 86400000), au: jourIso(Date.now()) };
 }
 const etiqPlage = () => { const p = plageActive(); return p.du === p.au ? 'le ' + X().jourLong(p.du) : 'du ' + X().jourLong(p.du) + ' au ' + X().jourLong(p.au); };
 function duree(min){
@@ -40,7 +39,7 @@ function depuis(iso){
   if(s < 86400) return 'il y a ' + Math.round(s / 3600) + ' h';
   return 'il y a ' + Math.round(s / 86400) + ' j';
 }
-const heureCourte = iso => iso ? new Date(iso).toLocaleString('fr-FR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—';
+const heureCourte = iso => iso ? new Date(iso).toLocaleString('fr-FR', { timeZone:'Africa/Ouagadougou', day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—';
 const allerA = vue => { X().A.vue = vue; X().rendre(); };
 const tendance = (n, avant) => {
   if(avant == null) return '';
@@ -286,6 +285,31 @@ async function ouvrirFiche(id){
   }
 }
 X().ouvrirFiche = ouvrirFiche;
+
+/* ---------- écrire à une personne : la même fenêtre partout (signalements, recherche, fiche) ---------- */
+function ecrireA(id, nom, modele){
+  const m = modele || {};
+  const f = fenetre(`<h3 style="margin:0 0 4px">Écrire à ${e(nom || 'ce candidat')}</h3>
+    <p class="sous" style="margin:0 0 10px;font-size:13px">Ce message n'arrive qu'à cette personne : dans sa cloche, en fenêtre plein écran, ou les deux.</p>
+    <label>Titre<input id="ea-titre" maxlength="80" value="${e(m.titre || '')}" placeholder="Titre (3 à 80 caractères)"></label>
+    <label>Message<textarea id="ea-msg" rows="4" maxlength="600" placeholder="Votre message">${e(m.message || '')}</textarea></label>
+    <label>Comment l'afficher<select id="ea-mode"><option value="les_deux">Cloche et plein écran</option><option value="cloche">Cloche seulement</option><option value="plein">Plein écran seulement</option></select></label>
+    <p id="ea-etat" class="sous" style="margin:6px 0 0"></p>
+    <div class="rangee" style="margin-top:10px"><button class="cta" id="ea-go">Envoyer</button><button class="cta creux" data-fermer>Fermer</button></div>`);
+  f.querySelector('#ea-go').onclick = async () => {
+    const etat = f.querySelector('#ea-etat'), b = f.querySelector('#ea-go');
+    const titre = f.querySelector('#ea-titre').value.trim(), msg = f.querySelector('#ea-msg').value.trim();
+    if(titre.length < 3 || msg.length < 3) return (etat.textContent = 'Écrivez un titre et un message.');
+    b.disabled = true; etat.textContent = 'Envoi…';
+    const { data, error: er } = await X().db.rpc('admin_envoyer_a', { p_user: id, p_titre: titre, p_message: msg, p_mode: f.querySelector('#ea-mode').value });
+    b.disabled = false;
+    if(er || !data || !data.ok) return (etat.textContent = (data && data.message) || (er && er.message) || 'Échec.');
+    etat.textContent = 'Message envoyé.';
+    setTimeout(() => f._fermer && f._fermer(), 900);
+  };
+  return f;
+}
+X().ecrireA = ecrireA;
 
 /* ============================================================
    RECHERCHE : par nom ou par numéro

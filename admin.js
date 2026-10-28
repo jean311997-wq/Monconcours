@@ -60,13 +60,13 @@ function nombre(n){ return (n ?? 0).toLocaleString('fr-FR'); }
 function dateCourte(iso){
   if(!iso) return '—';
   return new Date(iso).toLocaleDateString('fr-FR',
-    { day:'numeric', month:'long', year:'numeric' });
+    { timeZone:'Africa/Ouagadougou', day:'numeric', month:'long', year:'numeric' });
 }
 
 function dateHeure(iso){
   if(!iso) return '—';
   return new Date(iso).toLocaleString('fr-FR',
-    { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+    { timeZone:'Africa/Ouagadougou', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
 }
 
 function octets(n){
@@ -1809,7 +1809,8 @@ function barreHorizontale(valeur, max, couleur){
 }
 
 /* ---- période libre : A.plage = { du, au } (AAAA-MM-JJ) quand on choisit des dates au calendrier ---- */
-const isoJour = d => { const x = new Date(d); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); };
+/* le jour se compte à l'heure du Burkina (UTC), quel que soit le fuseau de l'ordinateur de l'équipe */
+const isoJour = d => new Date(d).toLocaleDateString('en-CA', { timeZone:'Africa/Ouagadougou' });
 const jourLong = iso => new Date(iso + 'T12:00:00').toLocaleDateString('fr-FR', { day:'numeric', month:'short', year:'numeric' });
 function libellePeriode(j){
   if(A.plage) return A.plage.du === A.plage.au ? 'le ' + jourLong(A.plage.du) : 'du ' + jourLong(A.plage.du) + ' au ' + jourLong(A.plage.au);
@@ -2539,10 +2540,17 @@ const MOTIFS_SIGNAL = { reponse_fausse:'Bonne réponse fausse', enonce_errone:'�
   perime:'Information périmée', faute:'Faute de frappe', autre:'Autre' };
 async function vueSignalements(){
   const { data, error } = await db.from('signalements')
-    .select('id, motif, commentaire, statut, cree_le, question_id, questions(enonce, explication, question_options(position, texte, est_correcte))')
+    .select('id, user_id, motif, commentaire, statut, cree_le, question_id, questions(enonce, explication, question_options(position, texte, est_correcte))')
     .order('cree_le', { ascending:false }).limit(100);
   if(error) return erreur(error, 'Lecture impossible');
   const nouveaux = (data || []).filter(s => s.statut === 'nouveau');
+  /* qui a signalé : nom, fiche et message direct */
+  const auteurs = {};
+  const ids = [...new Set((data || []).map(s => s.user_id).filter(Boolean))];
+  if(ids.length){
+    const { data: pr } = await db.from('profils').select('id, nom, telephone').in('id', ids);
+    (pr || []).forEach(p => { auteurs[p.id] = p; });
+  }
   $('#vue').innerHTML = `
     <h2 class="titre">Signalements</h2>
     <p class="sous">Les candidats signalent une question qui leur paraît fausse. Vérifiez, corrigez la question dans « Questions », puis marquez le signalement.</p>
@@ -2559,12 +2567,18 @@ async function vueSignalements(){
           <ol type="A" style="margin:4px 0 0 20px">${opts.map(o => `<li${o.est_correcte ? ' style="font-weight:bold;color:var(--vert-texte, #0E7A54)"' : ''}>${E(o.texte)}${o.est_correcte ? ' ✓' : ''}</li>`).join('')}</ol>
           ${q.explication ? `<p style="margin-top:6px"><small>Explication : ${E(q.explication)}</small></p>` : ''}
           <small style="display:block;margin-top:6px;color:#888">Identifiant de la question : ${E(s.question_id)}</small>
+          ${s.user_id ? `<div style="margin-top:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><small>Signalé par <b class="cliquable" data-fiche="${E(s.user_id)}">${E((auteurs[s.user_id] || {}).nom || 'un candidat')}</b></small>
+            ${A.admin ? `<button class="mini" data-ecrire="${E(s.user_id)}" data-nom="${E((auteurs[s.user_id] || {}).nom || '')}">Écrire à ce candidat</button>` : ''}</div>` : ''}
           ${s.statut === 'nouveau' ? `<div style="margin-top:8px">
             <button class="lien" data-sig="${s.id}|corrige">marquer corrigé</button>
             <button class="lien" style="margin-left:12px" data-sig="${s.id}|rejete">rejeter</button></div>` : ''}
         </div>`;
       }).join('')}
     </div>`;
+  $$('[data-ecrire]').forEach(b => b.onclick = () => {
+    if(!window.ADMIN.ecrireA) return signal('La fenêtre de message n\'est pas chargée. Rechargez la page.', 'erreur');
+    window.ADMIN.ecrireA(b.dataset.ecrire, b.dataset.nom, { titre: 'Merci pour votre signalement', message: 'Merci d\'avoir signalé cette question. Nous l\'avons examinée : la correction est faite si elle était nécessaire. Continuez à nous dire quand quelque chose vous paraît faux.' });
+  });
   $$('[data-sig]').forEach(b => b.onclick = async () => {
     const [id, st] = b.dataset.sig.split('|');
     const { error: e2 } = await db.from('signalements').update({ statut: st }).eq('id', +id);
@@ -2899,7 +2913,13 @@ async function vueTableau(){
       </div>
     </div>`;
   $$('[data-aller]').forEach(b => b.onclick = () => { A.vue = b.dataset.aller; rendre(); });
-  minuteurTableau = setTimeout(() => { if(A.vue === 'tableau') vueTableau(); }, 60000);
+  /* le tableau se redessine seul chaque minute ; jamais pendant que la souris est sur un bouton, pour ne pas avaler le clic */
+  const reessayer = () => {
+    if(A.vue !== 'tableau') return;
+    if(document.querySelector('#vue button:hover, #vue .cliquable:hover, #vue a:hover')) minuteurTableau = setTimeout(reessayer, 4000);
+    else vueTableau();
+  };
+  minuteurTableau = setTimeout(reessayer, 60000);
 }
 function dureeLisible(min){
   min = Number(min) || 0;
