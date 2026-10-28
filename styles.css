@@ -1479,6 +1479,8 @@ body.concentration .app{grid-template-columns:minmax(0,1fr) !important;grid-temp
 .mr-actions{display:flex;gap:6px;margin-top:11px}
 .mr-actions button{flex:1;display:flex;align-items:center;justify-content:center;gap:5px;min-height:40px;padding:6px 8px;border-radius:10px;border:1px solid var(--trait);font-size:12.5px;font-weight:600;color:var(--craie);background:none}
 .mr-actions button.plein{background:var(--cachet);border-color:var(--cachet);color:#fff}
+.mr-actions button.plein.verrou{background:none;border-color:var(--cachet);color:var(--cachet)}
+.gratuit-reste{color:var(--craie2)}
 .mr-actions button:active{transform:scale(.97)}
 @media(max-width:360px){.mr-actions button svg{display:none}}
 

@@ -2094,7 +2094,7 @@ function blocFinEssai(){
   const f = FORMULES.mensuelle;
   return `<div class="carte fin-essai" role="status">
     <div class="fe-ligne"><b>Votre essai ${reste}</b></div>
-    <p class="sous" style="margin:6px 0 12px">Ensuite, l'abonnement gratuit garde 10 corrections par jour et 3 compositions. Pour tout garder sans limite : ${E(f.n)}, ${E(f.prix)} pour 30 jours, soit ${E(f.jour)}.</p>
+    <p class="sous" style="margin:6px 0 12px">Ensuite, l'abonnement gratuit garde 5 corrections par jour, 15 questions par matière et 3 compositions. Pour tout garder sans limite : ${E(f.n)}, ${E(f.prix)} pour 30 jours, soit ${E(f.jour)}.</p>
     <button class="cta" data-pass="mensuelle">Garder l'accès complet · ${E(f.prix)}</button>
     <button class="cta creux" style="margin-top:8px" data-go="abonnement">Voir tous les abonnements</button>
   </div>`;
@@ -2653,6 +2653,7 @@ const SIGLE = { 'Français':'FR', 'Mathématiques':'MA', 'Sciences de la vie et 
   'Géopolitique':'GP', 'Droit':'DR', 'Économie':'EC', 'Tests psychotechniques':'PT' };
 const sigle = nom => SIGLE[nom] || (nom || '?').slice(0, 2).toUpperCase();
 
+const LIMITE_MATIERE = 15;
 function ecranRevisions(){
   if(!S.banque && S.banqueEtat !== 'chargement') chargerQuestions();
   if((S.ressources === null || S.ressources === undefined) && !S.ressourcesEnCours) chargerRessources();
@@ -2666,6 +2667,7 @@ function ecranRevisions(){
   banque.forEach(m => mats.push(m.nom));
   (S.ressources || []).filter(r => r.type_ressource !== 'annale' && r.matiere !== 'Autres documents')
     .forEach(r => { if(!mats.includes(r.matiere)) mats.push(r.matiere); });
+  const limiteMatiere = S.util.connecte && !S.gratuit && !estAbonne();
   vue().innerHTML = `
   <div class="pad">
     <div class="eyebrow">Mes cours</div>
@@ -2699,13 +2701,16 @@ function ecranRevisions(){
           <span class="ic">${E(sigle(nom))}</span>
           <div class="mr-co"><b>${E(nom)}</b>
             ${nb ? `<span class="bar"><i style="width:${pc}%"></i></span>
-            <span class="pc">${faites} sur ${nb} question${nb>1?'s':''} travaillée${nb>1?'s':''}${p && p.faites ? ' · ' + Math.round(100 * p.reussies / Math.max(1, p.faites)) + ' % de réussite' : ''}</span>` : ''}
+            <span class="pc">${faites} sur ${nb} question${nb>1?'s':''} travaillée${nb>1?'s':''}${p && p.faites ? ' · ' + Math.round(100 * p.reussies / Math.max(1, p.faites)) + ' % de réussite' : ''}</span>
+            ${limiteMatiere ? `<span class="pc gratuit-reste">${faites >= LIMITE_MATIERE ? 'Aperçu gratuit terminé' : 'Gratuit : ' + faites + ' sur ' + LIMITE_MATIERE + ' questions'}</span>` : ''}` : ''}
             ${chap.length ? `<span class="pc">${chap.length} chapitre${chap.length>1?'s':''} de cours${S.util.connecte ? ' · ' + nLus + ' lu' + (nLus>1?'s':'') : ''}</span>` : ''}
           </div>
         </div>
         <div class="mr-actions">
           ${chap.length ? `<button data-matiere="${encodeURIComponent(nom)}">${ico('lire',16)}<span>${lecturePos()[nom] ? 'Reprendre le cours' : 'Lire le cours'}</span></button>` : ''}
-          ${nb ? `<button class="plein" data-mat="${E(nom)}">${ico('revisions',16)}<span>${faites > 0 ? 'Continuer' : 'Faire les QCM'}</span></button>` : ''}
+          ${nb ? (limiteMatiere && faites >= LIMITE_MATIERE
+            ? `<button class="plein verrou" data-abo-matiere="${E(nom)}">${ico('cadenas',16)}<span>Débloquer la suite</span></button>`
+            : `<button class="plein" data-mat="${E(nom)}">${ico('revisions',16)}<span>${faites > 0 ? 'Continuer' : 'Faire les QCM'}</span></button>`) : ''}
         </div>
       </div>`;
     }).join('')}
@@ -2715,7 +2720,7 @@ function ecranRevisions(){
     ${!S.util.connecte ? `<div class="carte" style="margin-top:12px">
       <p class="sous">${S.gratuit ? "Sans compte, tu peux lire les questions. Pour voir la correction et garder tes erreurs, crée ton compte : c'est gratuit." : "Sans compte, tu peux lire les questions. Pour voir la correction, crée ton compte gratuit : 10 corrections par jour, sans limite avec l'abonnement."}</p>
     </div>` : (!S.abo.actif && !S.gratuit ? `<div class="carte" style="margin-top:12px">
-      <p class="sous">Abonnement gratuit : 10 corrections par jour et 3 compositions offertes. L'abonnement payant les rend illimitées.</p>
+      <p class="sous">Abonnement gratuit : 5 corrections par jour, 15 questions par matière et 3 compositions offertes. L'abonnement payant les rend illimitées.</p>
     </div>` : '')}
   </div>`;
 }
@@ -3820,11 +3825,13 @@ function ecranQcm(){
       return `
       <div class="retour mal">
         ${c.quota
-          ? `<b>Vous avez atteint votre limite d'essai gratuit.</b>Vos 10 corrections du jour sont faites : elles reviennent demain. Pour continuer maintenant, faites l'abonnement.`
+          ? (c.motif === 'matiere'
+              ? `<b>Aperçu gratuit terminé en ${E(c.matiere || m.nom)}.</b>Vos 15 questions gratuites dans cette matière sont faites. Pour la continuer, faites l'abonnement. Les autres matières restent ouvertes.`
+              : `<b>Vous avez atteint votre limite gratuite du jour.</b>Vos 5 corrections du jour sont faites : elles reviennent demain. Pour continuer maintenant, faites l'abonnement.`)
           : `<b>${c.connexion ? 'Compte nécessaire' : 'Correction indisponible'}</b>${E(c.message || '')}`}
       </div>
       ${offre ? `<button class="cta" style="margin-top:12px" data-go="abonnement">Faire l'abonnement</button>` : ''}
-      ${c.quota ? `<button class="cta creux" style="margin-top:9px" data-demain="1">À demain</button>` : ''}
+      ${c.quota ? (c.motif === 'matiere' ? `<button class="cta creux" style="margin-top:9px" data-go="revisions">Choisir une autre matière</button>` : `<button class="cta creux" style="margin-top:9px" data-demain="1">À demain</button>`) : ''}
       ${offre ? `<button class="lien-mini" style="margin-top:6px" data-proche="mensuelle">${ico('partage',13)} Un proche paie pour moi</button>` : ''}
       ${c.connexion ? `<button class="cta" style="margin-top:12px" data-modal="inscription">Créer mon compte gratuit</button>` : ''}
       ${c.reseau ? `<button class="cta" style="margin-top:12px" data-qcm-relancer="1">Réessayer</button>` : ''}
@@ -3839,6 +3846,7 @@ function ecranQcm(){
       </div>
       ${motiv ? `<div class="motiv"><b>${E(motiv)}</b></div>` : ''}
       ${typeof c.quota_restant === 'number' && c.quota_restant <= 5 ? `<p class="sous" style="margin-top:8px;font-size:12px">${c.quota_restant} correction${c.quota_restant>1?'s':''} gratuite${c.quota_restant>1?'s':''} restante${c.quota_restant>1?'s':''} aujourd'hui.</p>` : ''}
+      ${typeof c.matiere_restant === 'number' && c.matiere_restant <= 5 ? `<p class="sous" style="margin-top:4px;font-size:12px">${c.matiere_restant} question${c.matiere_restant>1?'s':''} gratuite${c.matiere_restant>1?'s':''} restante${c.matiere_restant>1?'s':''} en ${E(m.nom)}.</p>` : ''}
       ${!c.correcte ? `<button class="cta creux" style="margin-top:10px" data-similaires="${E(q.id)}">S'entraîner sur 3 questions similaires</button>` : ''}
       <div class="actions-q">
         <button class="lien-mini" data-signaler="${E(q.id)}">${ico('drapeau',13)} Signaler une erreur</button>
@@ -5127,7 +5135,7 @@ function rappelFinEssai(essai){
     <button class="pn-x" data-fin-essai-non="1" aria-label="Fermer">×</button>
     <div class="eyebrow" style="color:var(--or)">Votre essai gratuit</div>
     <h3 id="pfe-titre">${S.abo.jours_restants > 0 ? 'Il se termine demain' : 'Il se termine aujourd\'hui'}</h3>
-    <p class="intro">Ensuite, l'abonnement gratuit garde 10 corrections par jour et 3 compositions. Pour tout garder sans limite : ${E(f.n || 'Abonnement Mois')}, ${E(f.prix || '1 000 FCFA')} pour 30 jours.</p>
+    <p class="intro">Ensuite, l'abonnement gratuit garde 5 corrections par jour, 15 questions par matière et 3 compositions. Pour tout garder sans limite : ${E(f.n || 'Abonnement Mois')}, ${E(f.prix || '1 000 FCFA')} pour 30 jours.</p>
     <button class="cta" data-fin-essai-oui="1">Choisir mon abonnement</button>
   </div>`;
   pister('TRIAL_END_POPUP');
@@ -5304,7 +5312,12 @@ function ecranPourToi(){
       return `<button class="opt ${k}" ${rep !== undefined ? 'disabled' : ''} data-fil-rep="${i}"><span class="lettre">${'ABCD'[i] || '•'}</span>${E(o)}</button>`;
     }).join('')}
 
-    ${c && !c.ok ? `<div class="retour mal"><b>Correction indisponible</b>${E(c.message || '')}</div>
+    ${c && !c.ok && c.quota ? `<div class="retour mal">${c.motif === 'matiere'
+        ? `<b>Aperçu gratuit terminé en ${E(c.matiere || q.matiere || 'cette matière')}.</b>Vos 15 questions gratuites dans cette matière sont faites. Pour la continuer, faites l'abonnement.`
+        : `<b>Vous avez atteint votre limite gratuite du jour.</b>Vos 5 corrections du jour sont faites : elles reviennent demain. Pour continuer maintenant, faites l'abonnement.`}</div>
+      <button class="cta" style="margin-top:12px" data-go="abonnement">Faire l'abonnement</button>
+      ${c.motif === 'matiere' ? `<button class="cta creux" style="margin-top:9px" data-fil-suiv="1">Question suivante →</button>` : `<button class="cta creux" style="margin-top:9px" data-demain="1">À demain</button>`}` : ''}
+    ${c && !c.ok && !c.quota ? `<div class="retour mal"><b>Correction indisponible</b>${E(c.message || '')}</div>
       <button class="cta" style="margin-top:12px" data-fil-suiv="1">Question suivante →</button>` : ''}
     ${c && c.ok ? `
       <div class="retour ${c.correcte ? 'bien' : 'mal'}">
@@ -5381,7 +5394,7 @@ function ecranQdj(){
       </div>
       ${c.taux !== null && c.taux !== undefined ? `<p class="sous" style="margin-top:10px"><span class="num">${c.taux} %</span> des candidats ont trouvé la bonne réponse aujourd'hui.</p>` : ''}
       <button class="cta" style="margin-top:12px" data-partage-qdj="1">${ico('partage',16)} Défier un camarade<small>Envoie-lui la question du jour sur WhatsApp</small></button>
-      ${S.util.connecte ? `<button class="cta creux" style="margin-top:9px" data-pourtoi="10">Continuer avec 10 questions pour toi</button>`
+      ${S.util.connecte ? `<button class="cta creux" style="margin-top:9px" data-pourtoi="10">Continuer avec 10 questions pour toi${!S.gratuit && !estAbonne() ? '<small>Gratuit : 5 corrections par jour. Sans limite avec l\'abonnement.</small>' : ''}</button>`
         : `<button class="cta creux" style="margin-top:9px" data-modal="inscription">Créer mon compte gratuit<small>Pour garder tes erreurs et ta progression</small></button>`}
       ${S.util.connecte ? `<div class="actions-q"><button class="lien-mini" data-signaler="${E(q.id)}">${ico('drapeau',13)} Signaler une erreur</button></div>` : ''}` : ''}
 
@@ -6080,7 +6093,7 @@ window.addEventListener('popstate', ev => {
 /* Les nouveaux boutons ont leur propre écouteur : le grand aiguillage
    plus bas reste tel quel. */
 document.addEventListener('click', ev => {
-  const t = ev.target.closest('[data-corr-nat],[data-fin-essai-non],[data-fin-essai-oui],[data-class-fermer],[data-class-voir],[data-quitter],[data-quitter-oui],[data-quitter-non],[data-son],[data-correction-differee],[data-gagnants],[data-pourtoi],[data-fil-rep],[data-fil-suiv],[data-qdj-rep],[data-qp-rep],[data-signaler],[data-signal-envoi],[data-objectif],[data-rejoindre],[data-rappel-activer],[data-rappel-retirer],[data-reagir],[data-partage-question],[data-partage-qdj],[data-partage-rang],[data-carte-resultat],[data-sortir-reprise],[data-inscrire-nat],[data-correction-nat],[data-nat-oui],[data-nat-non],[data-resultats-pdf],[data-telecharger-mat],[data-rappel-heure],[data-rappel-inter],[data-rappel-oui],[data-rappel-autre],[data-rappel-plus-tard],[data-rappel-fermer],[data-rappel-masquer],[data-rappel-wa],[data-installe-d],[data-notifs-d],[data-paiement-plus-tard]');
+  const t = ev.target.closest('[data-abo-matiere],[data-corr-nat],[data-fin-essai-non],[data-fin-essai-oui],[data-class-fermer],[data-class-voir],[data-quitter],[data-quitter-oui],[data-quitter-non],[data-son],[data-correction-differee],[data-gagnants],[data-pourtoi],[data-fil-rep],[data-fil-suiv],[data-qdj-rep],[data-qp-rep],[data-signaler],[data-signal-envoi],[data-objectif],[data-rejoindre],[data-rappel-activer],[data-rappel-retirer],[data-reagir],[data-partage-question],[data-partage-qdj],[data-partage-rang],[data-carte-resultat],[data-sortir-reprise],[data-inscrire-nat],[data-correction-nat],[data-nat-oui],[data-nat-non],[data-resultats-pdf],[data-telecharger-mat],[data-rappel-heure],[data-rappel-inter],[data-rappel-oui],[data-rappel-autre],[data-rappel-plus-tard],[data-rappel-fermer],[data-rappel-masquer],[data-rappel-wa],[data-installe-d],[data-notifs-d],[data-paiement-plus-tard]');
   if(!t) return;
   const d = t.dataset;
   try{ const cle = Object.keys(d)[0]; pister('BUTTON_CLICKED', { valeur: String(d[cle]).slice(0,40) }, cle); }catch(e){}
@@ -6117,6 +6130,7 @@ document.addEventListener('click', ev => {
   if(d.classFermer){ pister('RANKING_POPUP_CLOSED'); return fermerClassement(d.classFermer); }
   if(d.classVoir){ fermerClassement(d.classVoir); chargerClassement(d.classVoir); return aller('gagnants'); }
   if(d.gagnants){ chargerClassement(d.gagnants); return aller('gagnants'); }
+  if(d.aboMatiere){ return exigerAbonnement('Vous avez fait les 15 questions gratuites en ' + d.aboMatiere + '. L\'abonnement ouvre toute la matière.', 'matiere'); }
   if(d.corrNat){ chargerCorrectionNat(d.corrNat); return aller('correctionnat'); }
   if(d.pourtoi){ return lancerFil(d.pourtoi); }
   if(d.filRep !== undefined) return repondreFil(+d.filRep);
