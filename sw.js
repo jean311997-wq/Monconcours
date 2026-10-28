@@ -3,12 +3,12 @@
    Un candidat en 2G ne doit pas repayer le chargement à chaque visite,
    et un candidat sans réseau doit pouvoir relire ses cours.
    ===================================================================== */
-const VERSION = 'mc-v46';
+const VERSION = 'mc-v47';
 const COQUE   = VERSION + '-coque';   // les fichiers de l'application
 const DONNEES = VERSION + '-donnees'; // les réponses de la base
 
 const FICHIERS = [
-  '/', '/index.html', '/app.js?v=45', '/styles.css?v=36',
+  '/', '/index.html', '/app.js?v=46', '/styles.css?v=36',
   '/supabase-js.min.js?v=13', '/manifest.webmanifest', '/favicon.png', '/icone-192.png'
 ];
 
@@ -133,7 +133,7 @@ self.addEventListener('push', e => {
     /* vibration et nouvelle alerte : c'est ce qui fait descendre la bannière en haut de l'écran, même dans Facebook ou WhatsApp */
     vibrate: [220, 110, 220], renotify: true, silent: false, timestamp: Date.now(),
     /* fin d'essai : la notification reste affichée tant qu'on ne la touche pas */
-    requireInteraction: /abonnement=essai/.test(d.lien || ''),
+    requireInteraction: /abonnement=essai|admin\.html/.test(d.lien || ''),
     data: { lien: d.lien || '/' }, tag: (d.lien || 'rappel').slice(0, 60)
   }));
 });
@@ -141,7 +141,12 @@ self.addEventListener('notificationclick', e => {
   e.notification.close();
   const lien = (e.notification.data && e.notification.data.lien) || '/';
   e.waitUntil(clients.matchAll({ type:'window', includeUncontrolled:true }).then(liste => {
-    for(const c of liste){ if('focus' in c){ c.navigate(lien).catch(() => {}); return c.focus(); } }
+    /* une alerte pour l'administration s'ouvre dans la fenêtre admin, jamais dans celle des candidats */
+    const admin = /admin\.html/.test(lien);
+    for(const c of liste){
+      if(!('focus' in c) || admin !== /admin\.html/.test(c.url)) continue;
+      c.navigate(lien).catch(() => {}); return c.focus();
+    }
     return clients.openWindow(lien);
   }));
 });

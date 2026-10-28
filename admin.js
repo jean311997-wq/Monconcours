@@ -139,6 +139,7 @@ async function entrer(session){
   if(error){ return refuser("Impossible de lire vos droits : " + error.message); }
 
   A.equipe = (roles || []).some(r => r.role === 'admin' || r.role === 'correcteur');
+  A.admin = (roles || []).some(r => r.role === 'admin');
   A.investisseur = !A.equipe && (roles || []).some(r => r.role === 'investisseur');
   if(!A.equipe && !A.investisseur){
     return refuser("Ce compte n'a pas les droits d'administration. Attribuez-lui le rôle « admin » dans la table roles_utilisateur.");
@@ -162,8 +163,11 @@ async function entrer(session){
     if(bienvenue) bienvenue.hidden = false;
   }
   await chargerReferentiel();
+  const h0 = (location.hash || '').replace('#', '');
+  if(h0 && document.querySelector('#menu [data-vue="' + h0.replace(/[^a-z_]/g, '') + '"]')) A.vue = h0.replace(/[^a-z_]/g, '');
   rendre();
   majPastilles();
+  if(window.ADMIN && window.ADMIN.apresEntree) window.ADMIN.apresEntree();
 }
 /* les pastilles du menu (à valider, au dépôt), quelle que soit la page ouverte */
 async function majPastilles(){
@@ -253,6 +257,9 @@ const statut = s => `<span class="marque-statut s-${E(s)}">${E((s||'').replace(/
    ============================================================ */
 function rendre(){
   $$('#menu button').forEach(b => b.classList.toggle('on', b.dataset.vue === A.vue));
+  const plus = window.ADMIN && window.ADMIN.vues && window.ADMIN.vues[A.vue];
+  if(plus){ try{ history.replaceState(null, '', '#' + A.vue); }catch(e){} $('#vue').scrollTop = 0; plus(); return; }
+  try{ history.replaceState(null, '', '#' + A.vue); }catch(e){}
   ({ tableau:vueTableau, bannissement:vueBannissement, acces:vueAcces, apercu:vueApercu, analyse:vueAnalyse, direct:vueDirect, comportement:vueComportement,
      pedagogie:vuePedagogie, candidats:vueCandidats,
      depot:vueDepot, import:vueImport, bibliotheque:vueBibliotheque,
@@ -353,7 +360,8 @@ async function vuePaiements(){
        le nom et le montant, puis confirmez ou refusez. La confirmation active
        immédiatement l'abonnement du candidat.</p>
   </div>
-  <div class="carte"><div id="pai-liste">Chargement…</div></div>
+  <div id="pai-plus"></div>
+  <div class="carte"><h3 style="margin:0 0 8px">Toutes les demandes, une par une</h3><div id="pai-liste">Chargement…</div></div>
   <div class="carte" style="margin-top:14px">
     <h3 style="margin:0 0 6px">Activer un Pass par numéro</h3>
     <p style="margin:0 0 10px;color:var(--craie2);font-size:13px">Quand un proche a payé pour le candidat : indiquez le numéro de son compte Mon Concours et le Pass payé.</p>
@@ -378,6 +386,7 @@ async function vuePaiements(){
     <div id="cod-liste" style="margin-top:10px"></div>
   </div>`;
 
+  if(window.ADMIN && window.ADMIN.paiementsPlus) window.ADMIN.paiementsPlus($('#pai-plus'), vuePaiements);
   $('#act-go').onclick = async () => {
     const msg = $('#act-msg'); msg.textContent = '…';
     const { data, error } = await db.rpc('admin_activer_pass', { p_telephone: $('#act-tel').value, p_formule: $('#act-formule').value, p_note: $('#act-note').value });
@@ -1040,6 +1049,12 @@ async function vueDepot(){
       </div>
     </div>
 
+    <div class="bloc" id="bloc-non-publies" hidden>
+      <div class="libelle">Rangés mais pas encore publiés<span class="num" id="nb-non-publies">…</span></div>
+      <p class="sous" style="margin:0 0 8px">Ces fichiers ont été rangés sans être mis à la disposition des candidats. Complétez la matière et le niveau, puis publiez.</p>
+      <div id="liste-non-publies"></div>
+    </div>
+
     <div class="bloc">
       <div class="libelle">À ranger<span class="num" id="nb-ranger">…</span></div>
       <div id="liste-depots">Chargement…</div>
@@ -1057,6 +1072,31 @@ async function vueDepot(){
   brancherDepotLibre(majDevine);
   document.getElementById('btn-deposer').onclick = envoyerAuDepot;
   listerDepots();
+  listerNonPublies();
+}
+
+async function listerNonPublies(){
+  const { data, error } = await db.rpc('depots_non_publies');
+  const bloc = document.getElementById('bloc-non-publies'); if(!bloc || error) return;
+  const l = data || [];
+  bloc.hidden = !l.length;
+  document.getElementById('nb-non-publies').textContent = l.length;
+  const z = document.getElementById('liste-non-publies');
+  z.innerHTML = l.map(d => `
+    <div class="proposition" data-np="${E(d.id)}">
+      <div class="enonce" style="font-size:15px">${E(d.titre || d.nom_fichier || 'Document')}</div>
+      <p class="sous" style="margin:0 0 10px;font-size:12.5px">${E(d.nom_fichier || '')} · ${octets(d.taille_octets)} · déposé le ${dateCourte(d.cree_le)}</p>
+      <div class="deux" style="margin-bottom:10px">
+        <div><label>Type</label><select data-np-type style="margin:0">${TYPES_RESSOURCE.map(t => `<option value="${t}"${(d.nature_retenue || 'cours') === t ? ' selected' : ''}>${{cours:'Cours',exercices:'Exercices',corrige:'Corrigé',fiche:'Fiche de révision',annale:'Ancien sujet'}[t]}</option>`).join('')}</select></div>
+        <div><label>Matière</label><select data-np-matiere style="margin:0"><option value="">— aucune —</option>${optionsMatieres(d.matiere_id)}</select></div>
+        <div><label>Niveau</label><select data-np-niveau style="margin:0">${optionsNiveaux(d.niveau || 'terminale')}</select></div>
+      </div>
+      <div class="actions"><button class="b-publier" data-np-pub="${E(d.id)}">Publier dans la bibliothèque</button></div>
+    </div>`).join('');
+  z.querySelectorAll('[data-np-pub]').forEach(b => b.onclick = () => {
+    const c = z.querySelector(`[data-np="${b.dataset.npPub}"]`), d = l.find(x => x.id === b.dataset.npPub);
+    publierFichierDepot(d, { nature_retenue: c.querySelector('[data-np-type]').value, matiere_id: c.querySelector('[data-np-matiere]').value || null, niveau: c.querySelector('[data-np-niveau]').value || null }, b);
+  });
 }
 
 let fichiersDepot = [];
@@ -1176,6 +1216,7 @@ async function listerDepots(){
       </div>
 
       <div class="actions">
+        ${d.fichier_chemin ? `<button class="b-publier" data-pub-fichier="${E(d.id)}">Publier dans la bibliothèque</button>` : ''}
         ${d.contenu ? `<button class="b-publier" data-traiter="${E(d.id)}">Ranger et intégrer</button>` : ''}
         <button class="b-valider" data-classer="${E(d.id)}">Enregistrer le classement</button>
         <button class="b-modifier" data-range="${E(d.id)}">Marquer comme rangé</button>
@@ -1214,8 +1255,27 @@ async function listerDepots(){
     signal('Mis de côté.', 'info'); listerDepots();
   });
 
+  z.querySelectorAll('[data-pub-fichier]').forEach(b => b.onclick = () => {
+    const d = data.find(x => x.id === b.dataset.pubFichier);
+    publierFichierDepot(d, champs(d.id), b);
+  });
+
   z.querySelectorAll('[data-traiter]').forEach(b => b.onclick = () =>
     rangerEtIntegrer(b.dataset.traiter, data.find(x => x.id === b.dataset.traiter), champs(b.dataset.traiter)));
+}
+
+/* ---------- un fichier déposé devient une ressource de la bibliothèque, visible des candidats ---------- */
+const TYPES_RESSOURCE = ['cours', 'exercices', 'corrige', 'fiche', 'annale'];
+async function publierFichierDepot(depot, ch, bouton){
+  if(!depot || !(depot.fichier_chemin || depot.nom_fichier)) return signal('Ce dépôt ne contient pas de fichier.', 'mal');
+  if(!ch.matiere_id && !confirm('Aucune matière choisie : le fichier sera publié sans matière, les candidats le trouveront moins facilement. Publier quand même ?')) return;
+  if(bouton) bouton.disabled = true;
+  const type = TYPES_RESSOURCE.includes(ch.nature_retenue) ? ch.nature_retenue : 'cours';
+  const { data, error } = await db.rpc('admin_publier_depot', { p_depot: depot.id, p_titre: depot.titre || depot.nom_fichier || 'Document', p_matiere: ch.matiere_id, p_niveau: ch.niveau || '', p_type: type });
+  if(bouton) bouton.disabled = false;
+  if(error || !data || !data.ok) return signal((data && data.message) || (error && error.message) || 'Publication impossible.', 'mal');
+  signal('Publié dans la bibliothèque : les candidats peuvent l\'ouvrir.', 'bien');
+  vueDepot();
 }
 
 /* ---------- ranger : le contenu part au bon endroit ---------- */
@@ -1250,6 +1310,9 @@ async function rangerEtIntegrer(id, depot, ch){
       if(error) throw error;
       bilan = `${data.inserees} information(s) publiée(s)`;
 
+    }else if(['cours','exercices','corrige','fiche'].includes(nature) && depot.fichier_chemin){
+      return publierFichierDepot(depot, ch, null);
+
     }else if(['cours','exercices','corrige','fiche'].includes(nature)){
       const { error } = await db.from('ressources').insert({
         titre: depot.titre || 'Sans titre',
@@ -1258,6 +1321,7 @@ async function rangerEtIntegrer(id, depot, ch){
         matiere_id: ch.matiere_id, niveau: ch.niveau,
         fichier_chemin: depot.fichier_chemin, nom_fichier: depot.nom_fichier,
         taille_octets: depot.taille_octets,
+        telechargeable: !!depot.fichier_chemin,
         statut: 'publie', publie_le: new Date().toISOString(),
         depose_par: A.session.user.id
       });
@@ -1744,11 +1808,36 @@ function barreHorizontale(valeur, max, couleur){
     <div style="height:100%;width:${l}%;background:${couleur || 'var(--cachet)'}"></div></div>`;
 }
 
-function choixPeriode(){
-  return `<div class="rangee" style="margin-bottom:16px">
-    ${[[1,'Aujourd\'hui'],[7,'7 jours'],[30,'30 jours'],[90,'90 jours']].map(p =>
-      `<button class="cta creux petit" style="${periode===p[0]?'border-color:var(--craie2);background:var(--ardoise2)':''}"
+/* ---- période libre : A.plage = { du, au } (AAAA-MM-JJ) quand on choisit des dates au calendrier ---- */
+const isoJour = d => { const x = new Date(d); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); };
+const jourLong = iso => new Date(iso + 'T12:00:00').toLocaleDateString('fr-FR', { day:'numeric', month:'short', year:'numeric' });
+function libellePeriode(j){
+  if(A.plage) return A.plage.du === A.plage.au ? 'le ' + jourLong(A.plage.du) : 'du ' + jourLong(A.plage.du) + ' au ' + jourLong(A.plage.au);
+  return (j || periode) === 1 ? "aujourd'hui" : (j || periode) + ' jours';
+}
+async function rpcPeriode(nom, jours){
+  /* période libre : les versions « _p » acceptent deux dates ; sans dates, les fonctions d'origine servent comme avant */
+  if(!A.plage) return db.rpc(nom, { p_jours: jours });
+  let r = await db.rpc(nom + '_p', { p_jours: jours, p_du: A.plage.du, p_au: A.plage.au });
+  if(r.error && /schema cache|could not find|does not exist|PGRST202/i.test((r.error.message || '') + ' ' + (r.error.code || ''))){
+    r = await db.rpc(nom, { p_jours: jours });
+    A.plageApprox = true;
+    signal("Ces écrans comptent jusqu'à aujourd'hui. Pour une période qui se termine avant, utilisez « Analytique ».", 'info');
+  }
+  return r;
+}
+function choixPeriode(liste){
+  const presets = liste || [[1,'Aujourd\'hui'],[7,'7 jours'],[30,'30 jours'],[90,'90 jours']];
+  const auj = isoJour(new Date());
+  return `<div class="rangee barre-periode" style="margin-bottom:16px;align-items:center">
+    ${presets.map(p =>
+      `<button class="cta creux petit" style="${!A.plage && periode===p[0]?'border-color:var(--craie2);background:var(--ardoise2)':''}"
         data-periode="${p[0]}">${p[1]}</button>`).join('')}
+    <span class="plage-libre${A.plage ? ' on' : ''}">
+      <label>Du <input type="date" id="plage-du" max="${auj}" value="${A.plage ? A.plage.du : ''}"></label>
+      <label>au <input type="date" id="plage-au" max="${auj}" value="${A.plage ? A.plage.au : ''}"></label>
+      <button class="cta creux petit" id="plage-go">Afficher ces dates</button>
+    </span>
   </div>`;
 }
 
@@ -1762,10 +1851,10 @@ async function vueAnalyse(){
 
   brancherPeriode(vueAnalyse);
 
-  const { data: g, error } = await db.rpc('stats_generales', { p_jours: periode });
+  const { data: g, error } = await rpcPeriode('stats_generales', periode);
   if(error) return erreur(error, 'Lecture impossible');
 
-  const { data: ent } = await db.rpc('entonnoir', { p_jours: periode });
+  const { data: ent } = await rpcPeriode('entonnoir', periode);
   const { data: ab }  = await db.rpc('abandons_composition');
 
   const depart = (ent && ent.length) ? ent[0].nombre : 0;
@@ -1844,8 +1933,8 @@ async function vueComportement(){
   brancherPeriode(vueComportement);
 
   const [{ data: ec }, { data: bt }] = await Promise.all([
-    db.rpc('ecrans', { p_jours: periode }),
-    db.rpc('clics_boutons', { p_jours: periode })
+    rpcPeriode('ecrans', periode),
+    rpcPeriode('clics_boutons', periode)
   ]);
 
   const maxE = (ec && ec.length) ? Math.max(...ec.map(x => x.vues)) : 0;
@@ -1984,7 +2073,7 @@ async function vueCandidats(pageC){
         ${(!gens || !gens.length) ? insuffisant("Aucun compte pour l'instant.") : `
         <table><tbody>
         ${gens.map(p => `<tr>
-          <td><b>${E(p.nom)}</b><br><span class="num" style="font-size:11px;color:var(--craie2)">
+          <td><b class="cliquable" data-fiche="${E(p.id)}">${E(p.nom)}</b><br><span class="num cliquable" data-fiche="${E(p.id)}" style="font-size:11px;color:var(--craie2)">
             ${p.telephone ? '+226 ' + E(p.telephone) : '—'} · ${E(p.niveau || '—')} · ${dateCourte(p.cree_le)}</span></td>
           <td style="text-align:right"><button class="lien" data-chrono="${E(p.id)}">voir son parcours</button></td>
         </tr>`).join('')}</tbody></table>${barrePagination(pageC, parPage, totalC || 0)}`}
@@ -2040,8 +2129,17 @@ async function vueCandidats(pageC){
 
 function brancherPeriode(recharger){
   document.querySelectorAll('[data-periode]').forEach(b => b.onclick = () => {
-    periode = +b.dataset.periode; recharger();
+    periode = +b.dataset.periode; A.plage = null; A.plageApprox = false; recharger();
   });
+  const go = document.getElementById('plage-go');
+  if(go) go.onclick = () => {
+    const du = document.getElementById('plage-du').value, au = document.getElementById('plage-au').value || isoJour(new Date());
+    if(!du) return signal('Choisissez au moins le premier jour.', 'mal');
+    const a = du <= au ? [du, au] : [au, du];
+    A.plage = { du: a[0], au: a[1] }; A.plageApprox = false;
+    periode = Math.max(1, Math.round((new Date(isoJour(new Date()) + 'T12:00:00') - new Date(a[0] + 'T12:00:00')) / 86400000) + 1);
+    recharger();
+  };
 }
 
 
@@ -2483,24 +2581,59 @@ async function vueAvis(){
   if(error) return erreur(error, 'Lecture impossible');
   const liste = data || [];
   const nouveaux = liste.filter(a => a.statut === 'nouveau').length;
+  const sansReponse = liste.filter(a => !a.reponse).length;
   const niveau = v => (NIVEAUX.find(([k]) => k === v) || [])[1] || '';
+  const peut = A.equipe;
   $('#vue').innerHTML = `
     <h2 class="titre">Avis des candidats</h2>
-    <p class="sous">Après une trentaine de minutes d'utilisation, l'application propose au candidat de donner son avis sur le site ou sur les recommandations. Les avis arrivent ici.</p>
-    <div class="bloc"><div class="libelle">${nouveaux} nouveau${nouveaux > 1 ? 'x' : ''} · ${liste.length} au total</div>
+    <p class="sous">Après une trentaine de minutes d'utilisation, l'application propose au candidat de donner son avis sur le site ou sur les recommandations. Les avis arrivent ici : vous pouvez les aimer et répondre. La réponse arrive chez le candidat sous le titre « Réponse de l'administration · Mon Concours ».</p>
+    <div class="bloc"><div class="libelle">${nouveaux} nouveau${nouveaux > 1 ? 'x' : ''} · ${sansReponse} sans réponse · ${liste.length} au total</div>
       ${!liste.length ? '<div class="carte"><div class="vide">Aucun avis pour le moment.</div></div>' :
-      liste.map(a => `<div class="carte" style="margin-bottom:10px;${a.statut === 'nouveau' ? '' : 'opacity:.6'}">
+      liste.map(a => `<div class="carte avis-carte" data-avis="${a.id}" style="margin-bottom:10px;${a.statut === 'nouveau' || !a.reponse ? '' : 'opacity:.85'}">
           <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap">
-            <b>${E(a.nom || 'Candidat')}${niveau(a.niveau) ? ' · ' + E(niveau(a.niveau)) : ''}</b><small>${E(dateHeure(a.cree_le))}</small></div>
+            <b>${a.user_id ? `<span class="cliquable" data-fiche="${E(a.user_id)}">${E(a.nom || 'Candidat')}</span>` : E(a.nom || 'Candidat')}${niveau(a.niveau) ? ' · ' + E(niveau(a.niveau)) : ''}${a.aime ? ' <span class="coeur" title="Vous avez aimé cet avis">♥</span>' : ''}</b><small>${E(dateHeure(a.cree_le))}</small></div>
           <p style="margin:8px 0;white-space:pre-wrap">${E(a.message)}</p>
-          ${a.telephone ? `<small style="color:#888">${E(a.telephone)}</small>` : ''}
-          ${a.statut === 'nouveau' ? `<div style="margin-top:8px"><button class="lien" data-avis-lu="${a.id}">marquer comme lu</button></div>` : ''}
+          ${a.telephone ? `<small style="color:#888">${a.user_id ? `<span class="cliquable" data-fiche="${E(a.user_id)}">${E(a.telephone)}</span>` : E(a.telephone)}</small>` : ''}
+          ${a.reponse ? `<div class="reponse-admin"><small>Votre réponse · ${E(dateHeure(a.reponse_le))}</small><p style="margin:4px 0 0;white-space:pre-wrap">${E(a.reponse)}</p></div>` : ''}
+          ${peut ? `<div class="avis-actions" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <button class="mini" data-avis-aime="${a.id}" data-etat="${a.aime ? 1 : 0}">${a.aime ? '♥ Aimé · retirer' : '♡ J\'aime'}</button>
+            <button class="mini" data-avis-repondre="${a.id}">${a.reponse ? 'Répondre à nouveau' : 'Répondre'}</button>
+            ${a.statut === 'nouveau' ? `<button class="lien" data-avis-lu="${a.id}">marquer comme lu</button>` : ''}
+          </div>
+          <div class="avis-form" data-forme="${a.id}" hidden>
+            <textarea rows="3" maxlength="800" placeholder="Votre réponse au candidat (800 caractères au plus)"></textarea>
+            <div class="rangee" style="margin-top:6px;align-items:center">
+              <label style="font-size:13px">Affichage chez le candidat
+                <select data-mode><option value="les_deux">Cloche et fenêtre plein écran</option><option value="cloche">Cloche seulement</option><option value="plein">Fenêtre plein écran seulement</option></select></label>
+              <button class="cta petit" data-avis-envoyer="${a.id}">Envoyer la réponse</button>
+              <button class="lien" data-avis-annuler="${a.id}">Annuler</button>
+            </div>
+          </div>` : (a.statut === 'nouveau' ? `<div style="margin-top:8px"><button class="lien" data-avis-lu="${a.id}">marquer comme lu</button></div>` : '')}
         </div>`).join('')}
     </div>`;
   $$('[data-avis-lu]').forEach(b => b.onclick = async () => {
     const { error: e2 } = await db.from('avis').update({ statut: 'lu' }).eq('id', +b.dataset.avisLu);
     if(e2) return erreur(e2, 'Mise à jour impossible');
     signal('Marqué comme lu.', 'info'); vueAvis(); majPastilles();
+  });
+  $$('[data-avis-aime]').forEach(b => b.onclick = async () => {
+    b.disabled = true;
+    const { data: r, error: e2 } = await db.rpc('admin_aimer_avis', { p_id: +b.dataset.avisAime, p_aime: b.dataset.etat !== '1' });
+    if(e2 || !r || !r.ok){ b.disabled = false; return erreur(e2 || { message: (r && r.message) || 'Échec' }, 'J\'aime impossible'); }
+    signal(b.dataset.etat === '1' ? 'J\'aime retiré.' : 'Avis aimé : le candidat en est informé.', 'bien'); vueAvis(); majPastilles();
+  });
+  $$('[data-avis-repondre]').forEach(b => b.onclick = () => {
+    const f = document.querySelector('[data-forme="' + b.dataset.avisRepondre + '"]'); f.hidden = !f.hidden; if(!f.hidden) f.querySelector('textarea').focus();
+  });
+  $$('[data-avis-annuler]').forEach(b => b.onclick = () => { document.querySelector('[data-forme="' + b.dataset.avisAnnuler + '"]').hidden = true; });
+  $$('[data-avis-envoyer]').forEach(b => b.onclick = async () => {
+    const f = document.querySelector('[data-forme="' + b.dataset.avisEnvoyer + '"]');
+    const txt = f.querySelector('textarea').value.trim();
+    if(txt.length < 2) return signal('Écrivez votre réponse.', 'mal');
+    b.disabled = true;
+    const { data: r, error: e2 } = await db.rpc('admin_repondre_avis', { p_id: +b.dataset.avisEnvoyer, p_reponse: txt, p_mode: f.querySelector('[data-mode]').value });
+    if(e2 || !r || !r.ok){ b.disabled = false; return erreur(e2 || { message: (r && r.message) || 'Échec' }, 'Réponse impossible'); }
+    signal('Réponse envoyée au candidat.', 'bien'); vueAvis(); majPastilles();
   });
 }
 
@@ -2655,16 +2788,14 @@ const tendance = (n, avant) => {
 let minuteurTableau = null;
 async function vueTableau(){
   clearTimeout(minuteurTableau);
-  const j = [7, 30, 90].includes(periode) ? periode : 30;
+  const j = A.plage ? periode : ([7, 30, 90].includes(periode) ? periode : 30);
   $('#vue').innerHTML = `
     <h2 class="titre">Tableau de bord</h2>
     <p class="sous">La croissance, qui est là en ce moment, et ce que les candidats font vraiment. Mis à jour toutes les minutes.</p>
-    <div class="rangee" style="margin-bottom:16px">
-      ${[[7,'7 jours'],[30,'30 jours'],[90,'90 jours']].map(p => `<button class="cta creux petit" style="${j===p[0]?'border-color:var(--craie2);background:var(--ardoise2)':''}" data-periode="${p[0]}">${p[1]}</button>`).join('')}
-    </div>
+    ${choixPeriode([[7,'7 jours'],[30,'30 jours'],[90,'90 jours']])}
     <div id="zone-tableau">Chargement…</div>`;
   brancherPeriode(vueTableau);
-  const { data: t, error } = await db.rpc('tableau_de_bord', { p_jours: j });
+  const { data: t, error } = await rpcPeriode('tableau_de_bord', j);
   if(error) return erreur(error, 'Lecture impossible');
   const z = document.getElementById('zone-tableau');
   if(!z || A.vue !== 'tableau') return;
@@ -2694,7 +2825,7 @@ async function vueTableau(){
     </div>
 
     <div class="bloc">
-      <div class="libelle">La croissance<span>inscrits au total, ${j} jours</span></div>
+      <div class="libelle">La croissance<span>inscrits au total, ${libellePeriode(j)}</span></div>
       <div class="carte">${graphiqueCroissance(croiss, t.avant_periode)}
         <p class="sous" style="font-size:12.5px;margin-top:6px">${nombre(croiss.reduce((a, s) => a + s.inscrits, 0))} inscriptions sur la période. Survolez un point pour le détail du jour.</p></div>
     </div>
@@ -2712,7 +2843,7 @@ async function vueTableau(){
     </div>
 
     <div class="bloc">
-      <div class="libelle">Où ils passent leur temps<span>${j} jours</span></div>
+      <div class="libelle">Où ils passent leur temps<span>${libellePeriode(j)}</span></div>
       <div class="carte">
         ${!zones.length ? insuffisant() : `
         ${zone1 ? `<p class="sous" style="margin-top:0">« ${E(nomEcran(zone1.ecran))} » prend <b>${Math.round(100 * zone1.minutes / totalMin)} %</b> du temps passé sur le site.</p>` : ''}
@@ -2730,7 +2861,7 @@ async function vueTableau(){
     </div>
 
     <div class="bloc">
-      <div class="libelle">Ce qu'ils font le plus<span>${j} jours</span></div>
+      <div class="libelle">Ce qu'ils font le plus<span>${libellePeriode(j)}</span></div>
       <div class="carte">
         ${!actions.length ? insuffisant('Aucune action observée.') : `
         <table><thead><tr><th>Action</th><th>Fois</th><th>Personnes</th></tr></thead><tbody>
@@ -2741,7 +2872,7 @@ async function vueTableau(){
     </div>
 
     <div class="bloc">
-      <div class="libelle">Les nouveautés : sont-elles utilisées ?<span>${j} jours</span></div>
+      <div class="libelle">Les nouveautés : sont-elles utilisées ?<span>${libellePeriode(j)}</span></div>
       <div class="carte"><div class="mini-compteurs">
         ${[['Inscriptions à la nationale', nv.nationale_inscrits], ['Défis créés', nv.defis], ['Invitations à des défis', nv.invitations],
            ['Packs hors ligne', nv.packs], ['Cartes de résultat partagées', nv.cartes], ['Attestations téléchargées', nv.attestations],
@@ -2974,6 +3105,21 @@ document.getElementById('menu').addEventListener('click', e => {
   A.vue = b.dataset.vue;
   rendre();
 });
+
+window.addEventListener('hashchange', () => {
+  const h = (location.hash || '').replace('#', '').replace(/[^a-z_]/g, '');
+  if(A.session && h && h !== A.vue && document.querySelector('#menu [data-vue="' + h + '"]')){ A.vue = h; rendre(); }
+});
+
+/* passerelle vers admin-plus.js : les mêmes outils, sans rien dupliquer */
+window.ADMIN = Object.assign(window.ADMIN || {}, {
+  get db(){ return db; }, A, E, $, $$, nombre, dateCourte, dateHeure, signal, erreur, rendre, nomEcran, nomAction, jourCourt,
+  graphiqueCroissance, graphiqueBarres, barreHorizontale, dureeLisible, insuffisant, statut, majPastilles, choixPeriode, brancherPeriode, libellePeriode,
+  isoJour, jourLong, optionsMatieres, optionsConcours, NIVEAUX, NOM_PASS, NOM_OPERATEUR,
+  vues: (window.ADMIN && window.ADMIN.vues) || {}
+});
+Object.defineProperty(window.ADMIN, 'periode', { get: () => periode, set: v => { periode = v; }, configurable: true });
+if(window.ADMIN.pret) window.ADMIN.pret();
 
 demarrer();
 

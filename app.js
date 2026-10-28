@@ -3755,7 +3755,7 @@ async function telechargerRessource(id){
   let poignee = null;
   try{ poignee = await demanderEmplacement(nom); }catch(e){ return; }
   try{
-    const { data, error } = await base.storage.from('cours').createSignedUrl(r.fichier_chemin, 3600);
+    const { data, error } = await base.storage.from(/^depot\//.test(r.fichier_chemin) ? 'documents-importes' : 'cours').createSignedUrl(r.fichier_chemin, 3600);
     if(error || !data) throw error || new Error('lien indisponible');
     pister('COURSE_DOWNLOADED', { titre: r.titre });
     toast('Téléchargement…', 2500);
