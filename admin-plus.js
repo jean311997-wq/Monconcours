@@ -130,11 +130,11 @@ async function listePeriode(type){
   if(error) return z.innerHTML = '<div class="vide">' + e(error.message) + '</div>';
   z.innerHTML = tableauPersonnes(data, [['Détail', p => e(p.valeur || '')], ['Dernière fois', p => e(heureCourte(p.quand))]]);
 }
-async function detailZone(ecran, action){
+async function detailZone(ecran, action, bouton){
   const { du, au } = plageActive();
-  const titre = action ? X().nomAction(ecran) : X().nomEcran(ecran);
+  const titre = bouton ? ecran : (action ? X().nomAction(ecran) : X().nomEcran(ecran));
   const f = fenetre(`<h3>${e(titre)}</h3><p class="sous" style="margin:0 0 10px">${action ? 'Qui l\'a fait' : 'Qui y passe du temps'} · ${e(etiqPlage())}</p><div id="lp">Chargement…</div><button class="cta creux petit" data-fermer style="margin-top:14px">Fermer</button>`, true);
-  const { data, error } = await X().db.rpc('detail_evenement', { p_type: action ? 'action' : 'zone', p_valeur: ecran, p_du: du, p_au: au });
+  const { data, error } = await X().db.rpc('detail_evenement', { p_type: bouton ? 'bouton' : (action ? 'action' : 'zone'), p_valeur: ecran, p_du: du, p_au: au });
   const z = f.querySelector('#lp'); if(!z) return;
   if(error) return z.innerHTML = '<div class="vide">' + e(error.message) + '</div>';
   z.innerHTML = tableauPersonnes(data, [action ? ['Fois', p => num(p.visites)] : ['Temps passé', p => duree(p.minutes)], ['Visites', p => action ? '' : num(p.visites)], ['Dernière fois', p => e(heureCourte(p.derniere))]]);
@@ -152,12 +152,13 @@ async function participantsEpreuve(id, titre){
 X().detailEpreuve = participantsEpreuve;
 
 document.addEventListener('click', ev => {
-  const t = ev.target.closest('[data-fiche],[data-zone],[data-action],[data-vers],[data-liste],[data-jour],[data-cohorte],[data-epreuve]');
+  const t = ev.target.closest('[data-fiche],[data-zone],[data-action],[data-bouton],[data-vers],[data-liste],[data-jour],[data-cohorte],[data-epreuve]');
   if(!t) return;
   const d = t.dataset;
   if(d.fiche){ ev.stopPropagation(); return ouvrirFiche(d.fiche); }
   if(d.zone) return detailZone(d.zone, false);
   if(d.action) return detailZone(d.action, true);
+  if(d.bouton) return detailZone(d.bouton, true, true);
   if(d.vers){ const f = document.querySelector('.fenetre-plus'); if(f && f._fermer) f._fermer(); return allerA(d.vers); }
   if(d.liste) return listePeriode(d.liste);
   if(d.jour){ X().A.histPlage = { du: d.jour, au: d.jour }; X().A.histUser = null; return allerA('direct'); }

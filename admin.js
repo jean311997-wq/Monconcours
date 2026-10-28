@@ -422,8 +422,8 @@ async function vuePaiements(){
     <thead><tr><th>Candidat</th><th>Numéro</th><th>Pass · moyen</th><th>Montant</th><th>Capture</th><th>Statut</th><th>Reçu le</th><th></th></tr></thead>
     <tbody>${liste.map(p => `
       <tr>
-        <td><b>${E(p.nom || '—')}</b><br><span style="color:var(--craie2);font-size:12px">${E(p.nom_compte||'')}</span></td>
-        <td>${E(p.telephone || '—')}</td>
+        <td><b${p.user_id ? ` class="cliquable" data-fiche="${E(p.user_id)}"` : ''}>${E(p.nom || '—')}</b><br><span style="color:var(--craie2);font-size:12px">${E(p.nom_compte||'')}</span></td>
+        <td>${p.user_id ? `<span class="cliquable" data-fiche="${E(p.user_id)}">${E(p.telephone || '—')}</span>` : E(p.telephone || '—')}</td>
         <td>${E(NOM_PASS[p.formule] || 'Pass')}<br><span style="color:var(--craie2);font-size:12px">${E(NOM_OPERATEUR[p.operateur] || p.operateur || '')}</span></td>
         <td>${nombre(p.montant)} F</td>
         <td>${p.preuve_chemin ? `<button class="mini" data-pai-voir="${E(p.preuve_chemin)}">Voir</button>` : '—'}</td>
@@ -1864,10 +1864,10 @@ async function vueAnalyse(){
   zA.innerHTML = `
     <div class="compteurs">
       <div class="compteur"><div class="v num">${nombre(g.visiteurs)}</div><div class="l">Visiteurs</div></div>
-      <div class="compteur"><div class="v num">${nombre(g.candidats)}</div><div class="l">Comptes</div></div>
-      <div class="compteur"><div class="v num">${nombre(g.nouveaux)}</div><div class="l">Nouveaux</div></div>
-      <div class="compteur"><div class="v num">${nombre(g.dau)}</div><div class="l">Actifs aujourd'hui</div></div>
-      <div class="compteur"><div class="v num">${nombre(g.wau)}</div><div class="l">Actifs 7 jours</div></div>
+      <div class="compteur cliquable" data-vers="candidats"><div class="v num">${nombre(g.candidats)}</div><div class="l">Comptes</div></div>
+      <div class="compteur cliquable" data-vers="candidats"><div class="v num">${nombre(g.nouveaux)}</div><div class="l">Nouveaux</div></div>
+      <div class="compteur cliquable" data-vers="direct"><div class="v num">${nombre(g.dau)}</div><div class="l">Actifs aujourd'hui</div></div>
+      <div class="compteur cliquable" data-vers="direct"><div class="v num">${nombre(g.wau)}</div><div class="l">Actifs 7 jours</div></div>
       <div class="compteur"><div class="v num">${nombre(g.sessions)}</div><div class="l">Sessions</div></div>
       <div class="compteur"><div class="v num">${nombre(g.evenements)}</div><div class="l">Actions observées</div></div>
       <div class="compteur"><div class="v num">${nombre(g.questions_repondues)}</div><div class="l">Questions répondues</div></div>
@@ -1948,7 +1948,7 @@ async function vueComportement(){
       <div class="carte">
         ${(!ec || !ec.length) ? insuffisant() : `
         <table><thead><tr><th>Écran</th><th>Vues</th><th>Personnes</th><th>Sorties</th></tr></thead><tbody>
-        ${ec.map(e => `<tr>
+        ${ec.map(e => `<tr class="cliquable" data-zone="${E(e.ecran)}">
           <td>${E(e.ecran)}${barreHorizontale(e.vues, maxE)}</td>
           <td class="num">${nombre(e.vues)}</td>
           <td class="num">${nombre(e.personnes)}</td>
@@ -1963,7 +1963,7 @@ async function vueComportement(){
       <div class="carte">
         ${(!bt || !bt.length) ? insuffisant('Aucun clic observé.') : `
         <table><thead><tr><th>Action</th><th>Écran</th><th>Clics</th><th>Personnes</th></tr></thead><tbody>
-        ${bt.map(b => `<tr>
+        ${bt.map(b => `<tr class="cliquable" data-bouton="${E(b.element)}">
           <td>${E(b.element)}${barreHorizontale(b.clics, maxB, 'var(--laterite)')}</td>
           <td style="color:var(--craie2)">${E(b.ecran || '—')}</td>
           <td class="num">${nombre(b.clics)}</td>
@@ -2412,7 +2412,7 @@ async function vueJournal(pageJ){
     ? `<table><thead><tr><th>Quand</th><th>Action</th><th>Cible</th></tr></thead><tbody>
        ${data.map(l => `<tr><td class="num">${dateHeure(l.cree_le)}</td>
          <td>${E((l.action || '').replace(/_/g,' '))}</td>
-         <td class="num" style="color:var(--craie2)">${E(l.table_cible || '—')}</td></tr>`).join('')}
+         <td class="num" style="color:var(--craie2)">${l.table_cible === 'profils' && /^[0-9a-f-]{36}$/i.test(l.ligne_cible || '') ? `<span class="cliquable" data-fiche="${E(l.ligne_cible)}">voir le candidat</span>` : E(l.table_cible || '—')}</td></tr>`).join('')}
        </tbody></table>`
     : `<div class="vide">Le journal est vide pour l'instant.</div>`)
     + barrePagination(pageJ, parPage, count || 0);
@@ -2474,7 +2474,7 @@ async function vueCollectives(){
           const etat = ep.statut === 'annulee' ? 'annulée' : (maintenant < d ? 'à venir' : (maintenant < f ? 'en cours' : 'terminée'));
           return `<tr><td><b>${E(nomConc(ep.concours_id) || ep.titre)}</b>${ep.recompense ? '<br><small>' + E(ep.recompense) + '</small>' : ''}</td>
             <td>${E(new Date(ep.debut_le).toLocaleString('fr-FR', { timeZone:'Africa/Ouagadougou', weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }))}</td>
-            <td>${ep.places}</td><td>${nbInscr[ep.id] || 0}</td><td>${etat}</td>
+            <td>${ep.places}</td><td class="cliquable" data-epreuve="${E(ep.id)}" data-titre="${E(nomConc(ep.concours_id) || ep.titre)}">${nbInscr[ep.id] || 0}</td><td>${etat}</td>
             <td style="text-align:right;white-space:nowrap">
               ${etat === 'terminée' ? `<button class="lien" data-ec-classement="${E(ep.id)}">résultats</button>` : ''}
               ${etat === 'à venir' ? `<button class="lien" data-ec-places="${E(ep.id)}" data-actuel="${ep.places}">places</button>
@@ -2810,17 +2810,17 @@ async function vueTableau(){
 
   z.innerHTML = `
     <div class="compteurs six">
-      <div class="compteur en-ligne"><div class="v num"><i class="pouls"></i>${nombre(t.en_ligne)}</div><div class="l">En ligne maintenant</div>
+      <div class="compteur en-ligne cliquable" data-vers="direct"><div class="v num"><i class="pouls"></i>${nombre(t.en_ligne)}</div><div class="l">En ligne maintenant</div>
         <div class="d">${nombre(t.en_ligne_comptes)} connecté${t.en_ligne_comptes > 1 ? 's' : ''} · ${nombre(t.en_composition)} en composition</div></div>
-      <div class="compteur"><div class="v num">${nombre(t.actifs_jour)}</div><div class="l">Actifs aujourd'hui</div>
+      <div class="compteur cliquable" data-vers="direct"><div class="v num">${nombre(t.actifs_jour)}</div><div class="l">Actifs aujourd'hui</div>
         <div class="d">${nombre(t.visiteurs_jour)} visiteurs en tout</div></div>
-      <div class="compteur"><div class="v num">${nombre(t.inscrits)}</div><div class="l">Inscrits au total</div>
+      <div class="compteur cliquable" data-vers="candidats"><div class="v num">${nombre(t.inscrits)}</div><div class="l">Inscrits au total</div>
         <div class="d">+${nombre(t.nouveaux_jour)} aujourd'hui</div></div>
-      <div class="compteur"><div class="v num">+${nombre(t.nouveaux_7j)}</div><div class="l">Nouveaux sur 7 jours</div>
+      <div class="compteur cliquable" data-vers="candidats"><div class="v num">+${nombre(t.nouveaux_7j)}</div><div class="l">Nouveaux sur 7 jours</div>
         <div class="d">${tendance(t.nouveaux_7j, t.nouveaux_7j_avant)}</div></div>
-      <div class="compteur"><div class="v num">${nombre(t.actifs_7j)}</div><div class="l">Actifs sur 7 jours</div>
+      <div class="compteur cliquable" data-vers="candidats"><div class="v num">${nombre(t.actifs_7j)}</div><div class="l">Actifs sur 7 jours</div>
         <div class="d">${t.inscrits ? Math.round(100 * t.actifs_7j / t.inscrits) : 0} % des inscrits</div></div>
-      <div class="compteur"><div class="v num">${nombre(t.questions_jour)}</div><div class="l">Questions aujourd'hui</div>
+      <div class="compteur cliquable" data-vers="analytique"><div class="v num">${nombre(t.questions_jour)}</div><div class="l">Questions aujourd'hui</div>
         <div class="d">${nombre(t.compositions_jour)} composition${t.compositions_jour > 1 ? 's' : ''} aujourd'hui</div></div>
     </div>
 
@@ -2848,7 +2848,7 @@ async function vueTableau(){
         ${!zones.length ? insuffisant() : `
         ${zone1 ? `<p class="sous" style="margin-top:0">« ${E(nomEcran(zone1.ecran))} » prend <b>${Math.round(100 * zone1.minutes / totalMin)} %</b> du temps passé sur le site.</p>` : ''}
         <table><thead><tr><th>Zone</th><th>Temps total</th><th>Part</th><th>Visites</th><th>Personnes</th><th>Durée moyenne</th></tr></thead><tbody>
-        ${zones.slice(0, 18).map(x => `<tr>
+        ${zones.slice(0, 18).map(x => `<tr class="cliquable" data-zone="${E(x.ecran)}">
           <td>${E(nomEcran(x.ecran))}${barreHorizontale(Number(x.minutes), maxZ)}</td>
           <td class="num">${dureeLisible(x.minutes)}</td>
           <td class="num">${Math.round(100 * x.minutes / totalMin)} %</td>
@@ -2865,7 +2865,7 @@ async function vueTableau(){
       <div class="carte">
         ${!actions.length ? insuffisant('Aucune action observée.') : `
         <table><thead><tr><th>Action</th><th>Fois</th><th>Personnes</th></tr></thead><tbody>
-        ${actions.map(a => `<tr><td>${E(nomAction(a.nom))}${barreHorizontale(a.n, maxA, 'var(--or)')}</td>
+        ${actions.map(a => `<tr class="cliquable" data-action="${E(a.nom)}"><td>${E(nomAction(a.nom))}${barreHorizontale(a.n, maxA, 'var(--or)')}</td>
           <td class="num">${nombre(a.n)}</td><td class="num">${nombre(a.personnes)}</td></tr>`).join('')}
         </tbody></table>`}
       </div>
@@ -2936,7 +2936,7 @@ async function vueBannissement(){
     <div class="bloc"><div class="libelle">Historique</div><div class="carte" id="b-histo">Chargement…</div></div>`;
 
   const ligneCompte = (p, extra) => `<tr>
-    <td><b>${E(p.nom || '—')}</b>${p.pseudo ? ` <span style="color:var(--craie2)">· ${E(p.pseudo)}</span>` : ''}<br>
+    <td><b class="cliquable" data-fiche="${E(p.id)}">${E(p.nom || '—')}</b>${p.pseudo ? ` <span style="color:var(--craie2)">· ${E(p.pseudo)}</span>` : ''}<br>
       <span class="num" style="font-size:11px;color:var(--craie2)">${p.telephone ? '+226 ' + E(p.telephone) : 'sans numéro'} · inscrit le ${dateCourte(p.cree_le)}</span>${extra || ''}</td>
     <td style="text-align:right;white-space:nowrap">${p.banni
       ? `<button class="lien" data-lever="${E(p.id)}">réintégrer</button>`
@@ -2954,12 +2954,12 @@ async function vueBannissement(){
     : `<table><tbody>${sus.map(p => ligneCompte(p, `<div class="raisons">${(p.raisons || []).map(r => `<span>${E(r)}</span>`).join('')}</div>`)).join('')}</tbody></table>`;
   document.getElementById('b-bannis').innerHTML = !actifs.length ? '<div class="vide">Personne n\'est banni.</div>'
     : `<table><thead><tr><th>Candidat</th><th>Motif</th><th>Jusqu'au</th><th></th></tr></thead><tbody>${actifs.map(b => `<tr>
-        <td><b>${E(b.nom || '—')}</b></td>
+        <td><b${b.user_id ? ` class="cliquable" data-fiche="${E(b.user_id)}"` : ''}>${E(b.nom || '—')}</b></td>
         <td>${E(b.motif)}</td><td class="num">${b.jusqu_au ? dateCourte(b.jusqu_au) : 'définitif'}</td>
         <td style="text-align:right"><button class="lien" data-lever="${E(b.user_id)}">réintégrer</button></td></tr>`).join('')}</tbody></table>`;
   document.getElementById('b-histo').innerHTML = !(bans || []).length ? '<div class="vide">Aucun bannissement pour l\'instant.</div>'
     : `<table><thead><tr><th>Date</th><th>Candidat</th><th>Motif</th><th>État</th></tr></thead><tbody>${bans.slice(0, 50).map(b => `<tr>
-        <td class="num">${dateCourte(b.cree_le)}</td><td>${E(b.nom || '—')}</td><td>${E(b.motif)}</td>
+        <td class="num">${dateCourte(b.cree_le)}</td><td>${b.user_id ? `<span class="cliquable" data-fiche="${E(b.user_id)}">${E(b.nom || '—')}</span>` : E(b.nom || '—')}</td><td>${E(b.motif)}</td>
         <td>${b.leve_le ? 'levé le ' + dateCourte(b.leve_le) : (b.jusqu_au && new Date(b.jusqu_au) <= new Date() ? 'expiré' : 'en cours')}</td></tr>`).join('')}</tbody></table>`;
 
   const brancher = () => {
