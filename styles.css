@@ -1900,3 +1900,17 @@ body[data-theme="clair"] .no-btn.no-danger{color:var(--erreur);border-color:rgba
 .iv-etapes{list-style:none;margin:0 0 14px;padding:0;display:grid;gap:8px}
 .iv-etapes li{display:flex;align-items:center;gap:10px;font-size:14px;line-height:1.35}
 .iv-etapes b{flex:none;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:var(--or,#C79A2B);color:#fff;font-size:13px}
+
+/* rappel quotidien : interrupteur, bandeau d'accueil */
+.inter{width:46px;height:26px;border-radius:13px;border:1px solid var(--trait);background:var(--ardoise2);position:relative;flex:none;padding:0;cursor:pointer}
+.inter i{position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:var(--craie2, #9a9a9a);transition:transform .18s,background .18s}
+.inter.on{background:var(--vert-fond, #10301f);border-color:var(--vert-bord, #1c5a3a)}
+.inter.on i{transform:translateX(20px);background:var(--vert-texte, #6fe0a8)}
+.bandeau-rappel{display:flex;align-items:center;gap:10px;margin:10px 0 14px;padding:11px 12px;border:1px solid var(--or-bord);background:var(--or-fond);border-radius:13px}
+.bandeau-rappel .br-i{flex:none;color:var(--or)}
+.bandeau-rappel .br-t{flex:1;min-width:0}
+.bandeau-rappel .br-t b{display:block;font-size:14px}
+.bandeau-rappel .br-t small{display:block;font-size:12px;color:var(--craie2);margin-top:2px}
+.bandeau-rappel .mini{width:auto;flex:none;padding:8px 13px;white-space:nowrap}
+.bandeau-rappel .br-x{flex:none;width:32px;height:32px;border-radius:50%;border:0;background:transparent;color:var(--craie2);font-size:22px;line-height:1}
+.rappel-wa a{color:var(--or);text-decoration:underline;text-underline-offset:3px}

@@ -695,6 +695,7 @@ function remettreTest(){
   pister('DIAGNOSTIC_COMPLETED', { repondues: Object.keys(S.testRep).length });
   let n=0; TEST.forEach((g,i)=>{ const r=S.testRep[i]||[]; if(r.length===1 && r[0]===g.i) n++; });
   S.testNote = n;
+  noterSucces('test');
   // les fautes du test ouvrent le cahier
   TEST.forEach((g,i)=>{
     const r = S.testRep[i] || [];
@@ -1376,7 +1377,9 @@ async function chargerAbonnement(){
     if(!uid) return;
     const { data: lignes } = await base.from('mon_abonnement').select('*').eq('user_id', uid).order('fin_le', { ascending:false }).limit(1);
     const data = (lignes && lignes[0]) || null;
+    const etaitActif = !!(S.abo && S.abo.actif);
     if(data && data.actif){
+      if(!etaitActif && data.formule !== 'essai' && lireReglages().rappelPaiementVu !== data.fin_le){ ecrireReglage('rappelPaiementVu', data.fin_le); noterSucces('paiement'); }
       S.abo = {
         actif: true, formule: data.formule, fin_le: data.fin_le,
         jours_restants: data.jours_restants,
@@ -1639,7 +1642,7 @@ async function ouvrirSession(tel, pin){
 
 async function reprendreSession(){
   if(!base) return;
-  try{ await reprendreSession0(); }finally{ S.sessionPrete = true; chargerEpreuve(); setTimeout(() => rappelFinEssai(0), 5000); }
+  try{ await reprendreSession0(); }finally{ S.sessionPrete = true; chargerEpreuve(); setTimeout(() => rappelFinEssai(0), 5000); setTimeout(() => proposerRappel(0), 12000); }
 }
 async function reprendreSession0(){
   const { data } = await base.auth.getSession();
@@ -2104,6 +2107,7 @@ function ecranAujourdhui(){
     ${salutAccueil()}
     ${blocInscriptionVisiteur()}
     ${blocFinEssai()}
+    ${blocBandeauRappel()}
     <div class="tete-jour">
       <span class="eyebrow">${dateDuJour()}</span>
       ${compteARebours()}
@@ -4350,6 +4354,7 @@ function remettre(){
   if(S.corrige) return;
   if(S.timer){clearInterval(S.timer);S.timer=null;}
   S.corrige = true; S.taches[1] = true; sauverTaches(); S.sessionCounter++;
+  noterSucces('composition');
   S.remiseEtat = 'envoi'; S.grilleNote = null;
   pister('COMPOSITION_SUBMITTED', { traitees: Object.keys(S.reponses).length, restant_s: S.chrono });
   sauverEpreuve();
@@ -5748,10 +5753,13 @@ const hm = (h, m) => h + ' h ' + String(m).padStart(2, '0');
 async function activerRappel(heure, minute){
   heure = +heure; minute = +minute || 0;
   if(!S.util.connecte){ S.modal = 'inscription'; S.erreur = ''; return surcouche(); }
-  if(!pushPossible()){ toast('Ce téléphone ne permet pas les rappels. Installez l\'application depuis Chrome pour les recevoir.', 6000); return; }
+  if(!pushPossible()){ pister('REMINDER_UNAVAILABLE'); fenetreRappel('impossible'); return; }
   try{
     const perm = await Notification.requestPermission();
-    if(perm !== 'granted'){ toast('Les notifications sont refusées. Autorisez-les dans les réglages du navigateur.', 6000); return; }
+    if(perm !== 'granted'){
+      ecrireReglage('rappelRefus', Date.now()); pister('REMINDER_PERMISSION_DENIED');
+      fenetreRappel('refuse'); return;
+    }
     const reg = await navigator.serviceWorker.ready;
     let sub = await reg.pushManager.getSubscription();
     if(!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: cleVapid(VAPID_PUBLIC) });
@@ -5781,7 +5789,7 @@ function blocRappels(){
   let h = 19, m = 0;
   if(r){ const d = new Date(); d.setUTCHours(r.heure, r.minute || 0, 0, 0); h = d.getHours(); m = d.getMinutes(); }
   return `<div class="carte rappel-c" style="margin-top:14px">
-    <div class="libelle" style="margin-bottom:8px"><span>${ico('cloche',14)} Me rappeler</span>${r ? '<span class="tampon t-ok">Activé</span>' : ''}</div>
+    <div class="libelle" style="margin-bottom:8px"><span>${ico('cloche',14)} Me rappeler</span><button class="inter${r ? ' on' : ''}" role="switch" aria-checked="${r ? 'true' : 'false'}" aria-label="Rappel quotidien" data-rappel-inter="1"><i></i></button></div>
     <p class="sous" style="margin:0 0 10px;font-size:12.5px">${r ? 'Chaque jour à <b>' + hm(h, m) + '</b> · prochain rappel dans ' + delaiRappel(h, m) + '.' : 'Choisissez votre heure : le téléphone vous le rappelle chaque jour, même si l\'application est fermée.'}</p>
     <div class="rappel-heure">
       <label class="sr" for="rappel-h">Heure</label>
@@ -5791,7 +5799,81 @@ function blocRappels(){
       <button class="mini" data-rappel-heure="1">Valider</button>
     </div>
     ${r ? '<button class="lien" style="margin-top:8px;padding:0" data-rappel-retirer="1">Arrêter le rappel</button>' : ''}
+    ${!r && ['refuse', 'impossible'].includes(etatRappel()) ? `<p class="sous rappel-wa" style="margin:10px 0 0;font-size:12.5px">${etatRappel() === 'refuse' ? 'Les notifications sont bloquées sur ce téléphone.' : 'Ce téléphone ne permet pas les rappels.'} Recevez les annonces et les rendez-vous de composition sur WhatsApp : <a href="${E(CONTACT.canal)}" target="_blank" rel="noopener" data-rappel-wa="1">rejoindre la communauté</a>.</p>` : ''}
   </div>`;
+}
+
+/* ---------- proposer le rappel au bon moment : après un succès, jamais au premier lancement ---------- */
+function etatRappel(){
+  if(!S.util.connecte) return 'non';
+  if(S.rappel) return 'actif';
+  if(!pushPossible()) return 'impossible';
+  if(Notification.permission === 'denied') return 'refuse';
+  return 'possible';
+}
+/* Le bandeau de l'accueil : discret, masquable sept jours */
+function blocBandeauRappel(){
+  if(S.gratuit && !S.util.connecte) return '';
+  if(etatRappel() !== 'possible') return '';
+  const masque = lireReglages().bandeauRappel;
+  if(masque && Date.now() - masque < 7 * 86400000) return '';
+  return `<div class="bandeau-rappel" role="status">
+    <span class="br-i">${ico('cloche', 18)}</span>
+    <div class="br-t"><b>Un rappel chaque jour ?</b><small>Le téléphone vous prévient à l'heure choisie, même application fermée.</small></div>
+    <button class="mini" data-rappel-oui="1">À 19 h</button>
+    <button class="br-x" data-rappel-masquer="1" aria-label="Masquer ce message">×</button>
+  </div>`;
+}
+const MOTS_RAPPEL = {
+  composition: ['Copie remise, bravo.', 'Revenir chaque jour fait gagner des points le jour du concours.'],
+  paiement:    ['Votre abonnement est actif.', 'Pour en profiter chaque jour, activez un rappel.'],
+  test:        ['Votre note est là.', 'Pour la faire monter, revenez chaque jour quelques minutes.'],
+  bandeau:     ['Un rappel chaque jour ?', 'Un seul message par jour, à l\'heure de votre choix.']
+};
+function fenetreRappel(mode, motif){
+  const v = document.getElementById('voile'); if(!v) return;
+  S.modal = 'rappel'; v.hidden = false;
+  let corps;
+  if(mode === 'possible'){
+    const t = MOTS_RAPPEL[motif] || MOTS_RAPPEL.bandeau;
+    corps = `<h3 id="pr-titre">${t[0]}</h3>
+      <p class="intro">${t[1]} Recevoir un rappel chaque jour à 19&nbsp;h&nbsp;? Vous pouvez changer l'heure ou l'arrêter à tout moment, dans « Mon compte ».</p>
+      <button class="cta" data-rappel-oui="1">Oui, me rappeler à 19 h</button>
+      <button class="cta creux" style="margin-top:8px" data-rappel-autre="1">Choisir une autre heure</button>
+      <button class="lien" style="display:block;margin:12px auto 0" data-rappel-plus-tard="1">Plus tard</button>`;
+  } else {
+    corps = `<h3 id="pr-titre">${mode === 'refuse' ? 'Pas de notifications, pas de souci' : 'Les rappels ne marchent pas sur ce téléphone'}</h3>
+      <p class="intro">${mode === 'refuse' ? 'Vous pourrez les autoriser plus tard dans les réglages du navigateur. ' : ''}En attendant, rejoignez la communauté WhatsApp : vous y recevez les annonces, les rendez-vous de composition et les conseils du jour.</p>
+      <a class="cta" style="display:block;text-align:center;text-decoration:none" href="${E(CONTACT.canal)}" target="_blank" rel="noopener" data-rappel-wa="1">Rejoindre la communauté WhatsApp</a>
+      <button class="lien" style="display:block;margin:12px auto 0" data-rappel-fermer="1">Fermer</button>`;
+  }
+  v.innerHTML = `<div class="panneau pop-nat" role="dialog" aria-modal="true" aria-labelledby="pr-titre">
+    <button class="pn-x" data-rappel-fermer="1" aria-label="Fermer">×</button>${corps}</div>`;
+  pister('REMINDER_PROMPT_SHOWN', { mode, motif: motif || null });
+}
+function fermerFenetreRappel(){ const v = document.getElementById('voile'); if(v) v.hidden = true; if(S.modal === 'rappel') S.modal = null; }
+/* Un succès vient d'arriver : on le note, la fenêtre s'ouvre à un moment calme. */
+function noterSucces(motif){
+  if(!S.util.connecte || S.rappel) return;
+  ecrireReglage('rappelApres', motif);
+  setTimeout(() => proposerRappel(0), 9000);
+}
+function proposerRappel(essai){
+  const r = lireReglages(), motif = r.rappelApres;
+  if(!motif) return;
+  const etat = etatRappel();
+  if(etat === 'actif' || etat === 'non'){ if(etat === 'actif') ecrireReglage('rappelApres', null); return; }
+  if(etat === 'impossible') return;                     /* rien à proposer ici : le bandeau et le compte portent le lien WhatsApp */
+  const refus = r.rappelRefus || r.rappelPlusTard;
+  if((r.rappelPropose || 0) >= 3 || (refus && Date.now() - refus < 14 * 86400000)){ ecrireReglage('rappelApres', null); return; }
+  const v = document.getElementById('voile');
+  if(S.ecran === 'compte' || S.modal || enComposition() || !v || !v.hidden || document.getElementById('invitation')){
+    if(essai < 8) setTimeout(() => proposerRappel(essai + 1), 8000);
+    return;
+  }
+  if(etat === 'refuse'){ ecrireReglage('rappelApres', null); if(r.rappelWaVu) return; ecrireReglage('rappelWaVu', true); return fenetreRappel('refuse', motif); }
+  ecrireReglage('rappelApres', null); ecrireReglage('rappelPropose', (r.rappelPropose || 0) + 1);
+  fenetreRappel('possible', motif);
 }
 
 /* ---------- mes compositions, dans le compte ---------- */
@@ -5942,7 +6024,7 @@ window.addEventListener('popstate', ev => {
 /* Les nouveaux boutons ont leur propre écouteur : le grand aiguillage
    plus bas reste tel quel. */
 document.addEventListener('click', ev => {
-  const t = ev.target.closest('[data-fin-essai-non],[data-fin-essai-oui],[data-class-fermer],[data-class-voir],[data-quitter],[data-quitter-oui],[data-quitter-non],[data-son],[data-correction-differee],[data-gagnants],[data-pourtoi],[data-fil-rep],[data-fil-suiv],[data-qdj-rep],[data-qp-rep],[data-signaler],[data-signal-envoi],[data-objectif],[data-rejoindre],[data-rappel-activer],[data-rappel-retirer],[data-reagir],[data-partage-question],[data-partage-qdj],[data-partage-rang],[data-carte-resultat],[data-sortir-reprise],[data-inscrire-nat],[data-correction-nat],[data-nat-oui],[data-nat-non],[data-resultats-pdf],[data-telecharger-mat],[data-rappel-heure],[data-installe-d],[data-notifs-d],[data-paiement-plus-tard]');
+  const t = ev.target.closest('[data-fin-essai-non],[data-fin-essai-oui],[data-class-fermer],[data-class-voir],[data-quitter],[data-quitter-oui],[data-quitter-non],[data-son],[data-correction-differee],[data-gagnants],[data-pourtoi],[data-fil-rep],[data-fil-suiv],[data-qdj-rep],[data-qp-rep],[data-signaler],[data-signal-envoi],[data-objectif],[data-rejoindre],[data-rappel-activer],[data-rappel-retirer],[data-reagir],[data-partage-question],[data-partage-qdj],[data-partage-rang],[data-carte-resultat],[data-sortir-reprise],[data-inscrire-nat],[data-correction-nat],[data-nat-oui],[data-nat-non],[data-resultats-pdf],[data-telecharger-mat],[data-rappel-heure],[data-rappel-inter],[data-rappel-oui],[data-rappel-autre],[data-rappel-plus-tard],[data-rappel-fermer],[data-rappel-masquer],[data-rappel-wa],[data-installe-d],[data-notifs-d],[data-paiement-plus-tard]');
   if(!t) return;
   const d = t.dataset;
   try{ const cle = Object.keys(d)[0]; pister('BUTTON_CLICKED', { valeur: String(d[cle]).slice(0,40) }, cle); }catch(e){}
@@ -6002,6 +6084,19 @@ document.addEventListener('click', ev => {
     pister('NATIONAL_JOINED');
     return aller('grille');
   }
+  if(d.rappelInter !== undefined){
+    if(S.rappel) return retirerRappel();
+    const h = document.getElementById('rappel-h'), m = document.getElementById('rappel-m');
+    return activerRappel(h ? +h.value : 19, m ? +m.value : 0);
+  }
+  if(d.rappelOui !== undefined){ fermerFenetreRappel(); pister('REMINDER_PROMPT_ACCEPTED'); return activerRappel(19, 0); }
+  if(d.rappelAutre !== undefined){ fermerFenetreRappel(); pister('REMINDER_PROMPT_OTHER_HOUR'); return aller('compte'); }
+  if(d.rappelPlusTard !== undefined || d.rappelFermer !== undefined){
+    if(d.rappelPlusTard !== undefined){ ecrireReglage('rappelPlusTard', Date.now()); pister('REMINDER_PROMPT_LATER'); }
+    return fermerFenetreRappel();
+  }
+  if(d.rappelMasquer !== undefined){ ecrireReglage('bandeauRappel', Date.now()); pister('REMINDER_BANNER_HIDDEN'); return rendre(); }
+  if(d.rappelWa !== undefined){ pister('REMINDER_WHATSAPP_CLICK'); return; }
   if(d.rappelActiver) return activerRappel(d.rappelActiver, 0);
   if(d.rappelRetirer) return retirerRappel();
   if(d.reagir) return reagir(d.reagir);

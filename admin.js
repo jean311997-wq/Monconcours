@@ -2724,7 +2724,7 @@ const NOMS_ACTIONS = {
   RESULT_CARD_SHARED:'Cartes de résultat partagées', PROGRESS_CARD_SHARED:'Cartes de progression partagées',
   QUESTION_SHARED:'Questions partagées', DAILY_QUESTION_SHARED:'Questions du jour partagées', SHARE:'Partages', SHARE_OPENED:'Menu de partage ouvert',
   BADGE_EARNED:'Badges gagnés', LEVEL_REACHED:'Niveaux atteints', CERTIFICATE_DOWNLOADED:'Attestations téléchargées',
-  OFFLINE_PACK_DOWNLOADED:'Packs hors ligne téléchargés', REMINDER_ENABLED:'Rappels activés', DAILY_GOAL_SET:'Objectifs du jour choisis',
+  OFFLINE_PACK_DOWNLOADED:'Packs hors ligne téléchargés', REMINDER_ENABLED:'Rappels activés', REMINDER_PROMPT_SHOWN:'Rappel proposé', REMINDER_PROMPT_ACCEPTED:'Rappel accepté depuis la fenêtre', REMINDER_PROMPT_LATER:'Rappel remis à plus tard', REMINDER_PROMPT_OTHER_HOUR:'Autre heure demandée', REMINDER_PERMISSION_DENIED:'Notifications refusées', REMINDER_UNAVAILABLE:'Rappels impossibles sur le téléphone', REMINDER_BANNER_HIDDEN:'Bandeau de rappel masqué', REMINDER_WHATSAPP_CLICK:'Clics vers la communauté WhatsApp (rappel)', DAILY_GOAL_SET:'Objectifs du jour choisis',
   ACCOUNT_CREATED:'Comptes créés', ACCOUNT_DELETED:'Comptes supprimés', LEVEL_CHANGED:'Changements de niveau',
   DIAGNOSTIC_STARTED:'Tests d\'entrée commencés', DIAGNOSTIC_COMPLETED:'Tests d\'entrée terminés', DIAGNOSTIC_RESULT_VIEWED:'Résultats du test vus',
   DIAGNOSTIC_ANSWER_SELECTED:'Réponses au test d\'entrée', ONBOARDING_STEP_COMPLETED:'Étapes d\'accueil franchies',
