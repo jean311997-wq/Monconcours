@@ -33,7 +33,7 @@ begin
     elsif r.delta = 1 then
       v_cle := 'essai-j1';
       v_titre := 'Votre essai gratuit expire demain';
-      v_msg := 'Demain, corrections et compositions repassent en mode limité. Gardez tout avec un abonnement dès 500 FCFA.';
+      v_msg := 'Demain, corrections et compositions repassent en mode limité. Gardez tout avec un abonnement dès 1 000 FCFA.';
     elsif r.delta = 2 then
       v_cle := 'essai-j2';
       v_titre := 'Votre essai gratuit se termine dans 2 jours';

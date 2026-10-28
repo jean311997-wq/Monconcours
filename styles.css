@@ -1849,14 +1849,16 @@ body[data-theme="clair"] .fe-carte{background:#fff}
 .raison-abo p{margin:0;font-size:14px;line-height:1.4;font-weight:600}
 .mini svg{vertical-align:-2px}
 
-/* Tuile « QCM / Compositions » : même carte blanche que le taux de réussite ; un trait oblique sépare les deux totaux */
-.stat.stat-oblique{position:relative;display:grid;grid-template-columns:1fr 1fr;align-items:stretch;min-height:96px;padding:12px 14px;text-align:left}
-.stat-oblique .so-trait{position:absolute;left:50%;top:12px;bottom:12px;width:0;border-left:1.5px solid var(--trait);transform:rotate(26deg);transform-origin:center}
-.stat-oblique .so-h,.stat-oblique .so-b{display:flex;flex-direction:column;justify-content:space-between;min-width:0}
-.stat-oblique .so-h{align-items:flex-start;justify-content:flex-start}
-.stat-oblique .so-b{align-items:flex-end;justify-content:flex-end;text-align:right}
-.stat-oblique .v{font-size:24px;line-height:1}
-.stat-oblique .l{font-size:9.5px;letter-spacing:.08em;margin-top:5px}
+/* Tuile « QCM / Compositions » : même carte blanche que le taux de réussite. Le trait va d'un coin à l'autre ;
+   les deux totaux sont dans les coins opposés, donc ne le touchent jamais. */
+.stat.stat-oblique{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);min-height:96px;padding:12px 12px;text-align:left;overflow:hidden;
+  background:linear-gradient(to top right,transparent calc(50% - .75px),var(--trait) calc(50% - .75px),var(--trait) calc(50% + .75px),transparent calc(50% + .75px)),var(--ardoise)}
+.stat-oblique .so-trait{display:none}
+.stat-oblique .so-h,.stat-oblique .so-b{display:flex;flex-direction:column;min-width:0}
+.stat-oblique .so-h{grid-column:1;align-items:flex-start;justify-content:flex-start}
+.stat-oblique .so-b{grid-column:2;align-items:flex-end;justify-content:flex-end;text-align:right}
+.stat-oblique .v{font-size:clamp(18px,6.2vw,24px);line-height:1;white-space:nowrap}
+.stat-oblique .l{font-size:9px;letter-spacing:.06em;margin-top:4px;white-space:nowrap}
 
 /* En-tête : « S'inscrire » pour un visiteur, pastille avec les initiales et un point vert pour un compte connecté */
 .bouton-tete.inscrire{background:var(--or);border-color:var(--or);color:#1a1405;padding:6px 12px}
@@ -1867,17 +1869,18 @@ body[data-theme="clair"] .fe-carte{background:#fff}
 .bouton-tete.avatar-tete i{position:absolute;right:-1px;bottom:-1px;width:11px;height:11px;border-radius:50%;background:#2fb26a;border:2px solid var(--barre)}
 @media(max-width:360px){.bouton-tete.inscrire{padding:6px 9px}.bouton-tete.avatar-tete{width:36px;min-width:36px}}
 
-/* Actualité : la barre de repli fait partie de la carte, collée au bas de l'écran tant qu'on lit la liste */
-.carte-actu{position:relative}
-.actu-bascule{position:sticky;bottom:calc(76px + env(safe-area-inset-bottom));z-index:5;display:block;margin:8px -2px -2px;pointer-events:none}
-.actu-barre{pointer-events:auto;display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:44px;padding:0 14px;
-  border:1px solid var(--trait);border-radius:12px;background:var(--ardoise2);color:var(--craie);font-family:var(--m);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;
-  box-shadow:0 6px 18px rgba(0,0,0,.18);transition:background .16s ease,border-color .16s ease,transform .12s ease}
-.actu-barre:hover{border-color:var(--survol)}
-.actu-barre:active{transform:scale(.985)}
-.actu-barre:focus-visible{outline:2px solid var(--or);outline-offset:2px}
 @media(max-width:340px){.bouton-tete.inscrire{padding:6px 7px}.bouton-tete.inscrire b{font-size:11px}.apptete{padding:8px 6px}}
 
 .pop-nat{position:relative}
 .pn-x{position:absolute;top:8px;right:8px;width:40px;height:40px;border-radius:50%;border:1px solid var(--trait);background:var(--ardoise2);color:var(--craie);font-size:24px;line-height:1;display:grid;place-items:center}
 .pn-x:hover{border-color:var(--survol)}
+
+/* Notifications : deux actions côte à côte, de même taille, sous le titre */
+.notif-outils{display:flex;gap:8px;margin:10px 0 2px}
+.no-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;min-height:42px;padding:0 10px;border:1px solid var(--trait);border-radius:10px;
+  background:var(--ardoise2);color:var(--craie);font-size:12.5px;font-weight:600;line-height:1.15;text-align:left;transition:border-color .16s ease,background .16s ease}
+.no-btn:hover{border-color:var(--survol)}
+.no-btn:active{transform:scale(.98)}
+.no-btn svg{flex:none}
+.no-btn.no-danger{color:var(--rouge-texte);border-color:var(--rouge-bord);background:transparent}
+body[data-theme="clair"] .no-btn.no-danger{color:var(--erreur);border-color:rgba(194,57,46,.35)}

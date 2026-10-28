@@ -728,7 +728,7 @@ function ouvrirPopupPaiementD(){
     <p style="color:var(--sous);margin:0 0 20px;font-size:14px;line-height:1.5">Accède à toutes les révisions, compositions et ton plan personnalisé. Résilie à tout moment.</p>
     <div style="display:grid;gap:10px;margin-bottom:18px">
       <button class="cta" style="margin:0" data-go="abonnement" data-paiement-plus-tard-close="1">
-        Voir les offres<small>À partir de 500 FCFA / semaine</small>
+        Voir les offres<small>À partir de 1 000 FCFA par mois</small>
       </button>
       <button class="lien" style="display:block;text-align:center;padding:12px 0" data-paiement-plus-tard="1">
         Plus tard
@@ -851,7 +851,6 @@ function blocPlanPaiement(faibles){
     ${S.offre ? `<div class="offre-kicker" style="margin:0 0 8px">Offre du jour · valable aujourd'hui seulement · il reste <b data-offre-reste="1">${resteOffre()}</b></div>` : ''}
     ${S.offre ? ligne('annuelle', 'Abonnement Année', '12 mois sans limite, à moitié prix. L\'offre expire ' + jourOffre() + ' à minuit.') : ''}
     ${ligne('mensuelle', 'Abonnement Mois', '30 jours pour travailler chaque jour.')}
-    ${ligne('semaine', 'Abonnement Semaine', '7 jours pour essayer, le plus petit prix.')}
     ${S.offre ? '' : ligne('annuelle', 'Abonnement Année', '12 mois sans limite.')}
   </div>`;
 }
@@ -2013,11 +2012,10 @@ function ecranAujourdhui(){
     <div class="colonnes">
     <div>
     <div class="bloc">
-      <div class="carte carte-actu" id="actu-accueil">
-        ${ACTU.length ? (S.actuAccueilOuverte ? ACTU : ACTU.slice(0,3)).map((a,k)=>carteActu(a,k===0)).join('') : blocActuVide()}
-        ${ACTU.length > 3 ? barreActu(!S.actuAccueilOuverte, ACTU.length - 3, 'data-actu-accueil') : ''}
+      <div class="carte">
+        ${ACTU.length ? ACTU.slice(0,3).map((a,k)=>carteActu(a,k===0)).join('') : blocActuVide()}
       </div>
-      ${ACTU.length > 3 ? `<button class="voir-tout" data-go="actualite"><span>Ouvrir la page Actualité</span><b aria-hidden="true">→</b></button>` : ''}
+      ${ACTU.length > 3 ? `<button class="voir-tout" data-go="actualite"><span>Voir les ${ACTU.length} informations</span><b aria-hidden="true">→</b></button>` : ''}
     </div>
     </div>
     <div>
@@ -2059,11 +2057,6 @@ function ecranAujourdhui(){
    premières informations, puis la redéploie. Rien n'est supprimé : la liste
    est seulement masquée, pour ne pas saturer l'écran quand on a fini de lire. */
 const ACTU_VISIBLES_REPLIEES = 3;
-function barreActu(replie, reste, attr){
-  return `<div class="actu-bascule"><button class="actu-barre" ${attr}="1" aria-expanded="${replie ? 'false' : 'true'}"
-    aria-label="${replie ? 'Afficher les ' + reste + ' autres informations' : 'Réduire la liste des informations'}">
-    <span class="ab-txt">${replie ? 'Voir les ' + reste + ' autres' : 'Réduire'}</span>${chevronActu(replie)}</button></div>`;
-}
 const chevronActu = replie => `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${replie ? 'M6 9l6 6 6-6' : 'M6 15l6-6 6 6'}"/></svg>`;
 
 function ecranActualite(){
@@ -2087,7 +2080,11 @@ function ecranActualite(){
     <div class="bloc" style="margin-top:12px">
       <div class="libelle">${S.actuOnglet==='national'?'Burkina Faso':'Monde et organisations'}<span class="num">${liste.length}</span></div>
       <div class="carte" id="liste-actu">${liste.length ? montrees.map(a => carteActu(a)).join('') : blocActuVide()}</div>
-      ${peutReplier ? barreActu(replie, liste.length - ACTU_VISIBLES_REPLIEES, 'data-actu-repli') : ''}
+      ${peutReplier ? `<div class="actu-bascule">
+        <button class="actu-chevron" data-actu-repli="1" aria-expanded="${replie ? 'false' : 'true'}"
+          aria-label="${replie ? 'Afficher les ' + (liste.length - ACTU_VISIBLES_REPLIEES) + ' autres informations' : 'Réduire la liste des informations'}">
+          ${replie ? `<span>+${liste.length - ACTU_VISIBLES_REPLIEES}</span>` : ''}${chevronActu(replie)}
+        </button></div>` : ''}
     </div>
 
     <button class="cta" style="margin-top:16px" data-go="aujourdhui">J'ai lu · valider ma tâche</button>
@@ -2143,7 +2140,8 @@ function ico(n, t){
     groupe:'<circle cx="9" cy="8.5" r="3.2"/><path d="M3 19a6 6 0 0 1 12 0"/><circle cx="17" cy="9.5" r="2.5"/><path d="M15.5 14.2A5 5 0 0 1 21 19"/>',
     question:'<circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.8-2.4 2.2-2.4 3.9"/><circle cx="12" cy="17" r=".6" fill="currentColor"/>',
     horloge:'<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
-    coche:'<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16.5 9.5"/>'
+    coche:'<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16.5 9.5"/>',
+    corbeille:'<path d="M4 7h16"/><path d="M9 7V4.5h6V7"/><path d="M6.5 7l.8 12a1.5 1.5 0 0 0 1.5 1.4h6.4a1.5 1.5 0 0 0 1.5-1.4L17.5 7"/><path d="M10 11v6M14 11v6"/>'
   }[n] || '';
   return `<svg ${o}>${p}</svg>`;
 }
@@ -2267,9 +2265,8 @@ function ecranConnexion(){
 const nomFormule = f => ({ semaine:'Abonnement Semaine', mensuelle:'Abonnement Mois', annuelle:'Abonnement Année', essai:'Essai gratuit' })[f] || 'Abonnement';
 /* Trois abonnements, jamais quatre. Aucun chiffre inventé : le prix par jour est un simple calcul. */
 const FORMULES = {
-  semaine:  { cle:'semaine',  n:'Abonnement Semaine', prix:'500 FCFA',   montant:500,  per:'7 jours',  jour:'71 F par jour', reco:false },
-  mensuelle:{ cle:'mensuelle', n:'Abonnement Mois',    prix:'1 000 FCFA', montant:1000, per:'30 jours', jour:'33 F par jour', reco:true },
-  annuelle: { cle:'annuelle', n:'Abonnement Année',   prix:'4 000 FCFA', montant:4000, per:'12 mois',  jour:'11 F par jour', reco:false }
+  mensuelle:{ cle:'mensuelle', n:'Abonnement Mois',    prix:'1 000 FCFA', montant:1000, per:'30 jours', jour:'33 F par jour', reco:false },
+  annuelle: { cle:'annuelle', n:'Abonnement Année',   prix:'4 000 FCFA', montant:4000, per:'12 mois',  jour:'11 F par jour', reco:true }
 };
 const OPERATEURS = {
   orange:{ nom:'Orange Money', pastille:'OM', cls:'om' },
@@ -2767,11 +2764,11 @@ function ouvrirNotifications(){
     <div class="poignee"></div>
     <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:4px">
       <h3 style="margin:0">Notifications</h3>
-      <span class="notif-actions">
-      ${liste.some(n=>!n.lue) ? `<button class="lien" data-notifs-tout="1">Tout marquer comme lu</button>` : ''}
-      ${liste.length ? `<button class="lien" data-notifs-vider="1">Tout supprimer</button>` : ''}
-      </span>
     </div>
+    ${liste.length ? `<div class="notif-outils">
+      ${liste.some(n=>!n.lue) ? `<button class="no-btn" data-notifs-tout="1">${ico('coche',15)}<span>Tout marquer comme lu</span></button>` : ''}
+      <button class="no-btn no-danger" data-notifs-vider="1">${ico('corbeille',15)}<span>Tout supprimer</span></button>
+    </div>` : ''}
     ${!liste.length ? `
     <p class="sous" style="margin:18px 0">Rien pour le moment. Vos résultats et rappels apparaîtront ici.</p>
     ` : `
@@ -7369,7 +7366,7 @@ function rendre(){
 }
 
 document.addEventListener('click', ev=>{
-  const t = ev.target.closest('[data-actu-accueil],[data-matiere],[data-vers],[data-musique],[data-notifs],[data-notifs-tout],[data-notifs-vider],[data-notif-lire],[data-copier],[data-partage-natif],[data-fermer-partage],[data-paieretour],[data-preuve-modifier],[data-preuve-envoyer],[data-plan-faire],[data-plan-effacer],[data-copie-plus-tard],[data-pass],[data-proche],[data-code-ouvrir],[data-code-valider],[data-copier-num],[data-demain],[data-feuille],[data-lire-feuille],[data-lire-cahier],[data-lecteur-dl],[data-nivinfo],[data-archive],[data-toutes-compos],[data-partage],[data-oeil],[data-reinitialiser],[data-lire],[data-telecharger],[data-apercu],[data-saut],[data-compotab],[data-bascule-theme],[data-modal],[data-entrer],[data-bascule],[data-plustard],[data-deconnecter],[data-theme-choix],[data-erreursdusoir],[data-cible],[data-cours],[data-inscrire],[data-connecter],[data-oubli],[data-oubli-wa],[data-formule],[data-operateur],[data-payer],[data-paiefin],[data-paieannul],[data-go],[data-toutcahier],[data-actu],[data-actu-repli],[data-niv],[data-mat],[data-qcm],[data-qsuiv],[data-cahierfreq],[data-classement],[data-diagnostic],[data-defi],[data-duel],[data-badges],[data-phase],[data-conc],[data-dep],[data-test],[data-tb],[data-tremettre],[data-seance],[data-rep],[data-suivante],[data-b],[data-remettre],[data-recommencer],[data-reprise],[data-rr],[data-fin-reprise],[data-qcm-relancer],[data-compo-relancer],[data-remise-relancer],[data-recu]');
+  const t = ev.target.closest('[data-matiere],[data-vers],[data-musique],[data-notifs],[data-notifs-tout],[data-notifs-vider],[data-notif-lire],[data-copier],[data-partage-natif],[data-fermer-partage],[data-paieretour],[data-preuve-modifier],[data-preuve-envoyer],[data-plan-faire],[data-plan-effacer],[data-copie-plus-tard],[data-pass],[data-proche],[data-code-ouvrir],[data-code-valider],[data-copier-num],[data-demain],[data-feuille],[data-lire-feuille],[data-lire-cahier],[data-lecteur-dl],[data-nivinfo],[data-archive],[data-toutes-compos],[data-partage],[data-oeil],[data-reinitialiser],[data-lire],[data-telecharger],[data-apercu],[data-saut],[data-compotab],[data-bascule-theme],[data-modal],[data-entrer],[data-bascule],[data-plustard],[data-deconnecter],[data-theme-choix],[data-erreursdusoir],[data-cible],[data-cours],[data-inscrire],[data-connecter],[data-oubli],[data-oubli-wa],[data-formule],[data-operateur],[data-payer],[data-paiefin],[data-paieannul],[data-go],[data-toutcahier],[data-actu],[data-actu-repli],[data-niv],[data-mat],[data-qcm],[data-qsuiv],[data-cahierfreq],[data-classement],[data-diagnostic],[data-defi],[data-duel],[data-badges],[data-phase],[data-conc],[data-dep],[data-test],[data-tb],[data-tremettre],[data-seance],[data-rep],[data-suivante],[data-b],[data-remettre],[data-recommencer],[data-reprise],[data-rr],[data-fin-reprise],[data-qcm-relancer],[data-compo-relancer],[data-remise-relancer],[data-recu]');
   if(!t) return;
   const d = t.dataset;
 
@@ -7619,12 +7616,6 @@ document.addEventListener('click', ev=>{
   }
   if(d.toutcahier){ S.cahierFiltre=false; S.cahierDepuisGrille=false; return rendre(); }
   if(d.actu){ S.actuOnglet = d.actu; return rendre(); }
-  if(d.actuAccueil){
-    S.actuAccueilOuverte = !S.actuAccueilOuverte;
-    rendre();
-    if(!S.actuAccueilOuverte){ const c = document.getElementById('actu-accueil'); if(c) c.scrollIntoView({ block:'center' }); }
-    return;
-  }
   if(d.actuRepli){
     S.actuRepli = S.actuRepli || {};
     S.actuRepli[S.actuOnglet] = !S.actuRepli[S.actuOnglet];
