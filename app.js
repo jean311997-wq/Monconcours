@@ -2087,24 +2087,14 @@ function blocInscriptionVisiteur(){
   </div>`;
 }
 /* Les derniers jours de l'essai de 7 jours : une carte calme, sur l'accueil seulement, jamais en pleine question */
-/* La fin d'essai parle du candidat : ce qu'il a déjà fait pendant l'essai. */
-function reste_essai(j){ return j <= 0 ? 'aujourd\'hui' : j === 1 ? 'demain' : 'dans ' + j + ' jours'; }
-function phraseEssai(){
-  const st = S.stats || {};
-  const q = +st.questions_resolues || 0, c = +st.compositions || 0;
-  const bouts = [];
-  if(q > 0) bouts.push('répondu à <b>' + nombreFr(q) + '</b> question' + (q > 1 ? 's' : ''));
-  if(c > 0) bouts.push('composé <b>' + nombreFr(c) + '</b> fois');
-  return bouts.length ? 'Pendant votre essai, vous avez ' + bouts.join(' et ') + '. ' : '';
-}
 function blocFinEssai(){
   const a = S.abo || {};
-  if(S.gratuit || !S.util.connecte || !a.actif || a.formule !== 'essai' || a.jours_restants > 3) return '';
-  const reste = 'se termine ' + reste_essai(a.jours_restants);
+  if(S.gratuit || !S.util.connecte || !a.actif || a.formule !== 'essai' || a.jours_restants > 2) return '';
+  const reste = a.jours_restants <= 0 ? 'se termine aujourd\'hui' : a.jours_restants === 1 ? 'se termine demain' : 'se termine dans 2 jours';
   const f = FORMULES.mensuelle;
   return `<div class="carte fin-essai" role="status">
     <div class="fe-ligne"><b>Votre essai ${reste}</b></div>
-    <p class="sous" style="margin:6px 0 12px">${phraseEssai()}Ensuite, l'abonnement gratuit garde 10 corrections par jour et 3 compositions. Pour tout garder sans limite : ${E(f.n)}, ${E(f.prix)} pour 30 jours, soit ${E(f.jour)}.</p>
+    <p class="sous" style="margin:6px 0 12px">Ensuite, l'abonnement gratuit garde 10 corrections par jour et 3 compositions. Pour tout garder sans limite : ${E(f.n)}, ${E(f.prix)} pour 30 jours, soit ${E(f.jour)}.</p>
     <button class="cta" data-pass="mensuelle">Garder l'accès complet · ${E(f.prix)}</button>
     <button class="cta creux" style="margin-top:8px" data-go="abonnement">Voir tous les abonnements</button>
   </div>`;
@@ -5115,7 +5105,8 @@ function carteEpreuve(){
 /* À l'ouverture : « Voulez-vous participer ? » une fois par composition */
 /* Dernier jour de l'essai : une fenêtre claire à l'ouverture, une fois par jour, avec une croix pour la fermer. */
 function rappelFinEssai(essai){
-  if(S.gratuit || !S.util.connecte || !S.abo || !S.abo.actif || S.abo.formule !== 'essai' || S.abo.jours_restants > 3) return;
+  return;   /* fenêtre de fin d'essai retirée à la demande : la carte de l'accueil suffit */
+  if(S.gratuit || !S.util.connecte || !S.abo || !S.abo.actif || S.abo.formule !== 'essai' || S.abo.jours_restants > 1) return;
   const jour = new Date().toISOString().slice(0, 10);
   if(lireReglages().finEssaiVu === jour) return;
   const v = document.getElementById('voile');
@@ -5130,8 +5121,8 @@ function rappelFinEssai(essai){
   <div class="panneau pop-nat" role="dialog" aria-modal="true" aria-labelledby="pfe-titre">
     <button class="pn-x" data-fin-essai-non="1" aria-label="Fermer">×</button>
     <div class="eyebrow" style="color:var(--or)">Votre essai gratuit</div>
-    <h3 id="pfe-titre">Il se termine ${reste_essai(S.abo.jours_restants)}</h3>
-    <p class="intro">${phraseEssai()}Ensuite, l'abonnement gratuit garde 10 corrections par jour et 3 compositions. Pour tout garder sans limite : ${E(f.n || 'Abonnement Mois')}, ${E(f.prix || '1 000 FCFA')} pour 30 jours.</p>
+    <h3 id="pfe-titre">${S.abo.jours_restants > 0 ? 'Il se termine demain' : 'Il se termine aujourd\'hui'}</h3>
+    <p class="intro">Ensuite, l'abonnement gratuit garde 10 corrections par jour et 3 compositions. Pour tout garder sans limite : ${E(f.n || 'Abonnement Mois')}, ${E(f.prix || '1 000 FCFA')} pour 30 jours.</p>
     <button class="cta" data-fin-essai-oui="1">Choisir mon abonnement</button>
   </div>`;
   pister('TRIAL_END_POPUP');
