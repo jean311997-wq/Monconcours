@@ -551,7 +551,7 @@ function nav(){
   n.style.gridTemplateColumns = 'repeat(5,1fr)';
   n.innerHTML = ONGLETS.map(o=>{
     const on = (o.id===S.ecran || (o.id==='grille'&&S.ecran==='copie')
-      || (o.id==='aujourdhui'&&['actualite','pourtoi','qdj','gagnants','question','notion','recherche','defi','top','proposer'].includes(S.ecran))
+      || (o.id==='aujourdhui'&&['actualite','pourtoi','qdj','gagnants','correctionnat','question','notion','recherche','defi','top','proposer'].includes(S.ecran))
       || (o.id==='compte'&&S.ecran==='parcours')
       || (o.id==='revisions'&&(S.ecran==='qcm'||S.ecran==='cours'))) ? 'on':'';
     const p = (o.id==='cahier' && ouvertes()) ? `<i class="pastille num">${ouvertes()}</i>`:'';
@@ -560,7 +560,7 @@ function nav(){
   }).join('');
   r.innerHTML = ONGLETS.map(o=>{
     const on = (o.id===S.ecran || (o.id==='grille'&&S.ecran==='copie')
-      || (o.id==='aujourdhui'&&['actualite','pourtoi','qdj','gagnants','question','notion','recherche','defi','top','proposer'].includes(S.ecran))
+      || (o.id==='aujourdhui'&&['actualite','pourtoi','qdj','gagnants','correctionnat','question','notion','recherche','defi','top','proposer'].includes(S.ecran))
       || (o.id==='revisions'&&(S.ecran==='qcm'||S.ecran==='cours'))) ? 'on':'';
     const p = (o.id==='cahier' && ouvertes()) ? `<span class="pastille num">${ouvertes()}</span>`:'';
     return `<button class="${on}" data-go="${o.id}"${on?' aria-current="page"':''}>
@@ -2168,6 +2168,7 @@ function ecranAujourdhui(){
     </div>
 
     ${carteEpreuve()}
+    ${blocDerniereNationale()}
     ${blocPlus()}
   </div>`;
 }
@@ -4980,6 +4981,10 @@ async function chargerEpreuve(){
     if(change && ['aujourdhui','gagnants'].includes(S.ecran)) rendre();
     setTimeout(proposerNationale, 900);
   }catch(e){}
+  try{
+    const { data } = await base.rpc('derniere_nationale');
+    if(!pareil(data || null, S.derniereNat)){ S.derniereNat = data || null; if(S.ecran === 'aujourdhui') rendre(); }
+  }catch(e){}
 }
 async function chargerDirect(){
   if(!base) return;
@@ -5177,7 +5182,7 @@ function proposerNationale(){
       ${ep.places} postes à pourvoir : les ${ep.places} premiers sont admis, les ${ep.places} suivants passent sur liste d'attente. Tout le monde peut composer ; les postes ne limitent pas le nombre de participants.</p>
     ${ep.etat === 'a_venir' ? rebours(ep.debut_le) : ''}
     <p class="pn-q">Voulez-vous participer ?</p>
-    ${S.util.connecte ? `<label class="pn-nom"><input type="checkbox" id="pn-nom" checked> <span>Afficher mon nom dans la liste des admis (sinon, mon pseudo)</span></label>` : ''}
+    ${S.util.connecte ? `<label class="pn-nom"><input type="checkbox" id="pn-nom" checked> <span>Afficher mon nom dans le classement (sinon : « Candidat anonyme »)</span></label>` : ''}
     <div class="duo">
       <button class="cta creux" data-nat-non="${E(ep.id)}">Non, merci</button>
       <button class="cta" data-nat-oui="${E(ep.id)}">Oui, je participe</button>
@@ -5477,6 +5482,54 @@ function boutonsReactions(l){
     return `<button class="reac ${mien ? 'on' : ''}" data-reagir="${E(l.composition)}|${k}" aria-pressed="${mien}">${t}${n ? ' · ' + n : ''}</button>`;
   }).join('')}</div>`;
 }
+/* ---------- l'entrée « dernière composition nationale » : visible par tous ---------- */
+function blocDerniereNationale(){
+  const d = S.derniereNat;
+  if(!d) return '';
+  /* la carte juste au-dessus propose déjà ces résultats quand c'est la même épreuve */
+  if(S.epreuve && S.epreuve.id === d.id && S.epreuve.etat === 'terminee') return '';
+  return `<button class="grande" style="margin-top:12px" data-gagnants="${E(d.id)}">
+    <span class="ic">${ico('trophee',19)}</span>
+    <span><b>Voir les résultats de la dernière composition nationale</b><span>${E(d.concours || 'Composition nationale')} · ${E(jourFr(d.debut_le))} · ${nombreFr(d.participants || 0)} candidat${(d.participants||0)>1?'s':''}</span></span>
+    <span class="fl">→</span></button>`;
+}
+async function chargerCorrectionNat(id){
+  if(!(S.corrNat && S.corrNat.id === id && S.corrNat.ok)) S.corrNat = { id, charge:false };
+  if(!base) return;
+  try{
+    const { data } = await base.rpc('correction_epreuve', { p_epreuve: id });
+    S.corrNat = { ...(data || { ok:false }), id, charge:true };
+  }catch(e){ S.corrNat = { id, charge:true, ok:false, erreur:true }; }
+  if(S.ecran === 'correctionnat') rendre();
+}
+function ecranCorrectionNat(){
+  const c = S.corrNat;
+  const tete = `<button class="retourhaut" data-gagnants="${E(c ? c.id : '')}">Retour aux résultats</button>`;
+  if(!c || !c.charge){ vue().innerHTML = `<div class="pad">${tete}<div class="squelette large" style="margin-top:16px"></div><div class="squelette"></div></div>`; return; }
+  if(!c.ok){ vue().innerHTML = `<div class="pad">${tete}<h1 class="titre">Corrigé indisponible</h1><p class="sous">${E(c.message || 'Vérifiez votre connexion.')}</p></div>`; return; }
+  if(!c.publie){
+    vue().innerHTML = `<div class="pad">${tete}
+      <div class="eyebrow">Composition nationale</div>
+      <h1 class="titre">Corrigé bientôt disponible</h1>
+      <p class="sous" style="margin-top:8px">${c.fin_le ? 'Le corrigé est publié à ' + heureH(c.fin_le) + ', à la fin de l\'épreuve.' : 'Le corrigé sera publié dans quelques heures, une fois l\'épreuve en cours terminée.'}</p></div>`;
+    return;
+  }
+  const L = 'ABCDEFGH';
+  const qs = (c.questions || []).map((q, i) => {
+    const bonnes = q.bonnes || [];
+    return `<div class="carte cn-corr">
+      <div class="libelle" style="margin-bottom:6px"><span>Question ${i + 1}${q.matiere ? ' · ' + E(q.matiere) : ''}</span>${q.reussite !== null && q.reussite !== undefined ? `<span class="num">${q.reussite} % de réussite</span>` : ''}</div>
+      <p style="font-weight:600;margin-bottom:10px">${E(q.enonce)}</p>
+      ${(q.options || []).map((o, k) => `<div class="opt${bonnes.includes(k) ? ' juste' : ''}" style="cursor:default"><span class="lettre">${L[k] || k + 1}</span><span>${E(o)}</span></div>`).join('')}
+      ${q.explication ? `<p class="sous" style="margin-top:8px">${E(q.explication)}</p>` : ''}
+    </div>`;
+  }).join('');
+  vue().innerHTML = `<div class="pad">${tete}
+    <div class="eyebrow">Composition nationale · corrigé</div>
+    <h1 class="titre">Corrigé de l'épreuve</h1>
+    <p class="sous" style="margin:6px 0 14px">${(c.questions || []).length} question${(c.questions || []).length > 1 ? 's' : ''} · ${nombreFr(c.participants || 0)} candidat${(c.participants||0)>1?'s':''}. Le pourcentage indique la part des candidats qui ont trouvé la bonne réponse.</p>
+    ${qs}</div>`;
+}
 const STATUTS = { admis:'Admis', attente:'Liste d\'attente', echoue:'Non admis' };
 function ecranGagnants(){
   const c = S.classementEp;
@@ -5535,7 +5588,10 @@ function ecranGagnants(){
       <div><b class="num">${c.echoues}</b><span>non admis</span></div>
     </div>
     ${statut}
-    ${m && maCompo ? `<button class="cta creux" style="margin-top:10px" data-correction-nat="${E(maCompo)}">${ico('lire',16)} Voir ma correction</button>` : ''}
+    <button class="cta creux" style="margin-top:10px" data-corr-nat="${E(c.id)}">${ico('lire',16)} Voir le corrigé de l'épreuve</button>
+    ${m && maCompo ? `<button class="cta creux" style="margin-top:9px" data-correction-nat="${E(maCompo)}">${ico('lire',16)} Voir ma correction</button>` : ''}
+    ${!m && S.epreuve && S.epreuve.id !== c.id && S.epreuve.etat === 'a_venir' && !S.epreuve.inscrit ? `<div class="carte" style="margin-top:12px;text-align:left"><p class="sous" style="margin:0 0 10px">Prochaine composition nationale : ${E(dateLongue(S.epreuve.debut_le))} à ${heureH(S.epreuve.debut_le)}. Venez composer et voir votre nom dans ce classement.</p>
+      <button class="cta" data-inscrire-nat="${E(S.epreuve.id)}">M'inscrire à la composition</button></div>` : ''}
     ${m && peutProposer(4) ? `<div class="carte" style="margin-top:12px;text-align:left"><p class="sous" style="margin:0 0 10px">Pour préparer la prochaine nationale, faites l'abonnement.</p>
       <button class="cta" data-go="abonnement">Faire l'abonnement</button></div>` : ''}
     ${podium.length ? `<div class="felicitations">
@@ -5561,7 +5617,7 @@ function ecranGagnants(){
     ${admis.length ? `<div class="bloc"><div class="libelle">Liste des admis<span class="num">${admis.length}</span></div><div class="carte">${admis.map(ligne).join('')}</div></div>` : ''}
     ${attente.length ? `<div class="bloc"><div class="libelle">Liste d'attente<span class="num">${attente.length}</span></div><div class="carte">${attente.map(ligne).join('')}</div></div>` : ''}
     ${c.echoues ? `<p class="sous" style="margin-top:12px">${c.echoues} candidat${c.echoues>1?'s ne sont pas admis':' n\'est pas admis'} cette semaine. Leurs noms ne sont pas publiés.</p>` : ''}
-    <p class="sous" style="margin-top:14px;font-size:12px">Classement par ordre de mérite. À note égale, le candidat le plus rapide passe devant. Un candidat qui a refusé l'affichage de son nom apparaît sous son pseudo.</p>
+    <p class="sous" style="margin-top:14px;font-size:12px">Classement par ordre de mérite. À note égale, le candidat le plus rapide passe devant. Un candidat qui a refusé l'affichage de son nom apparaît comme « Candidat anonyme ».</p>
   </div>`;
 }
 function resultatsPdf(){
@@ -5955,7 +6011,6 @@ function blocMesCompositions(){
         <div><b class="num">${nombreFr(qSemaine)}</b><span>questions</span></div>
         <div><b class="num">${typeof dt.minutes_semaine === 'number' ? dt.minutes_semaine : '—'}</b><span>minutes</span></div>
       </div>
-      ${j.pseudo ? `<p class="sous" style="margin-top:12px;font-size:12.5px">Votre pseudo dans les classements : <b>${E(j.pseudo)}</b>.</p>` : ''}
     </div>
   </div>`;
 }
@@ -6025,7 +6080,7 @@ window.addEventListener('popstate', ev => {
 /* Les nouveaux boutons ont leur propre écouteur : le grand aiguillage
    plus bas reste tel quel. */
 document.addEventListener('click', ev => {
-  const t = ev.target.closest('[data-fin-essai-non],[data-fin-essai-oui],[data-class-fermer],[data-class-voir],[data-quitter],[data-quitter-oui],[data-quitter-non],[data-son],[data-correction-differee],[data-gagnants],[data-pourtoi],[data-fil-rep],[data-fil-suiv],[data-qdj-rep],[data-qp-rep],[data-signaler],[data-signal-envoi],[data-objectif],[data-rejoindre],[data-rappel-activer],[data-rappel-retirer],[data-reagir],[data-partage-question],[data-partage-qdj],[data-partage-rang],[data-carte-resultat],[data-sortir-reprise],[data-inscrire-nat],[data-correction-nat],[data-nat-oui],[data-nat-non],[data-resultats-pdf],[data-telecharger-mat],[data-rappel-heure],[data-rappel-inter],[data-rappel-oui],[data-rappel-autre],[data-rappel-plus-tard],[data-rappel-fermer],[data-rappel-masquer],[data-rappel-wa],[data-installe-d],[data-notifs-d],[data-paiement-plus-tard]');
+  const t = ev.target.closest('[data-corr-nat],[data-fin-essai-non],[data-fin-essai-oui],[data-class-fermer],[data-class-voir],[data-quitter],[data-quitter-oui],[data-quitter-non],[data-son],[data-correction-differee],[data-gagnants],[data-pourtoi],[data-fil-rep],[data-fil-suiv],[data-qdj-rep],[data-qp-rep],[data-signaler],[data-signal-envoi],[data-objectif],[data-rejoindre],[data-rappel-activer],[data-rappel-retirer],[data-reagir],[data-partage-question],[data-partage-qdj],[data-partage-rang],[data-carte-resultat],[data-sortir-reprise],[data-inscrire-nat],[data-correction-nat],[data-nat-oui],[data-nat-non],[data-resultats-pdf],[data-telecharger-mat],[data-rappel-heure],[data-rappel-inter],[data-rappel-oui],[data-rappel-autre],[data-rappel-plus-tard],[data-rappel-fermer],[data-rappel-masquer],[data-rappel-wa],[data-installe-d],[data-notifs-d],[data-paiement-plus-tard]');
   if(!t) return;
   const d = t.dataset;
   try{ const cle = Object.keys(d)[0]; pister('BUTTON_CLICKED', { valeur: String(d[cle]).slice(0,40) }, cle); }catch(e){}
@@ -6062,6 +6117,7 @@ document.addEventListener('click', ev => {
   if(d.classFermer){ pister('RANKING_POPUP_CLOSED'); return fermerClassement(d.classFermer); }
   if(d.classVoir){ fermerClassement(d.classVoir); chargerClassement(d.classVoir); return aller('gagnants'); }
   if(d.gagnants){ chargerClassement(d.gagnants); return aller('gagnants'); }
+  if(d.corrNat){ chargerCorrectionNat(d.corrNat); return aller('correctionnat'); }
   if(d.pourtoi){ return lancerFil(d.pourtoi); }
   if(d.filRep !== undefined) return repondreFil(+d.filRep);
   if(d.filSuiv){ const f = S.fil; f.idx++; f.rep = undefined; f.c = null; f.debut = Date.now(); vue().scrollTop = 0; return ecranPourToi(); }
@@ -6633,9 +6689,9 @@ function ecranTop(){
   vue().innerHTML = `<div class="pad">${tete}
     <div class="eyebrow">Depuis lundi</div>
     <h1 class="titre">Top 10 de la semaine</h1>
-    <p class="sous" style="margin:6px 0 14px">Classé par points gagnés cette semaine (bonnes réponses, compositions, erreurs refermées). Les candidats apparaissent sous leur pseudo. Touchez « Défier » pour lancer un défi à l'un d'eux. Remise à zéro chaque lundi.</p>
+    <p class="sous" style="margin:6px 0 14px">Classé par points gagnés cette semaine (bonnes réponses, compositions, erreurs refermées). Les candidats apparaissent avec leur nom et prénom. Touchez « Défier » pour lancer un défi à l'un d'eux. Remise à zéro chaque lundi.</p>
     ${t.erreur ? '<p class="sous">Le classement n\'a pas pu être chargé.</p>' : `<div class="carte">
-      ${(t.top || []).length ? t.top.map(l => `<div class="ligne-rang${l.moi ? ' moi' : ''}"><span class="p num">${l.rang}</span><span class="n">${E(l.pseudo)}${l.moi ? ' (vous)' : ''}<em class="num">${nombreFr(l.points)} pts</em></span>${l.moi ? '' : `<button class="mini btn-defier" data-defier-pseudo="${E(l.pseudo)}">${ico('duel',13)} Défier</button>`}</div>`).join('') : '<p class="sous">Personne n\'a encore marqué de points cette semaine. Soyez le premier.</p>'}
+      ${(t.top || []).length ? t.top.map(l => `<div class="ligne-rang${l.moi ? ' moi' : ''}"><span class="p num">${l.rang}</span><span class="n">${E(l.nom || l.pseudo)}${l.moi ? ' (vous)' : ''}<em class="num">${nombreFr(l.points)} pts</em></span>${l.moi ? '' : `<button class="mini btn-defier" data-defier-pseudo="${E(l.pseudo)}">${ico('duel',13)} Défier</button>`}</div>`).join('') : '<p class="sous">Personne n\'a encore marqué de points cette semaine. Soyez le premier.</p>'}
     </div>
     ${t.moi && t.moi.rang > 10 ? `<div class="ma-place"><span>Ta place</span><b class="num">${t.moi.rang}<sup>e</sup> sur ${t.participants}</b><span class="num">${nombreFr(t.moi.points)} pts</span></div>` : ''}`}
     <button class="cta" style="margin-top:14px" data-pourtoi="10">Gagner des points maintenant</button>
@@ -7560,7 +7616,7 @@ function rendre(){
     revisions:ecranRevisions, cours:ecranCours, lecture:ecranLecture, qcm:ecranQcm,
     grille:ecranGrille, copie:ecranCopie,
     cahier:ecranCahier, lecteur:ecranLecteur, compte:ecranCompte,
-    pourtoi:ecranPourToi, qdj:ecranQdj, question:ecranQuestionPartagee, gagnants:ecranGagnants,
+    pourtoi:ecranPourToi, qdj:ecranQdj, question:ecranQuestionPartagee, gagnants:ecranGagnants, correctionnat:ecranCorrectionNat,
     notion:ecranNotion, recherche:ecranRecherche, defi:ecranDefi, top:ecranTop, proposer:ecranProposer, parcours:ecranParcours, horsligne:ecranHorsLigne, suppression:ecranSuppression}[S.ecran] || ecranAujourdhui);
 
   /* FILET — une erreur dans un seul écran ne doit plus jamais laisser
