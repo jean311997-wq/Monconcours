@@ -5770,7 +5770,7 @@ async function activerRappel(heure, minute){
       p_heure: d.getUTCHours(), p_minute: d.getUTCMinutes(), p_frequence: 'quotidien' });
     if(!data || !data.ok) throw new Error('refus');
     S.rappel = { heure: d.getUTCHours(), minute: d.getUTCMinutes(), actif:true, frequence:'quotidien' };
-    signalCandidat('Vous serez rappelé dans ' + delaiRappel(heure, minute) + ', à ' + hm(heure, minute) + ', puis chaque jour à la même heure.');
+    signalCandidat('Notifications activées : la première arrive dans ' + delaiRappel(heure, minute) + ', à ' + hm(heure, minute) + ', puis chaque jour à la même heure.');
     pister('REMINDER_ENABLED', { heure, minute });
     rendre();
   }catch(e){ toast('Le rappel n\'a pas pu être activé. Réessayez avec une meilleure connexion.'); }
@@ -5781,7 +5781,7 @@ async function retirerRappel(){
     const sub = await reg.pushManager.getSubscription();
     if(sub){ await base.rpc('retirer_rappel', { p_endpoint: sub.endpoint }); await sub.unsubscribe(); }
   }catch(e){}
-  S.rappel = null; toast('Rappels désactivés.'); pister('REMINDER_DISABLED'); rendre();
+  S.rappel = null; toast('Notifications désactivées.'); pister('REMINDER_DISABLED'); rendre();
 }
 function blocRappels(){
   if(!S.util.connecte) return '';
@@ -5789,8 +5789,8 @@ function blocRappels(){
   let h = 19, m = 0;
   if(r){ const d = new Date(); d.setUTCHours(r.heure, r.minute || 0, 0, 0); h = d.getHours(); m = d.getMinutes(); }
   return `<div class="carte rappel-c" style="margin-top:14px">
-    <div class="libelle" style="margin-bottom:8px"><span>${ico('cloche',14)} Me rappeler</span><button class="inter${r ? ' on' : ''}" role="switch" aria-checked="${r ? 'true' : 'false'}" aria-label="Rappel quotidien" data-rappel-inter="1"><i></i></button></div>
-    <p class="sous" style="margin:0 0 10px;font-size:12.5px">${r ? 'Chaque jour à <b>' + hm(h, m) + '</b> · prochain rappel dans ' + delaiRappel(h, m) + '.' : 'Choisissez votre heure : le téléphone vous le rappelle chaque jour, même si l\'application est fermée.'}</p>
+    <div class="libelle" style="margin-bottom:8px"><span>${ico('cloche',14)} Mes notifications</span><button class="inter${r ? ' on' : ''}" role="switch" aria-checked="${r ? 'true' : 'false'}" aria-label="Notifications" data-rappel-inter="1"><i></i></button></div>
+    <p class="sous" style="margin:0 0 10px;font-size:12.5px">${r ? 'Chaque jour à <b>' + hm(h, m) + '</b> · prochain rappel dans ' + delaiRappel(h, m) + '.' : 'Recevez sur le téléphone les points clés de votre parcours, les leçons à réviser et vos erreurs à revoir, même application fermée. Choisissez l\'heure.'}</p>
     <div class="rappel-heure">
       <label class="sr" for="rappel-h">Heure</label>
       <select id="rappel-h">${Array.from({ length:24 }, (_, i) => `<option value="${i}" ${i === h ? 'selected' : ''}>${i} h</option>`).join('')}</select>
@@ -5819,16 +5819,16 @@ function blocBandeauRappel(){
   if(masque && Date.now() - masque < 7 * 86400000) return '';
   return `<div class="bandeau-rappel" role="status">
     <span class="br-i">${ico('cloche', 18)}</span>
-    <div class="br-t"><b>Un rappel chaque jour ?</b><small>Le téléphone vous prévient à l'heure choisie, même application fermée.</small></div>
-    <button class="mini" data-rappel-oui="1">À 19 h</button>
+    <div class="br-t"><b>Restez informé</b><small>Les points clés de votre parcours, les leçons à réviser, vos erreurs à revoir : sur votre téléphone, même application fermée.</small></div>
+    <button class="mini" data-rappel-oui="1">Activer</button>
     <button class="br-x" data-rappel-masquer="1" aria-label="Masquer ce message">×</button>
   </div>`;
 }
 const MOTS_RAPPEL = {
   composition: ['Copie remise, bravo.', 'Revenir chaque jour fait gagner des points le jour du concours.'],
-  paiement:    ['Votre abonnement est actif.', 'Pour en profiter chaque jour, activez un rappel.'],
-  test:        ['Votre note est là.', 'Pour la faire monter, revenez chaque jour quelques minutes.'],
-  bandeau:     ['Un rappel chaque jour ?', 'Un seul message par jour, à l\'heure de votre choix.']
+  paiement:    ['Votre abonnement est actif, bravo.', 'Revenir chaque jour, c\'est ce qui fait gagner des points le jour du concours.'],
+  test:        ['Votre note est là, bravo.', 'Pour la faire monter, revenez chaque jour quelques minutes.'],
+  bandeau:     ['Restez informé.', 'Revenir chaque jour fait gagner des points le jour du concours.']
 };
 function fenetreRappel(mode, motif){
   const v = document.getElementById('voile'); if(!v) return;
@@ -5837,9 +5837,9 @@ function fenetreRappel(mode, motif){
   if(mode === 'possible'){
     const t = MOTS_RAPPEL[motif] || MOTS_RAPPEL.bandeau;
     corps = `<h3 id="pr-titre">${t[0]}</h3>
-      <p class="intro">${t[1]} Recevoir un rappel chaque jour à 19&nbsp;h&nbsp;? Vous pouvez changer l'heure ou l'arrêter à tout moment, dans « Mon compte ».</p>
-      <button class="cta" data-rappel-oui="1">Oui, me rappeler à 19 h</button>
-      <button class="cta creux" style="margin-top:8px" data-rappel-autre="1">Choisir une autre heure</button>
+      <p class="intro">${t[1]} Restez informé avec Mon Concours : les points clés de votre parcours, les compositions et leurs résultats, les leçons à réviser, vos erreurs à revoir. Vous pouvez changer l'heure ou arrêter à tout moment, dans « Mon compte ».</p>
+      <button class="cta" data-rappel-oui="1">Oui, me tenir informé</button>
+      <button class="cta creux" style="margin-top:8px" data-rappel-autre="1">Choisir l'heure des notifications</button>
       <button class="lien" style="display:block;margin:12px auto 0" data-rappel-plus-tard="1">Plus tard</button>`;
   } else {
     corps = `<h3 id="pr-titre">${mode === 'refuse' ? 'Pas de notifications, pas de souci' : 'Les rappels ne marchent pas sur ce téléphone'}</h3>
