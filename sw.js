@@ -3,12 +3,12 @@
    Un candidat en 2G ne doit pas repayer le chargement à chaque visite,
    et un candidat sans réseau doit pouvoir relire ses cours.
    ===================================================================== */
-const VERSION = 'mc-v51';
+const VERSION = 'mc-v52';
 const COQUE   = VERSION + '-coque';   // les fichiers de l'application
 const DONNEES = VERSION + '-donnees'; // les réponses de la base
 
 const FICHIERS = [
-  '/', '/index.html', '/app.js?v=50', '/styles.css?v=39',
+  '/', '/index.html', '/app.js?v=51', '/styles.css?v=39',
   '/supabase-js.min.js?v=13', '/manifest.webmanifest', '/favicon.png', '/icone-192.png'
 ];
 
