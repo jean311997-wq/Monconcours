@@ -2180,7 +2180,7 @@ async function vueSujets(){
           <div><label for="s-concours">Concours</label>
             <select id="s-concours"><option value="">— aucun —</option>${optionsConcours()}</select></div>
           <div><label for="s-duree">Durée en minutes</label>
-            <input id="s-duree" type="number" value="25" min="5" max="240"></div>
+            <input id="s-duree" type="number" value="30" min="5" max="240"></div>
           <div><label for="s-seuil">Seuil du dernier admis (seulement s'il est connu et sourcé)</label>
             <input id="s-seuil" type="number" min="0" placeholder="laisser vide si inconnu"></div>
         </div>
