@@ -6073,6 +6073,22 @@ function fenetreRappel(mode, motif){
     <button class="pn-x" data-rappel-fermer="1" aria-label="Fermer">×</button>${corps}</div>`;
   pister('REMINDER_PROMPT_SHOWN', { mode, motif: motif || null });
 }
+/* Lien à envoyer aux gens : monconcoursbf.com/?installer
+   Le navigateur n'autorise l'installation qu'après un toucher : le panneau porte le bouton. */
+function fenetreInstaller(){
+  const v = document.getElementById('voile'); if(!v) return;
+  S.modal = 'rappel'; v.hidden = false;
+  const dejaLa = estInstallee();
+  const notif = S.util.connecte && pushPossible() && !S.rappel;
+  v.innerHTML = `<div class="panneau pop-nat" role="dialog" aria-modal="true" aria-labelledby="pr-titre">
+    <button class="pn-x" data-rappel-fermer="1" aria-label="Fermer">×</button>
+    <h3 id="pr-titre">${dejaLa ? 'Application déjà installée' : 'Installer Mon Concours'}</h3>
+    <p class="intro">${dejaLa ? 'Elle est sur votre téléphone.' : 'Elle s\'ouvre comme une application, même avec peu de réseau.'}${notif ? ' Activez aussi les notifications pour ne rien manquer.' : ''}</p>
+    ${dejaLa ? '' : '<button class="cta" data-installer-lien="1">Installer l\'application</button>'}
+    ${notif ? '<button class="cta" style="margin-top:10px" data-notifs-lien="1">Activer les notifications</button>' : ''}
+    <button class="lien" style="display:block;margin:12px auto 0" data-rappel-fermer="1">Fermer</button></div>`;
+  pister('INSTALL_LINK_OPENED');
+}
 function fermerFenetreRappel(){ const v = document.getElementById('voile'); if(v) v.hidden = true; if(S.modal === 'rappel') S.modal = null; }
 /* Un succès vient d'arriver : on le note, la fenêtre s'ouvre à un moment calme. */
 function noterSucces(motif){
@@ -6207,10 +6223,12 @@ function ouvrirLienDirect(){
   else if(p.has('nouveau-code')) setTimeout(() => verifierChangementCode(true), 1500);
   else if(p.has('avis') || p.has('annonce')) setTimeout(() => chargerNotifications(), 1200);
   else if(p.has('communaute')){ cible = 'communaute'; if(/^[0-9a-f-]{36}$/i.test(p.get('communaute') || '')) S.commFocus = p.get('communaute'); }
+  else if(p.has('installer')){ S.modalDejaVu = true; setTimeout(fenetreInstaller, 1200); }
   else if(p.has('compte')) cible = 'compte';
   else if(p.has('abonnement')) cible = 'abonnement';
   else if(p.has('parcours')) cible = 'parcours';
-  if(p.toString()) try{ history.replaceState({ ecran: cible || S.ecran }, '', location.pathname); }catch(e){}
+  /* ?installer reste dans l'adresse : à la toute première visite la page se recharge une fois (service worker) */
+  if(p.toString() && !p.has('installer')) try{ history.replaceState({ ecran: cible || S.ecran }, '', location.pathname); }catch(e){}
   if(cible){
     S.modalDejaVu = true;
     if(ECRANS_DECOUVERTE.includes(S.ecran)) ecrireMemoire(Object.assign({}, lireMemoire() || {}, { dejaVenu:true }));
@@ -6246,7 +6264,7 @@ window.addEventListener('popstate', ev => {
 /* Les nouveaux boutons ont leur propre écouteur : le grand aiguillage
    plus bas reste tel quel. */
 document.addEventListener('click', ev => {
-  const t = ev.target.closest('[data-abo-matiere],[data-corr-nat],[data-fin-essai-non],[data-fin-essai-oui],[data-class-fermer],[data-class-voir],[data-quitter],[data-quitter-oui],[data-quitter-non],[data-son],[data-correction-differee],[data-gagnants],[data-pourtoi],[data-fil-rep],[data-fil-suiv],[data-qdj-rep],[data-qp-rep],[data-signaler],[data-signal-envoi],[data-objectif],[data-rejoindre],[data-rappel-activer],[data-rappel-retirer],[data-reagir],[data-partage-question],[data-partage-qdj],[data-partage-rang],[data-carte-resultat],[data-sortir-reprise],[data-inscrire-nat],[data-correction-nat],[data-nat-oui],[data-nat-non],[data-resultats-pdf],[data-telecharger-mat],[data-rappel-heure],[data-rappel-inter],[data-rappel-oui],[data-rappel-autre],[data-rappel-plus-tard],[data-rappel-fermer],[data-rappel-masquer],[data-rappel-wa],[data-installe-d],[data-notifs-d],[data-paiement-plus-tard]');
+  const t = ev.target.closest('[data-abo-matiere],[data-corr-nat],[data-fin-essai-non],[data-fin-essai-oui],[data-class-fermer],[data-class-voir],[data-quitter],[data-quitter-oui],[data-quitter-non],[data-son],[data-correction-differee],[data-gagnants],[data-pourtoi],[data-fil-rep],[data-fil-suiv],[data-qdj-rep],[data-qp-rep],[data-signaler],[data-signal-envoi],[data-objectif],[data-rejoindre],[data-rappel-activer],[data-rappel-retirer],[data-reagir],[data-partage-question],[data-partage-qdj],[data-partage-rang],[data-carte-resultat],[data-sortir-reprise],[data-inscrire-nat],[data-correction-nat],[data-nat-oui],[data-nat-non],[data-resultats-pdf],[data-telecharger-mat],[data-rappel-heure],[data-rappel-inter],[data-rappel-oui],[data-rappel-autre],[data-rappel-plus-tard],[data-rappel-fermer],[data-rappel-masquer],[data-rappel-wa],[data-installe-d],[data-installer-lien],[data-notifs-lien],[data-notifs-d],[data-paiement-plus-tard]');
   if(!t) return;
   const d = t.dataset;
   try{ const cle = Object.keys(d)[0]; pister('BUTTON_CLICKED', { valeur: String(d[cle]).slice(0,40) }, cle); }catch(e){}
@@ -6323,6 +6341,8 @@ document.addEventListener('click', ev => {
   if(d.rappelWa !== undefined){ pister('REMINDER_WHATSAPP_CLICK'); return; }
   if(d.rappelActiver) return activerRappel(d.rappelActiver, 0);
   if(d.rappelRetirer) return retirerRappel();
+  if(d.installerLien){ pister('INSTALL_LINK_CLICKED'); return installerAppli(); }
+  if(d.notifsLien){ pister('INSTALL_LINK_NOTIFS'); return activerRappel(18, 0); }
   if(d.reagir) return reagir(d.reagir);
   if(d.partageQuestion){
     const q = ((S.fil && S.fil.liste) || []).find(x => x.id === d.partageQuestion);
