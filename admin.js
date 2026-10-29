@@ -2423,7 +2423,7 @@ async function vueJournal(pageJ){
 
 /* ============================================================
    COMPOSITIONS NATIONALES
-   Chaque samedi à 17 h (heure de Ouagadougou = UTC), même sujet
+   Jour et heure au choix (heure de Ouagadougou = UTC), samedi à 18 h 00 par défaut, même sujet
    pour tous. La base programme seule la composition du samedi
    suivant ; ici on peut l'annuler, en ajouter une, voir les admis.
    ============================================================ */
@@ -2440,11 +2440,11 @@ async function vueCollectives(){
   (inscr || []).forEach(i => { nbInscr[i.epreuve_id] = (nbInscr[i.epreuve_id] || 0) + 1; });
   const nomConc = id => ((concours || []).find(c => c.id === id) || {}).nom || '';
   const samedi = new Date(); samedi.setUTCDate(samedi.getUTCDate() + ((6 - samedi.getUTCDay() + 7) % 7 || 7));
-  const defaut = samedi.toISOString().slice(0, 10) + 'T17:00';
+  const defaut = samedi.toISOString().slice(0, 10) + 'T18:00';
 
   $('#vue').innerHTML = `
     <h2 class="titre">Compositions nationales <small style="font-size:.55em;font-weight:500;opacity:.75">(simulation)</small></h2>
-    <p class="sous">Vous pouvez lancer une composition nationale quand vous voulez : choisissez le concours, le sujet, la date et l'heure, puis « Programmer ». Tous les candidats reçoivent une notification. En plus, chaque samedi à 17 h, une composition est programmée automatiquement : le concours change à tour de rôle et le sujet choisi n'a jamais servi en composition nationale. Les candidats s'inscrivent depuis l'application ; à la fin, ils voient leur statut (admis, liste d'attente, non admis), la liste des admis et peuvent télécharger les résultats en PDF.</p>
+    <p class="sous">Vous pouvez lancer une composition nationale quand vous voulez : choisissez le concours, le sujet, la date et l'heure, puis « Programmer ». Tous les candidats reçoivent une notification. En plus, chaque samedi à 18 h 00, une composition est programmée automatiquement : le concours change à tour de rôle et le sujet choisi n'a jamais servi en composition nationale. Les candidats s'inscrivent depuis l'application ; à la fin, ils voient leur statut (admis, liste d'attente, non admis), la liste des admis et peuvent télécharger les résultats en PDF.</p>
 
     <div class="bloc">
       <div class="libelle">Programmer une composition</div>
@@ -2461,7 +2461,7 @@ async function vueCollectives(){
           <div><label for="ec-recompense">Récompense (facultatif)</label><input id="ec-recompense" maxlength="120" placeholder="1 mois d'abonnement offert au major"></div>
         </div>
         <label for="ec-message">Message aux participants (facultatif)</label>
-        <textarea id="ec-message" rows="2" maxlength="400" placeholder="Félicitations à tous les admis. Rendez-vous samedi prochain à 17 h."></textarea>
+        <textarea id="ec-message" rows="2" maxlength="400" placeholder="Félicitations à tous les admis. La prochaine composition nationale est annoncée dans l'application."></textarea>
         <button class="cta vert petit" id="ec-creer" style="margin-top:10px">Programmer et prévenir les candidats</button>
       </div>
     </div>

@@ -528,6 +528,7 @@ function aller(e){
   if(['recherche','defi','proposer'].includes(e) && !S.banque) chargerQuestions();
   if(e === 'qdj' && S.qdj && S.qdj.jourLocal !== new Date().toDateString()){ S.qdj = null; S.qdjRep = undefined; S.qdjCorrection = null; }
   if(e !== 'grille' && S.ecran === 'grille' && document.fullscreenElement){ try{ document.exitFullscreen(); }catch(err){} }
+  if(e === 'grille' && S.ecran !== 'grille' && !S.corrige) pleinEcranAuto();
   S.ecran = e; rendre(); vue().scrollTop = 0;
   try{ vue().focus({preventScroll:true}); }catch(err){}
 }
@@ -3960,7 +3961,7 @@ function blocPoint2(){
     ${offre ? `<p class="sous" style="margin:0 0 12px"><b>Vous avez atteint vos limites d'essai gratuit.</b> Faites l'abonnement, puis choisissez l'abonnement qui vous convient.</p>
       <button class="cta" data-go="abonnement">Faire l'abonnement</button>
       <button class="lien-mini" style="margin-top:8px" data-proche="mensuelle">${ico('partage',13)} Un proche paie pour moi</button>` : ''}
-    <p class="sous" style="margin:12px 0 0;font-size:12.5px">La composition nationale du samedi reste gratuite.</p>`;
+    <p class="sous" style="margin:12px 0 0;font-size:12.5px">La composition nationale reste gratuite.</p>`;
 }
 function ecranCompoAttente(){
   const etat = S.compoEtat;
@@ -5199,9 +5200,21 @@ function blocMatieresCopie(grille, reponses, note, total){
   </div>`;
 }
 
-/* ---------- la composition nationale du samedi 17 h ---------- */
-const dateLongue = iso => new Date(iso).toLocaleDateString('fr-FR', { weekday:'long', day:'numeric', month:'long' });
-const heureH = iso => { const d = new Date(iso); return d.getHours() + ' h' + (d.getMinutes() ? ' ' + String(d.getMinutes()).padStart(2,'0') : ''); };
+/* ---------- la composition nationale : jour et heure donnés par l'administration ---------- */
+const dateLongue = iso => new Date(iso).toLocaleDateString('fr-FR', { weekday:'long', day:'numeric', month:'long', timeZone:'UTC' });
+/* toujours l'heure de Ouagadougou (= UTC), quelle que soit l'horloge du téléphone */
+const heureH = iso => { const d = new Date(iso); return d.getUTCHours() + ' h ' + String(d.getUTCMinutes()).padStart(2,'0'); };
+/* « Aujourd'hui », « Demain », sinon « Sam. 31 oct. » : le jour réel de la composition, jamais un jour fixe */
+function jourCourtNat(iso){
+  const d = new Date(iso), a = new Date(), j0 = x => Date.UTC(x.getUTCFullYear(), x.getUTCMonth(), x.getUTCDate());
+  const ecart = Math.round((j0(d) - j0(a)) / 86400000);
+  if(ecart === 0) return 'Aujourd\'hui';
+  if(ecart === 1) return 'Demain';
+  const t = d.toLocaleDateString('fr-FR', { weekday:'short', day:'numeric', month:'short', timeZone:'UTC' });
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+/* la prochaine composition, en toutes lettres, quand on la connaît */
+const prochaineNat = () => { const e = S.epreuve; return e && e.etat === 'a_venir' && e.debut_le ? dateLongue(e.debut_le) + ' à ' + heureH(e.debut_le) : ''; };
 function texteRebours(iso){
   let s = Math.max(0, Math.floor((new Date(iso) - Date.now()) / 1000));
   const j = Math.floor(s / 86400); s -= j * 86400;
@@ -5246,7 +5259,7 @@ function carteEpreuve(){
     bouton = `<button class="cta" style="margin-top:12px" data-gagnants="${E(ep.id)}">${absent ? 'Voir le classement' : 'Voir les résultats et les admis'}</button>`;
   }
   return `<div class="carte nationale">
-    <div class="cn-tete"><span>${ico('groupe',14)} Composition nationale <small class="sim">(simulation)</small></span><span class="cn-samedi">Samedis · 17 h</span></div>
+    <div class="cn-tete"><span>${ico('groupe',14)} Composition nationale <small class="sim">(simulation)</small></span><span class="cn-samedi">${E(jourCourtNat(ep.debut_le))} · ${heureH(ep.debut_le)}</span></div>
     <h2 class="col-titre">${E(ep.concours || ep.titre.replace(/^Composition nationale( \(simulation\))? · /, ''))}</h2>
     ${corps}
     ${ep.recompense ? `<p class="sous" style="margin-top:6px">Récompense : <b>${E(ep.recompense)}</b></p>` : ''}
@@ -5640,10 +5653,10 @@ function blocDerniereNationale(){
   if(!d) return '';
   /* la carte juste au-dessus propose déjà ces résultats quand c'est la même épreuve */
   if(S.epreuve && S.epreuve.id === d.id && S.epreuve.etat === 'terminee') return '';
-  return `<button class="grande" style="margin-top:12px" data-gagnants="${E(d.id)}">
-    <span class="ic">${ico('trophee',19)}</span>
-    <span><b>Voir les résultats de la dernière composition nationale</b><span>${E(d.concours || 'Composition nationale')} · ${E(jourFr(d.debut_le))} · ${nombreFr(d.participants || 0)} candidat${(d.participants||0)>1?'s':''}</span></span>
-    <span class="fl">→</span></button>`;
+  return `<button class="derniere-nat" data-gagnants="${E(d.id)}">
+    <span class="dn-ic">${ico('trophee',22)}</span>
+    <span class="dn-txt"><small>Dernière composition nationale</small><b>Voir les résultats et le classement</b><span>${E(d.concours || 'Composition nationale')} · ${E(jourFr(d.debut_le))}</span></span>
+    <span class="dn-fl">→</span></button>`;
 }
 async function chargerCorrectionNat(id){
   if(!(S.corrNat && S.corrNat.id === id && S.corrNat.ok)) S.corrNat = { id, charge:false };
@@ -5711,7 +5724,7 @@ function ecranGagnants(){
       <p class="sn-titre">${m.statut === 'admis' ? (m.rang <= 3 ? 'Félicitations, vous êtes sur le podium !' : 'Félicitations, vous êtes admis !')
         : m.statut === 'attente' ? 'Vous êtes sur la liste d\'attente.' : 'Vous n\'êtes pas admis cette fois.'}</p>
       <p>Votre rang : <b class="num">${r(m.rang)}</b> sur ${c.participants} · note <b class="num">${m.score}/${m.sur}</b></p>
-      ${m.statut !== 'admis' && dernierAdmis ? `<p style="margin-top:4px">Le dernier admis avait <b class="num">${dernierAdmis.score}/${dernierAdmis.sur}</b>${manque > 0 ? ` : il vous a manqué ${manque} point${manque>1?'s':''}` : ''}. Rendez-vous samedi prochain à 17 h.</p>` : ''}
+      ${m.statut !== 'admis' && dernierAdmis ? `<p style="margin-top:4px">Le dernier admis avait <b class="num">${dernierAdmis.score}/${dernierAdmis.sur}</b>${manque > 0 ? ` : il vous a manqué ${manque} point${manque>1?'s':''}` : ''}.${prochaineNat() ? ' Prochaine composition : ' + E(prochaineNat()) + '.' : ' Rendez-vous à la prochaine composition nationale.'}</p>` : ''}
     </div>`;
   }
   const insc = S.epreuve && S.epreuve.id === c.id && S.epreuve.inscrit;
@@ -5719,7 +5732,7 @@ function ecranGagnants(){
     statut = `<div class="statut-nat sn-absent">
       <div class="sn-tampon">Absent</div>
       <p class="sn-titre">La composition s'est terminée sans vous.</p>
-      <p>Vous étiez inscrit, mais vous n'avez pas composé. Voici le classement : regardez les notes des admis pour savoir où viser. Prochain rendez-vous samedi à 17 h.</p>
+      <p>Vous étiez inscrit, mais vous n'avez pas composé. Voici le classement : regardez les notes des admis pour savoir où viser. ${prochaineNat() ? 'Prochaine composition : ' + E(prochaineNat()) + '.' : 'Rendez-vous à la prochaine composition nationale.'}</p>
     </div>`;
   }
   const maCompo = S.epreuve && S.epreuve.id === c.id && S.epreuve.moi && S.epreuve.moi.composition;
@@ -5789,7 +5802,7 @@ function resultatsPdf(){
       'table.res td{border-bottom:1px solid #ddd;padding:4px 8px}table.res td.c{text-align:center;white-space:nowrap}table.res tr{break-inside:avoid}.note{font-size:12px;color:#444;margin-top:14px}' +
       '.sim{font-size:12px;letter-spacing:.06em;text-transform:none;color:#555}';
     return docComplet('Résultats — ' + (c.concours || c.titre), css,
-      docEntete('Scannez pour composer samedi prochain') +
+      docEntete('Scannez pour rejoindre la prochaine composition') +
       '<p class="doc-titre">Composition nationale <span class="sim">(simulation)</span></p>' +
       '<p class="doc-st"><b>Résultats · ' + E(c.concours || c.titre) + '</b></p>' +
       '<p class="doc-st">Épreuve du ' + quand + ' à ' + heureH(c.debut_le) + '</p>' +
@@ -5798,7 +5811,7 @@ function resultatsPdf(){
       (podium.length ? '<div class="felic"><b class="t">Félicitations</b>Mon Concours félicite chaleureusement les trois premiers de cette composition :<ol>' +
         podium.map(l => '<li><b>' + E(l.nom) + '</b>, ' + (l.rang === 1 ? 'major' : l.rang + 'e') + ' avec ' + l.score + ' / ' + l.sur + '</li>').join('') + '</ol>' +
         (c.recompense ? '<p style="margin:6px 0 0">Récompense du major : ' + E(c.recompense) + '.</p>' : '') +
-        '<p style="margin:6px 0 0">Bravo à tous les admis. Pour les autres, la prochaine composition a lieu samedi à 17 h.</p></div>' : '') +
+        '<p style="margin:6px 0 0">Bravo à tous les admis. Pour les autres, la prochaine composition nationale a lieu ' + (prochaineNat() || 'bientôt') + '.</p></div>' : '') +
       (admis.length ? '<h2>Liste des admis par ordre de mérite</h2>' + tableau(admis) : '') +
       (attente.length ? '<h2>Liste d\'attente</h2>' + tableau(attente) : '') +
       (c.echoues ? '<p class="note">Non admis : ' + c.echoues + ' candidat' + (c.echoues > 1 ? 's' : '') + '. Leurs noms ne sont pas publiés.</p>' : '') +
@@ -6327,7 +6340,7 @@ document.addEventListener('click', ev => {
   if(d.partageRang){
     const c = S.classementEp;
     if(!c || !c.moi) return;
-    const t3 = `${c.moi.statut === 'admis' ? 'Admis ! ' : ''}J'ai fini ${c.moi.rang}${c.moi.rang === 1 ? 'er' : 'e'} sur ${c.participants} à la composition nationale ${c.concours ? '(' + c.concours + ') ' : ''}de Mon Concours, avec ${c.moi.score}/${c.moi.sur}. La prochaine, c'est samedi à 17 h. Viens composer : ${CONTACT.site}`;
+    const t3 = `${c.moi.statut === 'admis' ? 'Admis ! ' : ''}J'ai fini ${c.moi.rang}${c.moi.rang === 1 ? 'er' : 'e'} sur ${c.participants} à la composition nationale ${c.concours ? '(' + c.concours + ') ' : ''}de Mon Concours, avec ${c.moi.score}/${c.moi.sur}. ${prochaineNat() ? 'La prochaine : ' + prochaineNat() + '.' : ''} Viens composer : ${CONTACT.site}`;
     window.open('https://wa.me/?text=' + encodeURIComponent(t3), '_blank', 'noopener');
     return;
   }
@@ -7262,7 +7275,7 @@ function donneesCarte(type){
     const m = c.moi;
     return { pseudo: m.nom || pseudo, tete: 'Composition nationale (simulation)', sous: c.concours || c.titre || '',
       note: m.score, sur: m.sur, rang: m.rang, sur_rang: c.participants, statut: STATUTS[m.statut] || '', statutCle: m.statut,
-      date: jourFr(c.debut_le), lien: CONTACT.site, appel: 'Prochaine composition samedi à 17 h' };
+      date: jourFr(c.debut_le), lien: CONTACT.site, appel: prochaineNat() ? 'Prochaine composition : ' + prochaineNat() : 'Prochaine composition nationale bientôt' };
   }
   if(type === 'defi'){
     const d = S.defi; if(!d || typeof d.score !== 'number') return null;
@@ -8225,7 +8238,7 @@ function invitationPossible(cle, ecart){
   return !(t && Date.now() - t < (ecart === undefined ? 240000 : ecart));
 }
 const TEXTES_WHATSAPP = [
-  { titre:'Rejoignez la communauté', texte:'Intégrez la communauté WhatsApp de Mon Concours pour rester informé : dates des concours, compositions du samedi, nouveautés.' },
+  { titre:'Rejoignez la communauté', texte:'Intégrez la communauté WhatsApp de Mon Concours pour rester informé : dates des concours, compositions nationales, nouveautés.' },
   { titre:'Vous avez oublié quelque chose', texte:'Vous avez oublié de vous intégrer dans le groupe WhatsApp de Mon Concours. C\'est là que sont annoncées les dates et les nouveautés.' },
   { titre:'Ne ratez pas les annonces', texte:'Vous n\'êtes toujours pas dans la communauté WhatsApp de Mon Concours. Rejoignez-la en un geste pour ne rien manquer.' }
 ];
@@ -8249,9 +8262,9 @@ function planifierInvitations(){
       action: () => { window.open(CONTACT.canal, '_blank', 'noopener'); pister('WHATSAPP_JOINED_CLICK', {}); } }, 120000));
   /* notifications : mêmes moments, décalés d'une minute pour ne pas empiler deux fenêtres ; s'arrête dès qu'elles sont acceptées */
   const TEXTES_NOTIFS = [
-    'Autorisez les notifications : Mon Concours vous prévient, même quand vous êtes sur Facebook ou WhatsApp, pour le rappel du soir, vos résultats et les compositions du samedi.',
+    'Autorisez les notifications : Mon Concours vous prévient, même quand vous êtes sur Facebook ou WhatsApp, pour le rappel du soir, vos résultats et les compositions nationales.',
     'Vous n\'avez pas encore autorisé les notifications. Sans elles, vous ne serez pas prévenu des compositions ni de vos rappels.',
-    'Dernier rappel : autorisez les notifications pour recevoir vos rappels et ne pas rater la composition du samedi.'
+    'Dernier rappel : autorisez les notifications pour recevoir vos rappels et ne pas rater la composition nationale.'
   ];
   [180000, 660000, 3660000].forEach((d, i) => {
     setTimeout(() => { if(S.util.connecte && !S.rappel) chargerRappel(); }, d - 15000);
@@ -8266,7 +8279,7 @@ planifierInvitations();
 function invitationNotifsApresInscription(){
   if(!notifsAEncourager() || !peutInviter() || !invitationPossible('notifs', 60000)) return;
   fenetreInvitation({ cle:'notifs', icone:'cloche', titre:'Être prévenu à temps',
-    texte:'Autorisez les notifications : Mon Concours s\'affiche même quand vous êtes sur Facebook ou WhatsApp, pour votre rappel du soir, vos résultats et la composition du samedi.',
+    texte:'Autorisez les notifications : Mon Concours s\'affiche même quand vous êtes sur Facebook ou WhatsApp, pour votre rappel du soir, vos résultats et la composition nationale.',
     oui:'Autoriser les notifications', rappel:0, sansFait:true, action: () => activerRappel(18, 0) });
 }
 
