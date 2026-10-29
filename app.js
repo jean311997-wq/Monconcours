@@ -4752,12 +4752,12 @@ function recompenses(){
    première visite, pour que ceux qui n'y vont pas ne paient rien.
    Ici : la tuile de « Mon compte », le compteur et l'accès.
    ===================================================================== */
-const COMM_VERSION = 1;
+const COMM_VERSION = 2;
 const LIEN_UUID = /^[0-9a-f-]{36}$/i;
-/* « Plus de 600 candidats » : arrondi à la centaine inférieure, donc toujours vrai */
+/* « Plus de 700 candidats » : arrondi à la centaine inférieure, donc toujours vrai */
 function candidatsCommunaute(){
   const n = S.commInfo && S.commInfo.membres;
-  if(n === undefined || n === null) return 'Plus de 600 candidats';
+  if(n === undefined || n === null) return 'Plus de 700 candidats';
   return n >= 100 ? 'Plus de ' + nombreFr(Math.floor(n / 100) * 100) + ' candidats' : 'Rejoignez les premiers candidats';
 }
 function tuileCommunaute(){

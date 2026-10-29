@@ -467,7 +467,7 @@ begin
   /* 1. mot de bienvenue, épinglé, une seule fois */
   begin
     insert into public.communaute_publications (auteur, type, texte, epingle, cle_auto) values (null, 'annonce',
-      E'Bienvenue dans la communauté Mon Concours. Plus de 600 candidats s''y retrouvent pour s''entraider : posez vos questions, partagez vos progrès, encouragez les autres.\n\nNos deux règles : du respect pour chacun, et ni numéro de téléphone ni publicité. Les numéros sont masqués automatiquement.',
+      E'Bienvenue dans la communauté Mon Concours. Des centaines de candidats s''y retrouvent pour s''entraider : posez vos questions, partagez vos progrès, encouragez les autres.\n\nNos deux règles : du respect pour chacun, et ni numéro de téléphone ni publicité. Les numéros sont masqués automatiquement.',
       true, 'bienvenue') on conflict (cle_auto) do nothing;
     if found then v_n := v_n + 1; end if;
   exception when others then null; end;

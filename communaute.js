@@ -359,7 +359,7 @@ function heroTop(){
 }
 function libelleCandidats(){
   const n = C.membres !== undefined ? C.membres : (S.commInfo && S.commInfo.membres);
-  if(n === undefined || n === null) return 'Plus de 600 candidats';
+  if(n === undefined || n === null) return 'Plus de 700 candidats';
   return n >= 100 ? 'Plus de ' + nombreFr(Math.floor(n / 100) * 100) + ' candidats' : 'Les premiers candidats sont là';
 }
 function heroHtml(){
