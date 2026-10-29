@@ -450,6 +450,53 @@ V.promotion = async function(){
 };
 
 /* ============================================================
+   ASSIDUITÉ : qui revient le plus, et qui n'est venu qu'une fois
+   ============================================================ */
+V.assiduite = async function(){
+  const { db, A } = X();
+  const st = { tri: A.assTri || 'serie', lim: 50 };
+  $('#vue').innerHTML = `
+    <h2 class="titre">Assiduité</h2>
+    <p class="sous">Les candidats qui reviennent le plus. La « série » compte les jours d'affilée : elle est en cours si le candidat est venu aujourd'hui ou hier. Les comptes de l'équipe ne sont pas comptés.</p>
+    <div class="carte"><div id="as-resume" class="mini-compteurs">Chargement…</div></div>
+    <div class="bloc">
+      <div class="libelle">Classement</div>
+      <div class="onglets" id="as-tri" style="margin-bottom:10px">
+        <button data-t="serie">Série en cours</button><button data-t="meilleure">Meilleure série</button><button data-t="total">Total de jours</button>
+      </div>
+      <div class="carte" id="as-liste">Chargement…</div>
+      <button class="cta creux" id="as-plus" style="margin-top:10px" hidden>Voir plus</button>
+    </div>`;
+  const marque = () => $$('#as-tri [data-t]').forEach(b => b.classList.toggle('on', b.dataset.t === st.tri));
+  const jourLong = j => j ? X().dateCourte(j) : '';
+  const charger = async () => {
+    marque();
+    const { data, error } = await db.rpc('admin_assiduite', { p_tri: st.tri, p_limite: st.lim });
+    const z = $('#as-liste'); if(!z) return;
+    if(error || !data || !data.ok){ z.innerHTML = '<div class="vide">' + e((error && error.message) || 'Lecture impossible.') + ' Touchez « Actualiser » en haut.</div>'; return; }
+    const r = data.resume || {};
+    const t = (n, l, d) => `<div><b>${num(n)}</b><span>${l}${d ? '<br><i style="font-style:normal;opacity:.8">' + d + '</i>' : ''}</span></div>`;
+    $('#as-resume').innerHTML =
+      t(r.jamais_revenus, 'Venus une seule fois, jamais revenus', 'baisse dès qu\'ils reviennent') +
+      t(r.revenus, 'Revenus au moins une fois', pct(r.revenus, (r.revenus || 0) + (r.jamais_revenus || 0)) + ' % de ceux qui sont venus') +
+      t(r.serie_3, '3 jours d\'affilée en ce moment') +
+      t(r.actifs_aujourdhui, 'Actifs aujourd\'hui') +
+      t(r.sans_activite, 'Inscrits sans visite enregistrée', 'sur ' + num(r.inscrits) + ' inscrits');
+    const L = data.classement || [];
+    $('#as-plus').hidden = L.length < st.lim || st.lim >= 200;
+    z.innerHTML = L.length ? `<div class="defile"><table><thead><tr><th>#</th><th>Candidat</th><th class="num">Série en cours</th><th class="num">Meilleure série</th><th class="num">Jours au total</th><th>Dernière visite</th></tr></thead><tbody>${L.map(c => `<tr>
+      <td class="num">${c.rang <= 3 ? ['🥇', '🥈', '🥉'][c.rang - 1] : c.rang}</td>
+      <td><b>${e(c.nom)}</b><br><span style="color:var(--craie2);font-size:12px">${e(c.telephone || '')}</span></td>
+      <td class="num">${c.serie > 0 ? '<b>' + c.serie + '</b> j' : '—'}</td>
+      <td class="num">${c.meilleure} j</td><td class="num">${c.total} j</td>
+      <td style="white-space:nowrap">${e(jourLong(c.dernier))}</td></tr>`).join('')}</tbody></table></div>` : '<div class="vide">Aucune donnée d\'assiduité.</div>';
+  };
+  $$('#as-tri [data-t]').forEach(b => b.onclick = () => { st.tri = b.dataset.t; A.assTri = st.tri; st.lim = 50; charger(); });
+  $('#as-plus').onclick = () => { st.lim = Math.min(200, st.lim + 50); charger(); };
+  charger();
+};
+
+/* ============================================================
    COMMUNAUTÉ : lire, épingler, masquer, supprimer, couper la parole, publier
    ============================================================ */
 V.communaute = async function(){

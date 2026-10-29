@@ -215,8 +215,8 @@ tr:last-child td{border-bottom:none}
 .fenetre-boite{width:100%;max-width:440px;background:var(--ardoise);border:1px solid var(--trait);border-radius:16px;padding:22px}
 .fenetre-boite h3{font-family:var(--d);font-size:20px;margin-bottom:6px}
 .fenetre-boite input,.fenetre-boite select{width:100%}
-.compteurs.six{grid-template-columns:repeat(3,1fr)}
-@media (min-width:1400px){ .compteurs.six{grid-template-columns:repeat(6,1fr)} }
+.compteurs.six{grid-template-columns:repeat(4,1fr)}
+@media (min-width:1500px){ .compteurs.six{grid-template-columns:repeat(7,1fr)} }
 @media (max-width:620px){ .compteurs.six{grid-template-columns:repeat(2,1fr)} }
 .fenetre-boite label{margin-top:12px}
 td.num{white-space:nowrap}
@@ -338,3 +338,7 @@ tr.cliquable:hover td{background:var(--ardoise2)}
 /* ---------- communauté ---------- */
 button.mini{padding:6px 11px;border-radius:8px;border:1px solid var(--trait);background:transparent;color:var(--craie);font-size:12.5px;font-weight:600;cursor:pointer}
 button.mini:hover{background:var(--ardoise2)}
+#btn-actualiser{font-weight:600}
+#btn-actualiser.tourne{opacity:.6}
+#btn-actualiser.tourne{animation:tourne-act 1s linear}
+@keyframes tourne-act{from{opacity:.4}to{opacity:1}}

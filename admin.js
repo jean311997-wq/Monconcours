@@ -89,7 +89,13 @@ function signal(texte, type){
 /* toute erreur remontée par la base passe par ici */
 function erreur(e, contexte){
   console.error(contexte || '', e);
-  signal((contexte ? contexte + ' : ' : '') + (e?.message || 'erreur inconnue'), 'mal');
+  const m = e?.message || 'erreur inconnue';
+  /* un délai dépassé n'est pas une panne : on le dit simplement, avec la marche à suivre */
+  if(/statement timeout|timeout|Failed to fetch|NetworkError|Load failed/i.test(m)){
+    signal('Le serveur a mis trop de temps à répondre. Touchez « Actualiser » en haut pour réessayer.', 'mal');
+    return;
+  }
+  signal((contexte ? contexte + ' : ' : '') + m, 'mal');
 }
 
 /* ============================================================
@@ -1818,8 +1824,15 @@ function libellePeriode(j){
 }
 async function rpcPeriode(nom, jours){
   /* période libre : les versions « _p » acceptent deux dates ; sans dates, les fonctions d'origine servent comme avant */
-  if(!A.plage) return db.rpc(nom, { p_jours: jours });
+  /* un délai dépassé est réessayé une fois tout de suite : le deuxième passage est presque toujours plus rapide */
+  const delai = r => r && r.error && /statement timeout|timeout/i.test(r.error.message || '');
+  if(!A.plage){
+    let r0 = await db.rpc(nom, { p_jours: jours });
+    if(delai(r0)) r0 = await db.rpc(nom, { p_jours: jours });
+    return r0;
+  }
   let r = await db.rpc(nom + '_p', { p_jours: jours, p_du: A.plage.du, p_au: A.plage.au });
+  if(delai(r)) r = await db.rpc(nom + '_p', { p_jours: jours, p_du: A.plage.du, p_au: A.plage.au });
   if(r.error && /schema cache|could not find|does not exist|PGRST202/i.test((r.error.message || '') + ' ' + (r.error.code || ''))){
     r = await db.rpc(nom, { p_jours: jours });
     A.plageApprox = true;
@@ -2722,7 +2735,7 @@ const NOMS_ECRANS = {
   recherche:'Recherche', proposer:'Proposer une question', horsligne:'Révision hors ligne', suppression:'Suppression du compte',
   engagement:'Accueil découverte', testIntro:'Test d\'entrée (début)', test:'Test d\'entrée', resultat:'Résultat du test',
   inscription:'Inscription', connexion:'Connexion', apparence:'Apparence', abonnement:'Abonnement', paiement:'Paiement',
-  question:'Question partagée', communaute:'Communauté'
+  question:'Question partagée', communaute:'Communauté', assiduite:'Assiduité'
 };
 const NOMS_ACTIONS = {
   COMPOSITION_SUBMITTED:'Copies remises', COMPOSITION_COMPLETED:'Compositions terminées', COMPOSITION_ANSWER_SELECTED:'Cases noircies en composition',
@@ -2836,6 +2849,8 @@ async function vueTableau(){
         <div class="d">${t.inscrits ? Math.round(100 * t.actifs_7j / t.inscrits) : 0} % des inscrits</div></div>
       <div class="compteur cliquable" data-vers="analytique"><div class="v num">${nombre(t.questions_jour)}</div><div class="l">Questions aujourd'hui</div>
         <div class="d">${nombre(t.compositions_jour)} composition${t.compositions_jour > 1 ? 's' : ''} aujourd'hui</div></div>
+      <div class="compteur cliquable" data-vers="assiduite"><div class="v num" id="cpt-jamais">…</div><div class="l">Venus une fois, jamais revenus</div>
+        <div class="d" id="cpt-jamais-d">baisse dès qu'ils reviennent</div></div>
     </div>
 
     <div class="bloc">
@@ -2913,6 +2928,14 @@ async function vueTableau(){
       </div>
     </div>`;
   $$('[data-aller]').forEach(b => b.onclick = () => { A.vue = b.dataset.aller; rendre(); });
+  /* « venus une seule fois, jamais revenus » : chargé à part pour ne jamais ralentir le tableau */
+  db.rpc('admin_assiduite_resume').then(({ data: ra, error: er }) => {
+    const c = document.getElementById('cpt-jamais'); if(!c) return;
+    if(er || !ra){ c.textContent = '—'; const d0 = document.getElementById('cpt-jamais-d'); if(d0) d0.textContent = 'lecture impossible, touchez Actualiser'; return; }
+    c.textContent = nombre(ra.jamais_revenus);
+    const d = document.getElementById('cpt-jamais-d');
+    if(d) d.textContent = nombre(ra.revenus) + ' sont revenus · baisse dès qu\'ils reviennent';
+  }).catch(() => {});
   /* le tableau se redessine seul chaque minute ; jamais pendant que la souris est sur un bouton, pour ne pas avaler le clic */
   const reessayer = () => {
     if(A.vue !== 'tableau') return;
@@ -3114,6 +3137,17 @@ document.getElementById('btn-oubli').onclick = motDePasseOublie;
 document.getElementById('motdepasse').addEventListener('keydown',
   e => { if(e.key === 'Enter') connexion(); });
 
+/* « Actualiser » : recharge l'écran en cours sans perdre sa place dans la page */
+(function(){
+  const b = document.getElementById('btn-actualiser');
+  if(!b) return;
+  b.onclick = () => {
+    const v = document.getElementById('vue'), haut = v ? v.scrollTop : 0;
+    b.disabled = true; b.classList.add('tourne');
+    try{ rendre(); }catch(e){ erreur(e, 'Actualisation'); }
+    setTimeout(() => { if(v) v.scrollTop = haut; b.disabled = false; b.classList.remove('tourne'); }, 900);
+  };
+})();
 document.getElementById('btn-deconnexion').onclick = async () => {
   await db.auth.signOut();
   location.reload();

@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="admin.css?v=20">
+<link rel="stylesheet" href="admin.css?v=21">
 <link rel="manifest" href="/admin.webmanifest?v=1">
 <meta name="theme-color" content="#0C1512">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -61,6 +61,7 @@
       <span class="etiquette">administration</span>
     </div>
     <div class="droite">
+      <button class="lien" id="btn-actualiser" title="Recharger cet écran" aria-label="Actualiser">↻ Actualiser</button>
       <span class="qui" id="qui"></span>
       <button class="lien" id="btn-deconnexion">Se déconnecter</button>
     </div>
@@ -88,6 +89,7 @@
       <span class="menu-groupe">Candidats</span>
       <button data-vue="recherche">Chercher un candidat</button>
       <button data-vue="candidats">Candidats</button>
+      <button data-vue="assiduite">Assiduité</button>
       <button data-vue="diffuser">Diffuser un message</button>
       <button data-vue="bannissement">Bannissement</button>
       <button data-vue="signalements">Signalements</button>
@@ -118,6 +120,6 @@
   </div>
 </div>
 
-<script src="admin-boot.js?v=27"></script>
+<script src="admin-boot.js?v=28"></script>
 </body>
 </html>
