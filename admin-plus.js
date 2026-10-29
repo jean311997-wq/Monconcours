@@ -418,6 +418,9 @@ V.analytique = async function(){
         <div class="carte">${barres({ titre:'Visites par jour de la semaine', labels: JOURS, valeurs: sem, pas: 1, largeur: 520 })}</div></div>
     </div>
 
+    <div class="bloc"><div class="libelle">D'où viennent les inscrits<span>origine de la première visite de chaque compte créé sur la période, et part de ceux qui sont revenus un autre jour</span></div>
+      <div class="carte" id="src-ins">Chargement…</div></div>
+
     <div class="deux-col">
       <div class="bloc"><div class="libelle">D'où ils viennent</div><div class="carte">
         ${(a.sources || []).length ? `<table><tbody>${a.sources.map(x => `<tr><td>${e(x.nom)}${X().barreHorizontale(x.n, maxSrc)}</td><td class="num" style="text-align:right">${num(x.n)}</td></tr>`).join('')}</tbody></table>` : X().insuffisant()}</div></div>
@@ -431,6 +434,11 @@ V.analytique = async function(){
       <div class="bloc"><div class="libelle">Les matières travaillées</div><div class="carte">
         ${(a.matieres || []).length ? `<table><thead><tr><th>Matière</th><th>Réponses</th><th>Réussite</th></tr></thead><tbody>${a.matieres.map(x => `<tr><td>${e(x.nom)}</td><td class="num">${num(x.reponses)}</td><td class="num" style="color:${x.taux < 50 ? 'var(--rouge-texte)' : 'var(--vert-texte)'}">${x.taux} %</td></tr>`).join('')}</tbody></table>` : X().insuffisant()}</div></div>
     </div>`;
+  db.rpc('sources_inscrits', { p_du: du, p_au: au }).then(({ data: si }) => {
+    const c = $('#src-ins'); if(!c || A.vue !== 'analytique') return;
+    const tot = (si || []).reduce((t, x) => t + x.inscrits, 0);
+    c.innerHTML = (si || []).length ? `<table><thead><tr><th>Source</th><th>Inscrits</th><th>Part</th><th>Revenus un autre jour</th></tr></thead><tbody>${si.map(x => `<tr><td>${e(x.nom)}</td><td class="num">${num(x.inscrits)}</td><td class="num">${pct(x.inscrits, tot)} %</td><td class="num">${num(x.revenus)} <small>(${pct(x.revenus, x.inscrits)} %)</small></td></tr>`).join('')}</tbody></table>` : X().insuffisant();
+  });
 };
 
 /* ============================================================

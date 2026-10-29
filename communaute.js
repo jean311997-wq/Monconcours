@@ -103,6 +103,7 @@ function postHtml(p, focus){
     <footer class="cm-pied">
       <button class="cm-act cm-coeur${p.aime ? ' on' : ''}" data-cm-coeur="${E(p.id)}" aria-pressed="${!!p.aime}" aria-label="${p.aime ? 'Retirer mon cœur' : 'Aimer cette publication'}">${ico('coeur', 19)}<span class="${p.coeurs ? 'num' : ''}">${p.coeurs ? nb(p.coeurs) : "J'aime"}</span></button>
       <button class="cm-act cm-bulle${o ? ' on' : ''}" data-cm-comm="${E(p.id)}" aria-expanded="${!!o}" aria-label="Commentaires">${ico('bulle', 19)}<span class="${p.comms ? 'num' : ''}">${p.comms ? nb(p.comms) : 'Commenter'}</span></button>
+      <span class="cm-vues" title="Personnes qui ont vu cette publication" aria-label="${p.vues || 0} vues"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span class="num">${nb(p.vues || 0)}</span></span>
     </footer>
     <div class="cm-comms"${o ? '' : ' hidden'}>${o ? commsHtml(p) : ''}</div>
   </article>`;
@@ -275,8 +276,10 @@ function dessinerFil(){
   }
 }
 const dernierCurseur = () => {
+  // le fil est mélangé : le curseur est la date la plus ancienne déjà reçue (hors épinglés)
   const l = C.posts.filter(p => !p.epingle);
-  return (l.length ? l[l.length - 1] : C.posts[C.posts.length - 1] || {}).cree_le || null;
+  const src = l.length ? l : C.posts;
+  return src.reduce((m, p) => (!m || p.cree_le < m ? p.cree_le : m), null);
 };
 const plusRecent = () => C.posts.reduce((m, p) => (!m || p.cree_le > m ? p.cree_le : m), null);
 
@@ -295,7 +298,7 @@ async function chargerFil(plus, silencieux){
     C.erreur = ''; C.blocage = r.blocage || null;
     if(r.membres !== undefined) C.membres = r.membres;
     const recus = r.publications || [];
-    const sig = l => l.map(p => [p.id, p.coeurs, p.comms, p.epingle]);
+    const sig = l => l.map(p => [p.id, p.coeurs, p.comms, p.epingle, p.vues]);
     if(plus){
       const deja = new Set(C.posts.map(p => p.id));
       recus.forEach(p => { if(!deja.has(p.id)) C.posts.push(p); });
@@ -339,7 +342,33 @@ function filtrer(f){
   chargerFil(false);
 }
 let obs = null;
+const vuesEnvoyees = new Set(); let vuesFile = [], vuesMin = null, obsVues = null;
+function envoyerVues(){
+  vuesMin = null;
+  const ids = vuesFile.splice(0, 30);
+  if(!ids.length || !base) return;
+  rpc('communaute_vu', { p_ids: ids }).catch(() => {});
+  if(vuesFile.length) vuesMin = setTimeout(envoyerVues, 800);
+}
+function suivreVues(){
+  if(obsVues){ obsVues.disconnect(); obsVues = null; }
+  if(!('IntersectionObserver' in window)) return;
+  obsVues = new IntersectionObserver(es => {
+    es.forEach(e => {
+      if(!e.isIntersecting) return;
+      const id = (e.target.id || '').replace('cm-p-', '');
+      if(!UUID.test(id) || vuesEnvoyees.has(id)) return;
+      vuesEnvoyees.add(id); vuesFile.push(id); obsVues.unobserve(e.target);
+    });
+    if(vuesFile.length && !vuesMin) vuesMin = setTimeout(envoyerVues, 1500);
+  }, { root: vue(), threshold: 0.6 });
+  document.querySelectorAll('#cm-fil .cm-post').forEach(a => {
+    const id = a.id.replace('cm-p-', '');
+    if(!vuesEnvoyees.has(id)) obsVues.observe(a);
+  });
+}
 function observer(){
+  suivreVues();
   if(obs){ obs.disconnect(); obs = null; }
   const s = document.getElementById('cm-sentinelle');
   if(!s || !('IntersectionObserver' in window)) return;

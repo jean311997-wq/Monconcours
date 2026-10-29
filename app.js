@@ -208,7 +208,19 @@ function dateDuJour(){
    en base (table concours, colonne date_ecrit). Pas de date inventée. */
 function compteARebours(){
   const j = joursAvantConcours();
-  if(j === null) return '';
+  if(j === null){
+    /* aucune date d'écrit en base : on compte jusqu'à la prochaine composition nationale (date et heure réelles) */
+    const ep = S.epreuve;
+    if(ep && ep.etat === 'a_venir' && ep.debut_le){
+      const reste = new Date(ep.debut_le) - Date.now();
+      const nom = E(ep.concours || 'Composition nationale');
+      if(reste <= 0) return '';
+      if(memeJourQue(ep.debut_le)) return `<span class="pastille-j urgent"><b class="num">Aujourd'hui, ${heureH(ep.debut_le)}</b>${nom}</span>`;
+      const jr = Math.ceil(reste / 86400000);
+      return `<span class="pastille-j urgent"><b class="num">J−${jr}</b>Nationale · ${nom}</span>`;
+    }
+    return '';
+  }
   const nom = E(S.nomConcours || 'le concours');
   const date = new Date(S.dateConcours + 'T08:00:00').toLocaleDateString('fr-FR', { day:'numeric', month:'short' });
   if(j <= 0)  return `<span class="pastille-j urgent"><b class="num">Écrit aujourd'hui</b>${nom}</span>`;
@@ -600,8 +612,23 @@ const TEST = [
   {q:'Solution de l\'équation 2x + 6 = 0',
    o:['x = 3','x = −3','x = 12','x = −12'],i:1,d:'Logique et calcul',e:'2x + 6 = 0 donne 2x = −6, donc x = −3.'}
 ];
+/* Quelques avis réels de candidats, sans nom, choisis par l'équipe */
+function blocAvisVitrine(){
+  const l = S.avisVitrine || [];
+  if(!l.length) return '';
+  return `<div class="avis-vitrine">${l.map(a => `<blockquote>« ${E(a.message)} »<cite>Un candidat</cite></blockquote>`).join('')}</div>`;
+}
+async function chargerAvisVitrine(){
+  if(!base || S.avisVitrineCharge) return;
+  S.avisVitrineCharge = true;
+  try{
+    const { data } = await base.rpc('avis_vitrine');
+    if(Array.isArray(data) && data.length){ S.avisVitrine = data; if(['engagement'].includes(S.ecran)) rendre(); }
+  }catch(e){ S.avisVitrineCharge = false; }
+}
 /* --- 1 sur 3 : l'engagement --- */
 function ecranEngagement(){
+  chargerAvisVitrine();
   vue().innerHTML = `
   <div class="hero">
     <div class="marquehero">${logoSvg(38)}
@@ -614,7 +641,11 @@ function ecranEngagement(){
       <div class="compteur-place" style="margin-top:18px">
         <p style="font-size:13.5px;line-height:1.5">Ceux qui ont obtenu les concours n'étaient pas plus intelligents. Ils étaient prêts.</p>
       </div>
+      <p class="sous" style="margin:14px 0 0;font-size:13px;line-height:1.5">Compositions chronométrées, corrections détaillées, cours et actualité utile aux concours.</p>
+      <p class="sous" style="margin:6px 0 0;font-size:13px"><b>Plus de 1 000 candidats</b> préparent leur concours ici.</p>
       <button class="cta" style="margin-top:16px" data-go="testIntro">Oui, je vais réussir</button>
+      <button class="lien" style="display:block;margin:12px auto 0" data-modal="connexion">J'ai déjà un compte</button>
+      ${blocAvisVitrine()}
     </div>
   </div>`;
 }
@@ -1790,6 +1821,37 @@ function systeme(){
   return 'autre';
 }
 
+/* D'où vient la visite : un mot en minuscules (facebook, whatsapp, google…), ou « direct » */
+function origineVisite(){
+  const nettoie = t => String(t || '').toLowerCase().replace(/[^a-z]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 20);
+  try{
+    const p = new URLSearchParams(location.search);
+    const explicite = nettoie(p.get('utm_source') || p.get('depuis') || p.get('src'));
+    if(explicite) return explicite;
+    if(p.has('fbclid')) return 'facebook';
+    const r = document.referrer || '';
+    if(!r) return 'direct';
+    if(/^android-app:\/\//.test(r)){
+      if(/whatsapp/.test(r)) return 'whatsapp';
+      if(/facebook|katana|lite/.test(r)) return 'facebook';
+      if(/telegram/.test(r)) return 'telegram';
+      if(/google/.test(r)) return 'google';
+      return 'appli_android';
+    }
+    const h = new URL(r).hostname.replace(/^www\.|^m\./, '');
+    if(h === location.hostname.replace(/^www\./, '')) return 'direct';
+    if(/(^|\.)(facebook|fb)\.com$|^l\.facebook|lm\.facebook/.test(h)) return 'facebook';
+    if(/whatsapp|^wa\.me$/.test(h)) return 'whatsapp';
+    if(/google\./.test(h)) return 'google';
+    if(/instagram/.test(h)) return 'instagram';
+    if(/tiktok/.test(h)) return 'tiktok';
+    if(/youtube|youtu\.be/.test(h)) return 'youtube';
+    if(/^t\.me$|telegram/.test(h)) return 'telegram';
+    if(/^(t\.co|x\.com|twitter)/.test(h)) return 'x';
+    return 'autre_site';
+  }catch(e){ return 'lien'; }
+}
+
 async function ouvrirSessionObservation(){
   if(!base || O.demarree) return;
   O.demarree = true;
@@ -1798,7 +1860,7 @@ async function ouvrirSessionObservation(){
     await base.from('sessions').insert({
       id: O.session, appareil: appareil(), navigateur: navigateur(), systeme: systeme(),
       version_app: VERSION_APP, langue: navigator.language, largeur: window.innerWidth,
-      premiere_visite: !document.referrer, source: document.referrer ? 'lien' : 'direct'
+      premiere_visite: !document.referrer, source: window.__origine || origineVisite()
     });
   }catch(e){}
   pister(document.referrer ? 'USER_RETURNED' : 'USER_FIRST_VISIT');
@@ -2046,6 +2108,7 @@ async function chargerActualites(){
       .from('actualites')
       .select('titre, contenu, categorie, source, pourquoi, verifiee, publie_le')
       .eq('statut', 'publie')
+      .lte('publie_le', new Date().toISOString())
       .order('publie_le', { ascending: false })
       .limit(40);
 
@@ -2148,6 +2211,15 @@ function blocFinEssai(){
     <button class="cta creux" style="margin-top:8px" data-go="abonnement">Voir tous les abonnements</button>
   </div>`;
 }
+/* Le jour de la composition nationale, sa carte passe en haut de l'accueil ; une fois finie, les résultats
+   y restent jusqu'au lendemain. Le reste de l'écran ne change pas, et chaque bloc retrouve sa place ensuite. */
+const memeJourQue = iso => !!iso && new Date(iso).toDateString() === new Date().toDateString();
+function nationaleEnHaut(){
+  const ep = S.epreuve;
+  if(ep && (ep.etat === 'en_cours' || (ep.etat === 'a_venir' && memeJourQue(ep.debut_le)) || (ep.etat === 'terminee' && memeJourQue(ep.fin_le)))) return true;
+  const d = S.derniereNat;
+  return !!(d && memeJourQue(d.fin_le));
+}
 function ecranAujourdhui(){
   const f = S.taches.filter(Boolean).length;
   const enCours = !S.corrige && Object.keys(S.reponses).length > 0;
@@ -2158,6 +2230,7 @@ function ecranAujourdhui(){
     ${blocPromo()}
     ${blocFinEssai()}
     ${blocBandeauRappel()}
+    ${nationaleEnHaut() ? carteEpreuve() + blocDerniereNationale() : ''}
     <div class="tete-jour">
       <span class="eyebrow">${dateDuJour()}</span>
       ${compteARebours()}
@@ -2217,8 +2290,7 @@ function ecranAujourdhui(){
     </div>
     </div>
 
-    ${carteEpreuve()}
-    ${blocDerniereNationale()}
+    ${nationaleEnHaut() ? '' : carteEpreuve() + blocDerniereNationale()}
     ${blocPlus()}
   </div>`;
 }
@@ -2470,6 +2542,35 @@ function exigerAbonnement(raison, origine){
 }
 const peutFeuilleDetaillee = () => S.gratuit || estAbonne() || ((S.stats && S.stats.compositions) || 0) <= 2;
 
+/* Payer avec l'aide d'un conseiller sur WhatsApp : premier choix, sans formulaire.
+   Deux numéros se partagent les demandes ; un même appareil retombe toujours sur le même. */
+function numeroConseiller(){
+  let i = null;
+  try{ i = localStorage.getItem('mc_conseiller'); }catch(e){}
+  if(i !== '0' && i !== '1'){
+    i = Math.random() < 0.5 ? '0' : '1';
+    try{ localStorage.setItem('mc_conseiller', i); }catch(e){}
+  }
+  return i === '1' ? CONTACT.adminTel2 : CONTACT.adminTel;
+}
+function messageConseiller(cle){
+  const f = cle && FORMULES[cle];
+  const tel = (S.util && S.util.tel) ? S.util.tel : '';
+  return 'Bonjour, je veux m\'abonner à Mon Concours' + (f ? ' (' + f.n + ', ' + f.prix + ')' : '') +
+    '. Mon numéro de compte : ' + (tel || '(mon numéro)') + '. Pouvez-vous m\'aider à payer ?';
+}
+function blocConseiller(cle, point){
+  return `<div class="conseiller">
+    <a class="cta vert" href="https://wa.me/226${numeroConseiller()}?text=${encodeURIComponent(messageConseiller(cle))}" target="_blank" rel="noopener" data-conseiller-wa="${E(point || 'abonnement')}" data-conseiller-formule="${E(cle || '')}">
+      ${ico('partage',16)} Payer avec l'aide d'un conseiller<small>Sur WhatsApp : on vous guide, c'est rapide</small></a>
+    <div class="ou-sep"><span>ou payer vous-même</span></div>
+  </div>`;
+}
+document.addEventListener('click', ev => {
+  const a = ev.target.closest && ev.target.closest('[data-conseiller-wa]');
+  if(a){ pister('PAY_ADVISOR_WHATSAPP', { point: a.dataset.conseillerWa, formule: a.dataset.conseillerFormule || null }); }
+});
+
 /* « Un proche paie pour moi » et « J'ai un code » : sous chaque écran de paiement */
 function blocAlternatives(cle){
   const k = cle || S.choixFormule;
@@ -2552,6 +2653,7 @@ function ecranAbonnement(){
       <div class="eyebrow">Capture reçue</div>
       <p class="sous" style="margin:6px 0 0">Votre paiement du ${new Date(paiement.cree_le).toLocaleDateString('fr-FR')} est en cours de vérification : deux heures au plus. Vous recevrez une notification dès que c'est confirmé.</p>
     </div>` : `
+    ${blocConseiller('', 'abonnement')}
     <div class="libelle" style="margin-top:6px">Choisissez votre abonnement</div>
     ${Object.keys(FORMULES).map(k => {
       const f = FORMULES[k];
@@ -2666,6 +2768,7 @@ function ecranPaiement(){
 
     ${S.erreur ? `<div class="alerte" role="alert">${E(S.erreur)}</div>` : ''}
 
+    ${blocConseiller(f.cle, 'paiement')}
     <div class="libelle">Moyen de paiement</div>
     ${Object.keys(OPERATEURS).map(k => `
     <button class="operateur ${op === k ? 'on' : ''}" data-operateur="${k}" aria-pressed="${op === k}">
@@ -3801,13 +3904,23 @@ async function chargerRessources(){
 }
 /* Lecture sans réseau : une fois connecté, le téléphone garde en silence les cours des trois
    niveaux (troisième, terminale, licence). Les cours sont du texte : quelques dizaines de Ko. */
+/* Les deux premiers cours de chaque niveau sont offerts (lecture sans réseau et PDF) ; les autres font partie de l'abonnement. */
+const COURS_OFFERTS = 2;
+const estCours = r => r.texte && r.type_ressource !== 'annale';
+function matieresCoursGratuites(liste){
+  const mats = []; (liste || []).filter(estCours).forEach(r => { if(!mats.includes(r.matiere)) mats.push(r.matiere); });
+  return mats.slice(0, COURS_OFFERTS);
+}
+const coursOuvert = nom => S.gratuit || estAbonne() || matieresCoursGratuites(S.ressources).includes(nom);
 async function garderCoursHorsLigne(){
-  if(!base || !navigator.onLine || garderCoursHorsLigne.enCours || !(S.gratuit || estAbonne())) return;
+  if(!base || !navigator.onLine || garderCoursHorsLigne.enCours) return;
   garderCoursHorsLigne.enCours = true;
   try{
+    const toutLeCours = S.gratuit || estAbonne();
     for(const niv of ['troisieme', 'terminale', 'licence']){
       try{
-        const liste = await lireRessourcesNiveau(niv);
+        let liste = await lireRessourcesNiveau(niv);
+        if(!toutLeCours){ const ok = matieresCoursGratuites(liste); liste = liste.filter(r => !estCours(r) || ok.includes(r.matiere)); }
         if(liste.length) memoEcrire('ressources-' + niv, liste);
       }catch(e){}
     }
@@ -4625,7 +4738,8 @@ function ecranCahier(){
   const nDiff = list.filter(e => e.rate >= 2 && e.suite < 3).length;
   if(vueC === 'jour') list = list.filter(e => joursRestants(e) === 0 && e.suite < 3);
   const closes = S.cahier.filter(e=>e.suite>=3);
-  if(repriseIdx !== null){ return ecranReprise(); }
+  if(repriseIdx !== null && S.cahier[repriseIdx]){ return ecranReprise(); }
+  repriseIdx = null; repriseRep = undefined;   // la liste a changé entre-temps : retour à la liste
   vue().innerHTML = `
   <div class="pad">
     <div class="eyebrow">Mes erreurs · ce qui reste à corriger</div>
@@ -4752,7 +4866,7 @@ function recompenses(){
    première visite, pour que ceux qui n'y vont pas ne paient rien.
    Ici : la tuile de « Mon compte », le compteur et l'accès.
    ===================================================================== */
-const COMM_VERSION = 2;
+const COMM_VERSION = 3;
 const LIEN_UUID = /^[0-9a-f-]{36}$/i;
 /* « Plus de 700 candidats » : arrondi à la centaine inférieure, donc toujours vrai */
 function candidatsCommunaute(){
@@ -6209,6 +6323,7 @@ async function lancerFautes(){
   aller('cahier');
 }
 function ouvrirLienDirect(){
+  window.__origine = origineVisite();
   const p = new URLSearchParams(location.search);
   const depuis = p.get('depuis');
   if(depuis) pister('ARRIVED_FROM', { depuis: depuis.slice(0, 20) });
@@ -6369,7 +6484,7 @@ document.addEventListener('click', ev => {
   if(d.natOui) return inscrireNationale(d.natOui, true);
   if(d.natNon){ ecrireReglage('nonNat-' + d.natNon, true); document.getElementById('voile').hidden = true; S.modal = null; pister('NATIONAL_DECLINED'); return; }
   if(d.resultatsPdf) return resultatsPdf();
-  if(d.telechargerMat){ if(!exigerAbonnement('Le cours en PDF fait partie de l\'abonnement.', 'cours_pdf')) return; return telechargerCoursMatiere(decodeURIComponent(d.telechargerMat)); }
+  if(d.telechargerMat){ if(!coursOuvert(decodeURIComponent(d.telechargerMat)) && !exigerAbonnement('Les deux premiers cours de chaque niveau sont offerts. Les autres font partie de l\'abonnement.', 'cours_pdf')) return; return telechargerCoursMatiere(decodeURIComponent(d.telechargerMat)); }
   if(d.rappelHeure){ const h = document.getElementById('rappel-h'), m = document.getElementById('rappel-m'); return activerRappel(h ? +h.value : 19, m ? +m.value : 0); }
   if(d.installeD){
     pister('PARCOURS_D_INSTALL_CLICKED');
@@ -7105,14 +7220,14 @@ function blocCoursHL(){
       <p class="sous" style="margin:0 0 10px">${mats.length
         ? (S.gratuit || estAbonne()
             ? 'Tous les cours de votre niveau sont gardés sur le téléphone dès que vous êtes en ligne : vous les lisez sans réseau. Vous pouvez aussi en télécharger un en PDF.'
-            : 'Lisez les cours en ligne. Le PDF et la lecture sans réseau font partie de l\'abonnement.')
+            : 'Les deux premiers cours de chaque niveau sont gardés sur le téléphone : vous les lisez sans réseau et vous les téléchargez en PDF. Les autres cours font partie de l\'abonnement.')
         : (S.ressources ? 'Aucun cours n\'est encore publié pour ce niveau.' : 'Chargement des cours…')}</p>
-      ${(pret || mats.length) && (S.gratuit || estAbonne()) ? `<p class="sous" style="margin:0 0 10px;font-size:12.5px"><b>${mats.length ? '✓ Cours disponibles hors ligne' : ''}</b></p>` : ''}
+      ${(pret || mats.length) ? `<p class="sous" style="margin:0 0 10px;font-size:12.5px"><b>${mats.length ? '✓ Cours disponibles hors ligne' + (S.gratuit || estAbonne() ? '' : ' : les ' + COURS_OFFERTS + ' premiers') : ''}</b></p>` : ''}
       ${mats.map(nom => {
         const n = liste.filter(r => r.matiere === nom).length;
         return `<div class="mat"><div class="nom">${E(nom)}<em>${n} chapitre${n > 1 ? 's' : ''}</em></div>
           <div class="paire" style="display:flex;gap:6px"><button class="mini" data-matiere="${encodeURIComponent(nom)}">Lire</button>
-          <button class="mini" data-telecharger-mat="${encodeURIComponent(nom)}">${S.gratuit || estAbonne() ? '' : ico('cadenas',12) + ' '}PDF</button></div></div>`;
+          <button class="mini" data-telecharger-mat="${encodeURIComponent(nom)}">${coursOuvert(nom) ? '' : ico('cadenas',12) + ' '}PDF</button></div></div>`;
       }).join('')}
     </div>
   </div>`;

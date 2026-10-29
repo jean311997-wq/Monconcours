@@ -1929,7 +1929,6 @@ async function vueAnalyse(){
       <div class="libelle">Abonnements</div>
       <div class="carte">
         <div class="deux">
-          <div class="compteur"><div class="v num">${nombre(g.essais_en_cours)}</div><div class="l">Essais en cours</div></div>
           <div class="compteur"><div class="v num">${nombre(g.abonnes)}</div><div class="l">Abonnés payants</div></div>
         </div>
       </div>
@@ -2581,7 +2580,7 @@ async function vueSignalements(){
           ${q.explication ? `<p style="margin-top:6px"><small>Explication : ${E(q.explication)}</small></p>` : ''}
           <small style="display:block;margin-top:6px;color:#888">Identifiant de la question : ${E(s.question_id)}</small>
           ${s.user_id ? `<div style="margin-top:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><small>Signalé par <b class="cliquable" data-fiche="${E(s.user_id)}">${E((auteurs[s.user_id] || {}).nom || 'un candidat')}</b></small>
-            ${A.admin ? `<button class="mini" data-ecrire="${E(s.user_id)}" data-nom="${E((auteurs[s.user_id] || {}).nom || '')}">Écrire à ce candidat</button>` : ''}</div>` : ''}
+            ${(A.admin || A.investisseur) ? `<button class="mini" data-ecrire="${E(s.user_id)}" data-nom="${E((auteurs[s.user_id] || {}).nom || '')}">Écrire à ce candidat</button>` : ''}</div>` : ''}
           ${s.statut === 'nouveau' ? `<div style="margin-top:8px">
             <button class="lien" data-sig="${s.id}|corrige">marquer corrigé</button>
             <button class="lien" style="margin-left:12px" data-sig="${s.id}|rejete">rejeter</button></div>` : ''}

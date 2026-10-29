@@ -229,3 +229,6 @@ body[data-theme="clair"] .cm-coeur.on{color:#D6303A}
   .cm-coeur svg.pop{animation:none}
 }
 body.sans-anim .cm-post,body.sans-anim .cm-regles,body.sans-anim .cm-compo-o,body.sans-anim .cm-nouv,body.sans-anim .cm-coeur svg.pop{animation:none}
+
+.cm-vues{margin-left:auto;display:inline-flex;align-items:center;gap:6px;padding:0 10px;font-size:13px;font-weight:600;color:var(--craie2);opacity:.85}
+.cm-vues svg{flex:none}

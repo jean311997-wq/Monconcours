@@ -1962,3 +1962,15 @@ body.sans-anim .stat-comm .sc-new.jamais{animation:none}
 .derniere-nat b{font-family:var(--d);font-weight:800;font-size:16.5px;letter-spacing:-.01em;line-height:1.2}
 .derniere-nat .dn-txt>span{font-size:12.5px;color:rgba(255,255,255,.86);line-height:1.3}
 .derniere-nat .dn-fl{margin-left:auto;font-size:20px;color:#fff;flex:none}
+
+/* paiement : conseiller WhatsApp en premier choix */
+.conseiller{margin:6px 0 18px}
+.conseiller .cta{display:block;text-align:center;text-decoration:none}
+.conseiller .cta small{display:block;font-weight:400;opacity:.85;margin-top:2px}
+.ou-sep{display:flex;align-items:center;gap:10px;margin:14px 0 4px;color:var(--craie2);font-size:12.5px}
+.ou-sep::before,.ou-sep::after{content:"";flex:1;height:1px;background:var(--trait)}
+
+/* avis des candidats sur l'écran d'accueil */
+.avis-vitrine{margin-top:16px;display:grid;gap:8px}
+.avis-vitrine blockquote{margin:0;padding:10px 12px;border-left:3px solid var(--vert-bord,var(--trait));background:var(--ardoise2,transparent);border-radius:0 8px 8px 0;font-size:13px;line-height:1.45;color:var(--craie)}
+.avis-vitrine cite{display:block;margin-top:4px;font-style:normal;font-size:11.5px;color:var(--craie2)}

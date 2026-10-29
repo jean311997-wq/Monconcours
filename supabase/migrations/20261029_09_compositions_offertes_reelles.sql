@@ -1,0 +1,3 @@
+-- Les 3 compositions offertes ne comptent que celles réellement faites (terminée, ou au moins une réponse).
+-- Patch appliqué sur ouvrir_composition(text) : la ligne de comptage devient
+--   select count(*) into v_deja from public.compositions where user_id = v_user and epreuve_id is null and (terminee or nb_traitees > 0);

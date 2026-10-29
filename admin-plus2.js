@@ -244,7 +244,7 @@ V.compositions = async function(){
 
     <div class="bloc"><div class="libelle">Épreuves nationales<span>touchez une ligne pour voir inscrits et participants</span></div><div class="carte">
       ${ep.length ? `<div class="defile"><table><thead><tr><th>Épreuve</th><th>Début</th><th>Inscrits</th><th>Ont composé</th><th>Terminées</th><th>Moyenne</th></tr></thead><tbody>${ep.map(x => `<tr class="cliquable" data-epreuve="${e(x.id)}" data-titre="${e(x.titre)}">
-        <td><b>${e(x.titre)}</b><br><span style="color:var(--craie2);font-size:12px">${e(x.statut || '')}</span></td><td>${e(X().heureCourte(x.debut_le))}</td><td class="num">${num(x.inscrits)}</td><td class="num">${num(x.participants)}${x.inscrits ? ' <small>(' + pct(x.participants, x.inscrits) + ' %)</small>' : ''}</td><td class="num">${num(x.terminees)}</td><td class="num">${x.moyenne != null ? x.moyenne + ' %' : '—'}</td></tr>`).join('')}</tbody></table></div>` : X().insuffisant('Aucune épreuve nationale.')}</div></div>
+        <td><b>${e(x.titre)}</b><br><span style="color:var(--craie2);font-size:12px">${e(({ terminee:'terminée', annulee:'annulée', en_cours:'en cours', programmee:'programmée' })[x.statut] || x.statut || '')}</span></td><td>${e(X().heureCourte(x.debut_le))}</td><td class="num">${num(x.inscrits)}</td><td class="num">${num(x.participants)}${x.inscrits ? ' <small>(' + pct(x.participants, x.inscrits) + ' %)</small>' : ''}</td><td class="num">${num(x.terminees)}</td><td class="num">${x.moyenne != null ? x.moyenne + ' %' : '—'}</td></tr>`).join('')}</tbody></table></div>` : X().insuffisant('Aucune épreuve nationale.')}</div></div>
 
     <div class="bloc"><div class="libelle">Les 60 dernières compositions</div><div class="carte">
       ${rec.length ? X().tableauPersonnes(rec, [['Sujet', c => e(c.nationale ? 'Nationale' : (c.sujet ? 'Sujet ' + c.sujet : 'Libre'))], ['Résultat', c => c.terminee ? '<span class="etat ok">' + e(c.score + ' / ' + c.nb) + '</span>' : '<span class="etat">' + e((c.traitees || 0) + ' / ' + c.nb + ' traitées') + '</span>'], ['Durée', c => c.duree ? e(Math.round(c.duree / 60) + ' min') : '—'], ['Le', c => e(X().heureCourte(c.debut_le))]]) : X().insuffisant()}</div></div>`;
@@ -261,9 +261,67 @@ const MODELES = {
   rappel:    ['Rappel : composition nationale', 'N\'oubliez pas la composition nationale. Soyez prêt à l\'heure, avec un bon réseau.'],
   absence:   ['Votre séance du jour vous attend', 'Quelques minutes aujourd\'hui font la différence. Ouvrez Mon Concours et faites votre séance.']
 };
+
+/* ============================================================
+   WHATSAPP : annoncer la nationale, partager un texte, une photo ou une vidéo
+   ============================================================ */
+const CANAL_WA = 'https://whatsapp.com/channel/0029Vb9boQ990x32o1rJTm07';
+const heureWA = d => { const p = new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Ouagadougou' }).formatToParts(d); return p.find(x => x.type === 'hour').value.replace(/^0/, '') + ' h ' + p.find(x => x.type === 'minute').value; };
+const jourWA = d => new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Africa/Ouagadougou' }).format(d);
+const cleJour = d => new Intl.DateTimeFormat('fr-CA', { timeZone: 'Africa/Ouagadougou' }).format(d);
+async function texteNationale(db){
+  const { data } = await db.from('epreuves_collectives').select('titre,debut_le,fin_le,places,recompense').eq('statut', 'programmee').gt('fin_le', new Date().toISOString()).order('debut_le').limit(1);
+  const ep = data && data[0];
+  if(!ep) return '';
+  const deb = new Date(ep.debut_le), fin = new Date(ep.fin_le), now = new Date();
+  const minutes = Math.round((fin - deb) / 60000);
+  const concours = String(ep.titre || '').split('·').slice(1).join('·').trim();
+  const quand = cleJour(deb) === cleJour(now) ? "aujourd'hui" : jourWA(deb);
+  return ['Composition nationale ' + quand + ' à ' + heureWA(deb) + (concours ? ' : ' + concours : '') + '.',
+    minutes + ' minutes, classement national dès la fin.' + (ep.recompense ? ' ' + ep.recompense + '.' : ''),
+    'Inscrivez-vous avant le début dans l\'application : https://monconcoursbf.com',
+    'Chaîne : ' + CANAL_WA].join('\n');
+}
+function blocWhatsApp(){
+  return `<div class="bloc"><div class="libelle">Partager sur WhatsApp</div><div class="carte" id="wa-bloc">
+    <p class="sous" style="margin:0 0 8px">Écrivez le texte, ajoutez une photo ou une vidéo si vous voulez, puis choisissez WhatsApp dans la fenêtre qui s'ouvre sur votre téléphone.</p>
+    <button class="cta creux petit" id="wa-nationale" type="button">Écrire l'annonce de la prochaine nationale</button>
+    <label style="margin-top:10px">Texte<textarea id="wa-texte" rows="5" maxlength="1500" placeholder="Votre message"></textarea></label>
+    <label>Photo ou vidéo (facultatif)<input id="wa-fichier" type="file" accept="image/*,video/*"></label>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+      <button class="cta" id="wa-partager" type="button">Partager</button>
+      <button class="cta creux" id="wa-copier" type="button">Copier le texte</button>
+      <button class="cta creux" id="wa-canal" type="button">Ouvrir ma chaîne</button>
+    </div>
+    <p id="wa-etat" class="sous" style="margin-top:8px"></p></div></div>`;
+}
+function brancherWhatsApp(db){
+  const etat = t => { const z = $('#wa-etat'); if(z) z.textContent = t; };
+  const texte = () => ($('#wa-texte').value || '').trim();
+  const copier = async t => { try{ await navigator.clipboard.writeText(t); return true; }catch(_){ const a = $('#wa-texte'); a.select(); try{ return document.execCommand('copy'); }catch(__){ return false; } } };
+  $('#wa-nationale').onclick = async () => {
+    etat('Je cherche la prochaine composition…');
+    const t = await texteNationale(db);
+    if(!t){ etat('Aucune composition nationale à venir. Programmez-en une d\'abord.'); return; }
+    $('#wa-texte').value = t; etat('Annonce prête. Relisez-la, puis partagez.');
+  };
+  $('#wa-partager').onclick = async () => {
+    const t = texte(), f = $('#wa-fichier').files[0];
+    if(!t && !f){ etat('Écrivez un texte ou choisissez une photo.'); return; }
+    try{
+      if(f && navigator.canShare && navigator.canShare({ files: [f] })){ await navigator.share({ text: t, files: [f] }); etat('Partage ouvert.'); return; }
+      if(!f && navigator.share){ await navigator.share({ text: t }); etat('Partage ouvert.'); return; }
+    }catch(err){ if(err && err.name === 'AbortError'){ etat(''); return; } }
+    if(t) window.open('https://wa.me/?text=' + encodeURIComponent(t), '_blank', 'noopener');
+    etat(f ? 'Ce téléphone ne peut pas joindre le fichier : le texte est parti, ajoutez la photo dans WhatsApp.' : 'WhatsApp ouvert avec le texte.');
+  };
+  $('#wa-copier').onclick = async () => { etat(texte() ? ((await copier(texte())) ? 'Texte copié.' : 'Copie impossible, sélectionnez le texte à la main.') : 'Rien à copier.'); };
+  $('#wa-canal').onclick = async () => { if(texte()) await copier(texte()); window.open(CANAL_WA, '_blank', 'noopener'); etat(texte() ? 'Texte copié. Collez-le dans votre chaîne.' : ''); };
+}
+
 V.diffuser = async function(){
   const { db, A } = X();
-  const admin = !!A.admin;
+  const admin = !!(A.admin || A.investisseur);
   const cible0 = A.diffCible || 'tous', modele = MODELES[A.diffModele] || ['', ''];
   A.diffCible = null; A.diffModele = null;
   $('#vue').innerHTML = `
@@ -293,7 +351,9 @@ V.diffuser = async function(){
     ${admin ? `<div class="bloc"><div class="libelle">Écrire à une seule personne</div><div class="carte">
       <label>Son numéro ou son nom<input id="solo-q" placeholder="70 12 34 56 ou Awa" autocomplete="off"></label>
       <div id="solo-res" class="sous" style="margin-top:6px"></div></div></div>` : ''}
+    ${admin ? blocWhatsApp() : ''}
     <div class="bloc"><div class="libelle">Messages déjà envoyés</div><div class="carte" id="d-histo">Chargement…</div></div>`;
+  if(admin) brancherWhatsApp(db);
 
   const histo = async () => {
     const { data, error } = await db.rpc('diffusions_liste');
@@ -501,7 +561,7 @@ V.assiduite = async function(){
    ============================================================ */
 V.communaute = async function(){
   const { db, A } = X();
-  const admin = !!A.admin;
+  const admin = !!(A.admin || A.investisseur);
   const NOM_TYPE = { annonce:'Annonce', motivation:'Motivation', bilan:'Bilan', cours:'Cours', actualite:'Actualité', top:'Contributeurs', epreuve:'Épreuve', classement:'Classement', progres:'Progrès', resultat:'Résultat', texte:'Message', photo:'Photo' };
   const urlImg = c => { try { return db.storage.from('communaute').getPublicUrl(c).data.publicUrl; } catch(_){ return ''; } };
   const etat = { fin: false, avant: null, nb: 0, filtre: 'tout' };
@@ -704,10 +764,11 @@ function lectures(m){
     !m.profils ? 'nodata' : cp >= 40 ? 'ok' : cp >= 15 ? 'attention' : 'alerte',
     `${num(m.push_actifs)} candidats sur ${num(m.profils)} peuvent être joints par une alerte sur leur téléphone (${cp} %).`,
     { t: 'Inviter à activer les rappels', vers: 'diffuser', cible: 'tous', modele: 'absence' });
-  add('Mukesh Ambani', 'Gagner un marché par le volume et un prix très bas, puis transformer les essais en habitude.',
-    m.essais_fin_3j == null ? 'nodata' : m.essais_fin_3j === 0 ? 'ok' : m.essais_fin_3j <= 20 ? 'attention' : 'alerte',
-    `${num(m.essais_fin_3j)} essais se terminent d'ici 3 jours, ${num(m.essais_actifs)} essais en cours, ${num(m.payants_actifs)} abonnés payants.`,
-    { t: 'Écrire à ceux dont l\'essai finit', vers: 'diffuser', cible: 'essai' });
+  const conv = m.profils ? Math.round(1000 * (m.payants_actifs || 0) / m.profils) / 10 : 0;
+  add('Mukesh Ambani', 'Gagner un marché par le volume et un prix très bas, puis transformer les visiteurs en habitude.',
+    !m.profils ? 'nodata' : conv >= 3 ? 'ok' : conv >= 1 ? 'attention' : 'alerte',
+    `${num(m.payants_actifs)} abonnés payants pour ${num(m.profils)} inscrits (${conv} %).`,
+    { t: 'Écrire aux candidats sans abonnement', vers: 'diffuser', cible: 'gratuits' });
   const kv = m.actifs ? (m.partages || 0) / m.actifs : 0;
   add('Mark Zuckerberg', 'Les boucles : chaque utilisateur satisfait doit en amener d\'autres.',
     !m.actifs ? 'nodata' : kv >= 0.5 ? 'ok' : kv >= 0.15 ? 'attention' : 'alerte',
@@ -807,7 +868,7 @@ async function activerPush(){
 V.app_admin = async function(){
   const { A, db } = X();
   const push = await etatPush();
-  const lecteur = !A.admin;
+  const lecteur = !(A.admin || A.investisseur);
   $('#vue').innerHTML = `
     <h2 class="titre">Application et alertes</h2>
     <p class="sous">Installez l'administration sur votre téléphone comme une application, et recevez une alerte dès qu'il se passe quelque chose d'urgent.</p>
@@ -846,7 +907,7 @@ function majBandeau(){
   if(!A.session) return;
   let off = false; try{ off = Date.now() - (+localStorage.getItem('adm_bandeau') || 0) < 7 * 86400000; }catch(err){}
   const veutInstaller = !installee() && (invite || ios());
-  const veutAlertes = A.admin && 'Notification' in window && Notification.permission === 'default';
+  const veutAlertes = (A.admin || A.investisseur) && 'Notification' in window && Notification.permission === 'default';
   if(off || (!veutInstaller && !veutAlertes)){ if(b) b.remove(); return; }
   if(!b){ b = document.createElement('div'); b.id = 'bandeau-app'; b.className = 'bandeau-app'; const c = $('.corps'); c.parentNode.insertBefore(b, c); }
   b.innerHTML = `<span>${veutInstaller ? 'Installez l\'administration sur votre téléphone' : 'Recevez les alertes urgentes sur ce téléphone'}</span>
