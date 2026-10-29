@@ -2213,7 +2213,8 @@ function blocFinEssai(){
 }
 /* Le jour de la composition nationale, sa carte passe en haut de l'accueil ; une fois finie, les résultats
    y restent jusqu'au lendemain. Le reste de l'écran ne change pas, et chaque bloc retrouve sa place ensuite. */
-const memeJourQue = iso => !!iso && new Date(iso).toDateString() === new Date().toDateString();
+/* le jour se compte à l'heure de Ouagadougou (= UTC), comme partout ailleurs dans la composition nationale */
+const memeJourQue = iso => !!iso && new Date(iso).toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10);
 function nationaleEnHaut(){
   const ep = S.epreuve;
   if(ep && (ep.etat === 'en_cours' || (ep.etat === 'a_venir' && memeJourQue(ep.debut_le)) || (ep.etat === 'terminee' && memeJourQue(ep.fin_le)))) return true;
@@ -2230,10 +2231,10 @@ function ecranAujourdhui(){
     ${blocPromo()}
     ${blocFinEssai()}
     ${blocBandeauRappel()}
-    ${nationaleEnHaut() ? carteEpreuve() + blocDerniereNationale() : ''}
+    ${nationaleEnHaut() ? `<section class="nat-jour" aria-label="Composition nationale du jour">${carteEpreuve()}${blocDerniereNationale()}</section>` : ''}
     <div class="tete-jour">
       <span class="eyebrow">${dateDuJour()}</span>
-      ${compteARebours()}
+      ${nationaleEnHaut() ? '' : compteARebours()}
     </div>
     ${!navigator.onLine ? carteHorsLigne() : ''}
 

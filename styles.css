@@ -1974,3 +1974,9 @@ body.sans-anim .stat-comm .sc-new.jamais{animation:none}
 .avis-vitrine{margin-top:16px;display:grid;gap:8px}
 .avis-vitrine blockquote{margin:0;padding:10px 12px;border-left:3px solid var(--vert-bord,var(--trait));background:var(--ardoise2,transparent);border-radius:0 8px 8px 0;font-size:13px;line-height:1.45;color:var(--craie)}
 .avis-vitrine cite{display:block;margin-top:4px;font-style:normal;font-size:11.5px;color:var(--craie2)}
+
+/* Le jour de la composition nationale : un seul bloc net en haut de l'accueil, puis l'écran habituel */
+.nat-jour{margin:4px 0 24px;padding-bottom:22px;border-bottom:1px solid var(--trait)}
+.nat-jour .carte.nationale{margin-top:0}
+.nat-jour .derniere-nat{margin-top:12px}
+.tag-neuf{margin-left:0}
