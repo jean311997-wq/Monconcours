@@ -13,7 +13,7 @@
   --laterite:#13805A;          /* boutons, 4,9:1 sous un texte blanc */
   --laterite-txt:#E9B44C;      /* accent en petit texte sur fond sombre */
   --erreur:#C2392E;            /* réponse fausse, alerte : rouge, jamais la marque */
-  --cachet:#0E7A54;
+  --cachet:#13805A;
   --or:#E3A82B;
   --survol:#3F5A4F;
   --vert-fond:#0F241C; --vert-bord:#1D5442; --vert-texte:#4FC28F; --vert-plein:#14503B;
@@ -1150,7 +1150,7 @@ body.en-transition *{transition:background-color .4s ease, color .4s ease, borde
 .rep-bloc.dissout{overflow:hidden;max-height:900px;animation:erreurDissoute 1.5s ease .8s forwards}
 .rep-bloc .opt.juste{animation:reponsePulse .5s ease}
 @keyframes reponsePulse{0%{transform:scale(1)}40%{transform:scale(1.03)}100%{transform:scale(1)}}
-.echeance.ok{color:var(--vert,#0E7A54);font-weight:700}
+.echeance.ok{color:var(--cachet);font-weight:700}
 
 /* Plus de lisibilité générale sur le cahier : titres, contrastes, respiration */
 .err .q{font-size:15px;line-height:1.4;font-weight:600;margin-bottom:8px}
@@ -1802,11 +1802,11 @@ body.sans-anim .nd-barre i{transition:none}
 body[data-theme="clair"] .fe-carte{background:#fff}
 .fe-badge{width:76px;height:76px;margin:0 auto 14px;border-radius:50%;display:grid;place-items:center;font-size:38px;font-weight:800;color:#fff;
   animation:feBadge .6s cubic-bezier(.2,1.4,.3,1) .15s both}
-.fenetre-evt.ok .fe-badge{background:#0E7A54;box-shadow:0 0 0 10px rgba(14,122,84,.14)}
-.fenetre-evt.refus .fe-badge{background:#B23A2E;box-shadow:0 0 0 10px rgba(178,58,46,.14)}
+.fenetre-evt.ok .fe-badge{background:var(--cachet);box-shadow:0 0 0 10px rgba(19,128,90,.16)}
+.fenetre-evt.refus .fe-badge{background:var(--erreur);box-shadow:0 0 0 10px rgba(194,57,46,.16)}
 @keyframes feBadge{0%{transform:scale(0) rotate(-40deg)}100%{transform:scale(1) rotate(0)}}
 .fe-titre{font-family:var(--d);font-size:25px;font-weight:800;margin:0 0 4px}
-.fe-sous{font-size:15px;font-weight:700;margin:0 0 10px;color:#0E7A54}
+.fe-sous{font-size:15px;font-weight:700;margin:0 0 10px;color:var(--cachet)}
 .fe-texte{font-size:14px;line-height:1.55;margin:0 0 20px;color:var(--craie2)}
 .fe-carte .cta{width:100%}
 .fe-confettis{position:absolute;left:50%;top:70px;width:0;height:0;pointer-events:none}
@@ -1888,20 +1888,20 @@ body[data-theme="clair"] .fe-carte{background:#fff}
 body[data-theme="clair"] .no-btn.no-danger{color:var(--erreur);border-color:rgba(194,57,46,.35)}
 
 /* fenêtres de l'administration : annonce, réponse à un avis, nouveau code */
-.fenetre-evt.annonce .fe-badge,.fenetre-evt.nouveau-code .fe-badge{background:var(--or,#C79A2B);box-shadow:0 0 0 10px rgba(199,154,43,.16);font-size:34px}
+.fenetre-evt.annonce .fe-badge,.fenetre-evt.nouveau-code .fe-badge{background:var(--or,#E3A82B);box-shadow:0 0 0 10px rgba(227,168,43,.18);font-size:34px}
 .fe-marque{font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--craie2);margin:0 0 8px}
 .fe-long{text-align:left;max-height:42vh;overflow:auto;white-space:normal;overflow-wrap:anywhere}
 .fe-etiq{display:block;text-align:left;font-size:12.5px;font-weight:700;margin:12px 0 5px;color:var(--craie2)}
 .fe-champ{width:100%;box-sizing:border-box;text-align:center;font-size:24px;letter-spacing:.5em;padding:12px;border-radius:12px;border:1.5px solid var(--trait);background:transparent;color:inherit}
-.fe-champ:focus{outline:2px solid var(--or,#C79A2B);outline-offset:1px}
-.fe-alerte{background:rgba(178,58,46,.12);color:#B23A2E;border-radius:10px;padding:9px 11px;font-size:13px;font-weight:600;margin:0 0 6px;text-align:left}
+.fe-champ:focus{outline:2px solid var(--or,#E3A82B);outline-offset:1px}
+.fe-alerte{background:rgba(194,57,46,.12);color:var(--erreur);border-radius:10px;padding:9px 11px;font-size:13px;font-weight:600;margin:0 0 6px;text-align:left}
 
 /* bloc d'inscription du visiteur sur l'accueil */
-.inscr-visiteur{border:2px solid var(--or,#C79A2B);padding:18px 16px;margin-bottom:14px}
+.inscr-visiteur{border:2px solid var(--or,#E3A82B);padding:18px 16px;margin-bottom:14px}
 .iv-titre{font-family:var(--d);font-size:21px;font-weight:800;margin:0 0 10px}
 .iv-etapes{list-style:none;margin:0 0 14px;padding:0;display:grid;gap:8px}
 .iv-etapes li{display:flex;align-items:center;gap:10px;font-size:14px;line-height:1.35}
-.iv-etapes b{flex:none;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:var(--or,#C79A2B);color:#fff;font-size:13px}
+.iv-etapes b{flex:none;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:var(--or,#E3A82B);color:#fff;font-size:13px}
 
 /* rappel quotidien : interrupteur, bandeau d'accueil */
 .inter{width:46px;height:26px;border-radius:13px;border:1px solid var(--trait);background:var(--ardoise2);position:relative;flex:none;padding:0;cursor:pointer}

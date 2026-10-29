@@ -8,7 +8,7 @@ const COQUE   = VERSION + '-coque';   // les fichiers de l'application
 const DONNEES = VERSION + '-donnees'; // les réponses de la base
 
 const FICHIERS = [
-  '/', '/index.html', '/app.js?v=58', '/styles.css?v=42',
+  '/', '/index.html', '/app.js?v=58', '/styles.css?v=43',
   '/supabase-js.min.js?v=13', '/manifest.webmanifest', '/favicon.png', '/icone-192.png'
 ];
 
