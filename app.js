@@ -1016,7 +1016,7 @@ async function chargerQuestions(force){
     let data = [];
     for(let a = 0; a < 8000; a += 1000){
       const { data: page, error } = await base.from('questions')
-        .select('id, enonce, niveau, matiere_id, matieres(nom, ordre, niveaux), question_options(position, texte)')
+        .select('id, enonce, niveau, difficulte, matiere_id, matieres(nom, ordre, niveaux), question_options(position, texte)')
         .eq('statut', 'publie')
         .or('niveau.eq.' + niv + ',niveau.is.null')
         .order('cree_le').order('id')
@@ -1033,7 +1033,7 @@ async function chargerQuestions(force){
       if(o.length < 2) return;
       const m = q.matieres.nom;
       (parMatiere[m] = parMatiere[m] || { nom:m, ordre:q.matieres.ordre || 99, questions:[] })
-        .questions.push({ id:q.id, q:q.enonce, o:o.map(x => x.texte) });
+        .questions.push({ id:q.id, q:q.enonce, o:o.map(x => x.texte), d:q.difficulte || 2 });
     });
     /* Les questions ont été saisies par lots du même sujet : on les écarte les unes des autres (ordre fixe, pas aléatoire). */
     Object.values(parMatiere).forEach(m => {
@@ -1043,6 +1043,11 @@ async function chargerQuestions(force){
       const pgcd = (a, b) => b ? pgcd(b, a % b) : a;
       while(pgcd(pas, n) !== 1) pas++;
       m.questions = m.questions.map((_, i) => m.questions[(i * pas) % n]);
+    });
+    /* Les questions difficiles passent devant : le candidat attaque par le niveau du concours, les plus simples viennent ensuite. */
+    Object.values(parMatiere).forEach(m => {
+      const dures = m.questions.filter(x => x.d >= 3), autres = m.questions.filter(x => x.d < 3);
+      m.questions = dures.concat(autres);
     });
     S.banque = Object.values(parMatiere).sort((x,y) => x.ordre - y.ordre);
     S.banqueEtat = 'pret';
