@@ -565,12 +565,13 @@ V.communaute = async function(){
   const NOM_TYPE = { annonce:'Annonce', motivation:'Motivation', bilan:'Bilan', cours:'Cours', actualite:'Actualité', top:'Contributeurs', epreuve:'Épreuve', classement:'Classement', progres:'Progrès', resultat:'Résultat', texte:'Message', photo:'Photo' };
   const urlImg = c => { try { return db.storage.from('communaute').getPublicUrl(c).data.publicUrl; } catch(_){ return ''; } };
   const etat = { fin: false, avant: null, nb: 0, filtre: 'tout' };
+  const SIGNE = A.investisseur ? 'Administrateur 2' : 'Administration Mon Concours';
   $('#vue').innerHTML = `
     <h2 class="titre">Communauté</h2>
-    <p class="sous">Tout ce qui s'écrit dans la communauté des candidats. Vous pouvez épingler, masquer, supprimer, couper la parole à quelqu'un, et publier au nom de « Administration Mon Concours ».</p>
+    <p class="sous">Tout ce qui s'écrit dans la communauté des candidats. Vous pouvez épingler, masquer, supprimer, couper la parole à quelqu'un, publier, commenter, répondre et aimer au nom de « ${SIGNE} ».</p>
     <div class="carte"><div id="cm-resume" class="mini-compteurs"></div></div>
     ${admin ? `<div class="carte" id="cm-form">
-      <div class="libelle" style="margin-bottom:8px">Publier comme « Administration Mon Concours »</div>
+      <div class="libelle" style="margin-bottom:8px">Publier comme « ${SIGNE} »</div>
       <label>Message<textarea id="cm-texte" rows="4" maxlength="1500" placeholder="Votre message aux candidats"></textarea></label>
       <label>Photo (facultatif, 3 Mo au plus)<input id="cm-photo" type="file" accept="image/jpeg,image/png,image/webp"></label>
       <label style="display:flex;gap:8px;align-items:center;margin:6px 0"><input type="checkbox" id="cm-epingle" style="width:auto"> Épingler en haut</label>
@@ -619,7 +620,7 @@ V.communaute = async function(){
   const garde = p => etat.filtre === 'tout' || (etat.filtre === 'candidats' && !p.admin) || (etat.filtre === 'admin' && p.admin) || (etat.filtre === 'masquees' && p.cache);
 
   const carte = p => {
-    const auteur = p.admin ? 'Administration Mon Concours' : (p.nom || p.nom_compte || 'Sans nom');
+    const auteur = p.admin ? (p.nom || 'Administration Mon Concours') : (p.nom || p.nom_compte || 'Sans nom');
     const txt = p.texte ? e(p.texte).replace(/\n/g, '<br>') : '';
     const kind = p.carte && p.carte.kind ? (NOM_TYPE[p.carte.kind] || p.carte.kind) : (NOM_TYPE[p.type] || p.type);
     return `<div class="carte" data-pub="${e(p.id)}" style="${p.cache ? 'opacity:.62;' : ''}${p.epingle ? 'border-color:var(--cachet);' : ''}">
@@ -634,6 +635,8 @@ V.communaute = async function(){
       ${p.carte && p.carte.titre ? `<div class="sous" style="margin-top:6px">Carte : ${e(p.carte.titre)}</div>` : ''}
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
         ${p.comms ? `<button class="mini" data-voir-comm="${e(p.id)}">Voir les commentaires</button>` : ''}
+        ${admin ? `<button class="mini" data-aimer>${p.aime ? 'Retirer mon cœur' : 'Aimer'}</button>
+        <button class="mini" data-commenter>Commenter</button>` : ''}
         ${admin ? `<button class="mini" data-act="${p.epingle ? 'desepingler' : 'epingler'}">${p.epingle ? 'Désépingler' : 'Épingler'}</button>
         <button class="mini" data-act="${p.cache ? 'montrer' : 'cacher'}">${p.cache ? 'Réafficher' : 'Masquer'}</button>
         <button class="mini" data-act="supprimer">Supprimer</button>
@@ -652,6 +655,22 @@ V.communaute = async function(){
         if(ok){ muets(); liste(true); }
       });
       c.querySelectorAll('[data-parole]').forEach(b => b.onclick = async () => { if(await agir('parole', { p_user: b.dataset.parole })){ muets(); liste(true); } });
+      const commenter = async (parent, nomParent) => {
+        const t = prompt((parent ? 'Répondre à ' + (nomParent || 'ce commentaire') : 'Votre commentaire') + ' (signé « ' + SIGNE + ' ») :', '');
+        if(t == null || !t.trim()) return;
+        const { data, error } = await db.rpc('communaute_commenter', { p_pub: id, p_texte: t.trim(), p_parent: parent || null });
+        if(error || !data || !data.ok) return alert((data && data.message) || (error && error.message) || 'Échec.');
+        liste(true);
+      };
+      c.commenter = commenter;
+      c.querySelectorAll('[data-commenter]').forEach(b => b.onclick = () => commenter(null));
+      c.querySelectorAll('[data-aimer]').forEach(b => b.onclick = async () => {
+        b.disabled = true;
+        const { data, error } = await db.rpc('communaute_aimer', { p_id: id });
+        b.disabled = false;
+        if(error || !data || !data.ok) return alert((data && data.message) || (error && error.message) || 'Échec.');
+        liste(true);
+      });
       c.querySelectorAll('[data-muet]').forEach(b => b.onclick = async () => {
         const choix = prompt('Couper la parole à ' + (b.dataset.nom || 'cette personne') + ' pendant combien de jours ?\n1, 7, 30, ou 0 pour définitivement.', '7');
         if(choix == null) return;
@@ -667,11 +686,12 @@ V.communaute = async function(){
         const { data, error } = await db.rpc('communaute_commentaires', { p_pub: id });
         if(error || !data || !data.ok){ z.innerHTML = '<div class="vide">Lecture impossible.</div>'; return; }
         z.innerHTML = (data.commentaires || []).map(k => `<div style="border-top:1px solid var(--trait);padding:8px 0;display:flex;gap:8px;justify-content:space-between;align-items:flex-start">
-          <div><b>${k.admin ? 'Administration Mon Concours' : e(k.nom || '')}</b> <span style="color:var(--craie2);font-size:12px">${e(X().heureCourte(k.cree_le))}</span><br>${e(k.texte).replace(/\n/g, '<br>')}</div>
-          ${admin ? `<button class="mini" data-kc="${e(k.id)}">Supprimer</button>` : ''}</div>`).join('') || '<div class="sous">Aucun commentaire.</div>';
+          <div><b>${e(k.admin ? (k.nom || 'Administration Mon Concours') : (k.nom || ''))}</b> <span style="color:var(--craie2);font-size:12px">${e(X().heureCourte(k.cree_le))}</span><br>${e(k.texte).replace(/\n/g, '<br>')}</div>
+          ${admin ? `<span style="display:flex;gap:6px;flex:none"><button class="mini" data-rep="${e(k.id)}" data-nom="${e(k.nom || '')}">Répondre</button><button class="mini" data-kc="${e(k.id)}">Supprimer</button></span>` : ''}</div>`).join('') || '<div class="sous">Aucun commentaire.</div>';
         z.querySelectorAll('[data-kc]').forEach(x => x.onclick = async () => {
           if(await agir('supprimer_commentaire', { p_id: x.dataset.kc }, 'Supprimer ce commentaire ?')){ x.closest('div[style]').remove(); liste(true); }
         });
+        z.querySelectorAll('[data-rep]').forEach(x => x.onclick = () => commenter(x.dataset.rep, x.dataset.nom));
       });
     });
   };

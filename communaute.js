@@ -43,7 +43,7 @@ function avatar(nom, teinte, admin, petit){
 }
 const medaille = r => `<span class="cm-med m${r >= 1 && r <= 3 ? r : 0} num">${Number(r) || ''}</span>`;
 const badgeAdmin = () => `<i class="cm-badge">${ico('coche', 11)} Officiel</i>`;
-const nomAffiche = o => o.admin ? 'Administration Mon Concours' : (o.nom || 'Candidat');
+const nomAffiche = o => o.admin ? (o.nom || 'Administration Mon Concours') : (o.nom || 'Candidat');
 function urlImage(chemin){
   try{ return base.storage.from('communaute').getPublicUrl(chemin).data.publicUrl; }catch(e){ return ''; }
 }
@@ -95,7 +95,7 @@ function postHtml(p, focus){
       ${avatar(p.nom, p.teinte, p.admin)}
       <div class="cm-qui"><span class="cm-nom"><b>${E(nomAffiche(p))}</b>${p.admin ? badgeAdmin() : ''}</span>
         <small>${p.epingle ? `<span class="cm-epingle">${ico('epingle', 11)} Épinglé</span>` : ''}${!p.admin && p.concours ? E(p.concours) + ' · ' : ''}${relatif(p.cree_le)}</small></div>
-      ${p.moi ? `<button class="cm-suppr" data-cm-suppr="${E(p.id)}" aria-label="Supprimer ma publication">${ico('corbeille', 16)}</button>` : ''}
+      ${p.moi || p.gerer ? `<button class="cm-suppr" data-cm-suppr="${E(p.id)}" aria-label="Supprimer cette publication">${ico('corbeille', 16)}</button>` : ''}
     </header>
     ${p.texte ? `<p class="cm-texte">${texteHtml(p.texte)}</p>` : ''}
     ${url ? `<button class="cm-photo" data-cm-photo="${E(url)}" aria-label="Agrandir la photo"><img src="${E(url)}" alt="Photo partagée par ${E(nomAffiche(p))}" loading="lazy" decoding="async"></button>` : ''}
@@ -138,7 +138,7 @@ function comHtml(p, c, prof){
     ${avatar(c.nom, c.teinte, c.admin, true)}
     <div class="cm-com-c">
       <div class="cm-com-b"><b>${E(nomAffiche(c))}</b>${c.admin ? badgeAdmin() : ''}${prof > 0 && c.parent_nom ? `<span class="cm-vers">› ${E(c.parent_nom)}</span>` : ''}<p>${texteHtml(c.texte)}</p></div>
-      <div class="cm-com-a"><span>${relatif(c.cree_le)}</span><button data-cm-rep="${E(p.id)}|${E(c.id)}">Répondre</button>${c.moi ? `<button data-cm-supprcom="${E(p.id)}|${E(c.id)}">Supprimer</button>` : ''}</div>
+      <div class="cm-com-a"><span>${relatif(c.cree_le)}</span><button data-cm-rep="${E(p.id)}|${E(c.id)}">Répondre</button>${c.moi || c.gerer ? `<button data-cm-supprcom="${E(p.id)}|${E(c.id)}">Supprimer</button>` : ''}</div>
     </div>
   </div>`;
 }

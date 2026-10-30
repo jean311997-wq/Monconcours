@@ -144,9 +144,10 @@ async function entrer(session){
 
   if(error){ return refuser("Impossible de lire vos droits : " + error.message); }
 
-  A.equipe = (roles || []).some(r => r.role === 'admin' || r.role === 'correcteur');
-  A.admin = (roles || []).some(r => r.role === 'admin');
-  A.investisseur = !A.equipe && (roles || []).some(r => r.role === 'investisseur');
+  /* l'investisseur a exactement les mêmes droits que l'administrateur, sans aucune restriction */
+  A.investisseur = (roles || []).some(r => r.role === 'investisseur');
+  A.equipe = A.investisseur || (roles || []).some(r => r.role === 'admin' || r.role === 'correcteur');
+  A.admin = A.investisseur || (roles || []).some(r => r.role === 'admin');
   if(!A.equipe && !A.investisseur){
     return refuser("Ce compte n'a pas les droits d'administration. Attribuez-lui le rôle « admin » dans la table roles_utilisateur.");
   }
@@ -163,8 +164,7 @@ async function entrer(session){
 
   if(A.investisseur){
     document.body.classList.add('mode-investisseur');
-    /* l'investisseur a tout l'espace d'administration, sauf « Mon accès » */
-    $$('#menu [data-vue="acces"]').forEach(b => b.remove());
+    /* l'investisseur a tout l'espace d'administration, « Mon accès » compris */
     const bienvenue = document.getElementById('bienvenue');
     if(bienvenue) bienvenue.hidden = false;
   }
