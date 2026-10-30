@@ -224,7 +224,7 @@ async function ouvrirFiche(id){
 
     <div class="libelle" style="margin-top:16px">Abonnements et paiements</div>
     ${(r.paiements || []).length || (r.abonnements || []).length ? `<table><tbody>
-      ${(r.abonnements || []).map(a => `<tr><td>Abonnement ${e(nomPass(a.formule))}</td><td>${e(X().dateCourte(a.debut_le))} → ${e(X().dateCourte(a.fin_le))}</td><td>${a.actif ? '<span class="etat ok">actif</span>' : '<span class="etat">terminé</span>'}</td></tr>`).join('')}
+      ${(r.abonnements || []).map(a => `<tr><td>${e(nomPass(a.formule))}</td><td>${e(X().dateCourte(a.debut_le))} → ${e(X().dateCourte(a.fin_le))}</td><td>${a.actif ? '<span class="etat ok">actif</span>' : '<span class="etat">terminé</span>'}</td></tr>`).join('')}
       ${(r.paiements || []).map(k => `<tr><td>Paiement ${e(X().NOM_OPERATEUR[k.operateur] || k.operateur || '')}</td><td>${F(k.montant)} · ${e(heureCourte(k.cree_le))}</td><td>${k.statut === 'confirme' ? '<span class="etat ok">confirmé</span>' : k.statut === 'refuse' ? '<span class="etat danger">refusé</span>' : '<span class="etat">en attente</span>'}</td></tr>`).join('')}
     </tbody></table>` : '<div class="vide">Aucun paiement ni abonnement.</div>'}
 
@@ -245,14 +245,14 @@ async function ouvrirFiche(id){
         </div>
       </div>
       <div class="carte">
-        <b>Changer son code secret</b>
+        <b>Changer son mot de passe</b>
         <p class="sous" style="margin:6px 0 10px;font-size:12.5px">Il reçoit une notification. En la touchant, il écrit son nouveau code (4 chiffres) deux fois. Vous ne voyez jamais le code.</p>
         <button class="cta creux petit" id="fm-code">${r.code_demande ? 'Renvoyer la demande' : 'Lui demander un nouveau code'}</button>
       </div>
       ${telPlein ? `<div class="carte">
-        <b>Activer un Pass</b>
+        <b>Activer un abonnement</b>
         <div class="rangee" style="align-items:center;margin-top:8px">
-          <select id="fm-formule"><option value="semaine">Pass Semaine</option><option value="mensuelle" selected>Pass Mois</option><option value="annuelle">Pass Année</option></select>
+          <select id="fm-formule"><option value="mensuelle" selected>Abonnement Mois</option><option value="annuelle">Abonnement Année</option></select>
           <button class="cta creux petit" id="fm-pass">Activer</button>
         </div>
         <a class="lien" style="display:inline-block;margin-top:10px" target="_blank" rel="noopener" href="https://wa.me/226${e(telPlein.slice(-8))}">Ouvrir WhatsApp avec lui</a>
@@ -272,15 +272,15 @@ async function ouvrirFiche(id){
       etat('Message envoyé.'); f.querySelector('#fm-titre').value = ''; f.querySelector('#fm-msg').value = '';
     };
     f.querySelector('#fm-code').onclick = async () => {
-      if(!confirm('Demander à ' + (p.nom || 'ce candidat') + ' de choisir un nouveau code secret ?')) return;
+      if(!confirm('Demander à ' + (p.nom || 'ce candidat') + ' de choisir un nouveau mot de passe ?')) return;
       const { data, error: er } = await X().db.rpc('admin_demander_changement_code', { p_user: p.id });
       etat(er || !data || !data.ok ? ((data && data.message) || (er && er.message) || 'Échec.') : 'Demande envoyée : il la verra à sa prochaine ouverture (et par notification s\'il a activé les rappels).');
     };
     const bp = f.querySelector('#fm-pass');
     if(bp) bp.onclick = async () => {
-      if(!confirm('Activer ce Pass pour ' + (p.nom || 'ce candidat') + ' ?')) return;
+      if(!confirm('Activer cet abonnement pour ' + (p.nom || 'ce candidat') + ' ?')) return;
       const { data, error: er } = await X().db.rpc('admin_activer_pass', { p_telephone: telPlein.slice(-8), p_formule: f.querySelector('#fm-formule').value, p_note: 'Depuis la fiche' });
-      etat(er || !data || !data.ok ? ((data && data.message) || (er && er.message) || 'Échec.') : 'Pass activé jusqu\'au ' + new Date(data.fin_le).toLocaleDateString('fr-FR') + '.');
+      etat(er || !data || !data.ok ? ((data && data.message) || (er && er.message) || 'Échec.') : 'Abonnement activé jusqu\'au ' + new Date(data.fin_le).toLocaleDateString('fr-FR') + '.');
     };
   }
 }

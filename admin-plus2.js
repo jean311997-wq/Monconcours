@@ -15,7 +15,7 @@ const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
 const allerA = vue => { X().A.vue = vue; X().rendre(); };
-const nomPass = f => f === 'essai' ? 'Essai' : (X().NOM_PASS[f] || f || 'Pass');
+const nomPass = f => f === 'essai' ? 'Essai' : (X().NOM_PASS[f] || f || 'Abonnement');
 const jourIso = d => X().isoJour(d);
 
 /* ============================================================
@@ -41,18 +41,18 @@ X().paiementsPlus = async function(zone, recharger){
 
   const ligneNom = p => p.user_id ? `<b class="cliquable" data-fiche="${e(p.user_id)}">${e(p.nom || 'Candidat')}</b><br><span class="num cliquable" data-fiche="${e(p.user_id)}" style="font-size:11.5px;color:var(--craie2)">${p.tel ? '+226 ' + e(p.tel) : '—'}</span>` : `<b>${e(p.nom || 'Candidat')}</b>`;
   const corps = {
-    recus: () => (d.recus || []).length ? `<div class="defile"><table><thead><tr><th>Candidat</th><th>Pass</th><th>Moyen</th><th>Montant</th><th>Reçu le</th></tr></thead><tbody>${d.recus.map(p => `<tr>
+    recus: () => (d.recus || []).length ? `<div class="defile"><table><thead><tr><th>Candidat</th><th>Abonnement</th><th>Moyen</th><th>Montant</th><th>Reçu le</th></tr></thead><tbody>${d.recus.map(p => `<tr>
       <td>${ligneNom(p)}</td><td>${e(nomPass(p.formule))}</td><td>${e(X().NOM_OPERATEUR[p.operateur] || p.operateur || '')}</td><td class="num">${F(p.montant)}</td><td>${e(X().heureCourte(p.regle_le || p.cree_le))}</td></tr>`).join('')}</tbody></table></div>` : '<div class="vide">Aucun paiement reçu sur cette période.</div>',
-    cours: () => `${(d.attente || []).length ? `<div class="libelle" style="margin-bottom:6px">Demandes envoyées, à vérifier par l'équipe</div><div class="defile"><table><thead><tr><th>Candidat</th><th>Pass · moyen</th><th>Montant</th><th>Depuis</th><th></th></tr></thead><tbody>${d.attente.map(p => `<tr>
+    cours: () => `${(d.attente || []).length ? `<div class="libelle" style="margin-bottom:6px">Demandes envoyées, à vérifier par l'équipe</div><div class="defile"><table><thead><tr><th>Candidat</th><th>Abonnement · moyen</th><th>Montant</th><th>Depuis</th><th></th></tr></thead><tbody>${d.attente.map(p => `<tr>
       <td>${ligneNom(p)}</td><td>${e(nomPass(p.formule))}<br><span style="color:var(--craie2);font-size:12px">${e(X().NOM_OPERATEUR[p.operateur] || p.operateur || '')}</span></td><td class="num">${F(p.montant)}</td><td>${e(X().depuis(p.cree_le))}</td>
       <td>${p.preuve ? `<button class="mini" data-pp-voir="${e(p.preuve)}">Voir la capture</button> ` : ''}${d.admin ? `<button class="mini" data-pp-ok="${e(p.id)}">Confirmer</button> <button class="mini danger" data-pp-non="${e(p.id)}">Refuser</button>` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<div class="vide" style="margin-bottom:8px">Aucune demande en attente de vérification.</div>'}
       <div class="libelle" style="margin:14px 0 6px">En train de payer (dernières 24 h), pas encore de demande</div>
-      ${(d.en_cours || []).length ? `<div class="defile"><table><thead><tr><th>Candidat</th><th>Où il en est</th><th>Pass</th><th>Dernière action</th></tr></thead><tbody>${d.en_cours.map(p => `<tr>
+      ${(d.en_cours || []).length ? `<div class="defile"><table><thead><tr><th>Candidat</th><th>Où il en est</th><th>Abonnement</th><th>Dernière action</th></tr></thead><tbody>${d.en_cours.map(p => `<tr>
         <td>${ligneNom(p)}</td><td>${e(ETAPE_NOM[p.etape] || 'Paiement commencé')}</td><td>${e(p.formule ? nomPass(p.formule) : '—')}</td><td>${e(X().depuis(p.derniere))}</td></tr>`).join('')}</tbody></table></div>` : '<div class="vide">Personne n\'est en train de payer en ce moment.</div>'}`,
-    non: () => `${(d.refuses || []).length ? `<div class="libelle" style="margin-bottom:6px">Refusés par l'équipe</div><div class="defile"><table><thead><tr><th>Candidat</th><th>Pass · moyen</th><th>Montant</th><th>Motif</th><th>Le</th></tr></thead><tbody>${d.refuses.map(p => `<tr>
+    non: () => `${(d.refuses || []).length ? `<div class="libelle" style="margin-bottom:6px">Refusés par l'équipe</div><div class="defile"><table><thead><tr><th>Candidat</th><th>Abonnement · moyen</th><th>Montant</th><th>Motif</th><th>Le</th></tr></thead><tbody>${d.refuses.map(p => `<tr>
       <td>${ligneNom(p)}</td><td>${e(nomPass(p.formule))}<br><span style="color:var(--craie2);font-size:12px">${e(X().NOM_OPERATEUR[p.operateur] || p.operateur || '')}</span></td><td class="num">${F(p.montant)}</td><td>${e(p.motif || '—')}</td><td>${e(X().heureCourte(p.cree_le))}</td></tr>`).join('')}</tbody></table></div>` : '<div class="vide" style="margin-bottom:8px">Aucun paiement refusé sur cette période.</div>'}
       <div class="libelle" style="margin:14px 0 6px">Paiements commencés puis abandonnés</div>
-      ${(d.abandons || []).length ? `<div class="defile"><table><thead><tr><th>Candidat</th><th>S'est arrêté à</th><th>Pass</th><th>Dernière action</th></tr></thead><tbody>${d.abandons.map(p => `<tr>
+      ${(d.abandons || []).length ? `<div class="defile"><table><thead><tr><th>Candidat</th><th>S'est arrêté à</th><th>Abonnement</th><th>Dernière action</th></tr></thead><tbody>${d.abandons.map(p => `<tr>
         <td>${ligneNom(p)}</td><td>${e(p.abandon ? 'A abandonné' + (p.etape ? ' · ' + (ETAPE_NOM[p.etape] || '').toLowerCase() : '') : (ETAPE_NOM[p.etape] || 'Paiement commencé') + ', puis plus rien')}</td><td>${e(p.formule ? nomPass(p.formule) : '—')}</td><td>${e(X().depuis(p.derniere))}</td></tr>`).join('')}</tbody></table></div>
         <p class="sous" style="font-size:12.5px;margin-top:6px">Ces personnes ont une raison de ne pas avoir fini : à elles de vous la donner. Ouvrez leur fiche pour leur écrire.</p>` : '<div class="vide">Aucun abandon sur cette période.</div>'}`
   };
@@ -98,7 +98,7 @@ X().paiementsPlus = async function(zone, recharger){
     <div class="deux-col" style="margin-top:14px">
       <div><div class="libelle">L'argent par jour</div>
         ${X().barres({ titre:'Argent reçu par jour', labels: serie.map(s => X().jourCourt(String(s.jour).slice(0, 10))), jours: serie.map(s => String(s.jour).slice(0, 10)), valeurs: serie.map(s => s.montant), format: v => F(v), marge: 70, couleur:'#E3A82B', vide:'Aucun paiement reçu sur cette période.', largeur: 520 })}</div>
-      <div><div class="libelle">Par moyen et par Pass</div>
+      <div><div class="libelle">Par moyen et par abonnement</div>
         ${(d.par_operateur || []).length ? `<table><tbody>${d.par_operateur.map(x => `<tr><td>${e(X().NOM_OPERATEUR[x.nom] || x.nom)}</td><td class="num">${x.n}</td><td class="num">${F(x.montant)}</td></tr>`).join('')}${d.par_formule.map(x => `<tr><td style="color:var(--craie2)">${e(nomPass(x.nom))}</td><td class="num">${x.n}</td><td class="num">${F(x.montant)}</td></tr>`).join('')}</tbody></table>` : '<div class="vide">Rien à répartir.</div>'}</div>
     </div>
     <div class="libelle" style="margin:18px 0 6px">Où ils s'arrêtent : de la page abonnement jusqu'au paiement confirmé<span>${e(X().etiqPlage())}</span></div>
@@ -112,7 +112,7 @@ X().paiementsPlus = async function(zone, recharger){
   bas.querySelectorAll('[data-ent]').forEach(b => b.onclick = () => {
     const n = +b.dataset.ent, liste = ((ent && ent.personnes) || []).filter(p => p.etape === n);
     const f = X().fenetre(`<h3>S'arrêtent à : ${e(ETAPE_NOM[n] || '')}</h3><p class="sous" style="margin:0 0 10px">${e(X().etiqPlage())}</p><div id="lp"></div><button class="cta creux petit" data-fermer style="margin-top:14px">Fermer</button>`, true);
-    f.querySelector('#lp').innerHTML = X().tableauPersonnes(liste, [['Pass', p => e(p.formule ? nomPass(p.formule) : '—')], ['Dernière action', p => e(X().heureCourte(p.derniere))], ['Remarque', p => p.abandon ? '<span class="etat danger">a abandonné</span>' : (p.statut === 'refuse' ? '<span class="etat danger">refusé</span>' : '')]]);
+    f.querySelector('#lp').innerHTML = X().tableauPersonnes(liste, [['Abonnement', p => e(p.formule ? nomPass(p.formule) : '—')], ['Dernière action', p => e(X().heureCourte(p.derniere))], ['Remarque', p => p.abandon ? '<span class="etat danger">a abandonné</span>' : (p.statut === 'refuse' ? '<span class="etat danger">refusé</span>' : '')]]);
   });
 };
 
@@ -254,7 +254,7 @@ V.compositions = async function(){
 /* ============================================================
    DIFFUSER : un message à tous, ou à un groupe
    ============================================================ */
-const CIBLES = [['tous', 'Tous les candidats'], ['abonnes', 'Abonnés (Pass payant)'], ['essai', 'En essai, sans Pass payant'], ['gratuits', 'Abonnement gratuit'], ['actifs7', 'Venus ces 7 derniers jours'], ['inactifs7', 'Pas venus depuis 7 jours'], ['push', 'Ceux qui ont activé les rappels']];
+const CIBLES = [['tous', 'Tous les candidats'], ['abonnes', 'Abonnés (abonnement payant)'], ['gratuits', 'Abonnement gratuit'], ['actifs7', 'Venus ces 7 derniers jours'], ['inactifs7', 'Pas venus depuis 7 jours'], ['push', 'Ceux qui ont activé les rappels']];
 const MODELES = {
   reprise:   ['Reprenez votre composition', 'Votre composition est restée en pause. Reprenez-la quand vous voulez : votre progression est gardée.'],
   nationale: ['La composition nationale vous attend', 'Vous vous êtes inscrit à la composition nationale. Revenez composer : chaque épreuve compte pour votre classement.'],

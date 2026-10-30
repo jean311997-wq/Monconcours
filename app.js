@@ -1295,12 +1295,12 @@ function fenetreNouveauCode(){
   document.querySelectorAll('.fenetre-evt').forEach(x => x.remove());
   const f = document.createElement('div');
   f.className = 'fenetre-evt nouveau-code';
-  f.setAttribute('role', 'dialog'); f.setAttribute('aria-modal', 'true'); f.setAttribute('aria-label', 'Choisir un nouveau code secret');
+  f.setAttribute('role', 'dialog'); f.setAttribute('aria-modal', 'true'); f.setAttribute('aria-label', 'Choisir un nouveau mot de passe');
   f.innerHTML = `<div class="fe-carte">
     <div class="fe-badge" aria-hidden="true">🔑</div>
     <div class="fe-marque">Mon Concours · Sécurité</div>
     <h2 class="fe-titre">Choisissez un nouveau code</h2>
-    <p class="fe-texte">L'administration a demandé le changement de votre code secret. Choisissez 4 chiffres, écrivez-les deux fois, et gardez-les en tête : ils serviront à votre prochaine connexion.</p>
+    <p class="fe-texte">L'administration a demandé le changement de votre mot de passe. Choisissez 4 chiffres, écrivez-les deux fois, et gardez-les en tête : ils serviront à votre prochaine connexion.</p>
     <div class="fe-alerte" id="nc-err" role="alert" hidden></div>
     <label class="fe-etiq" for="nc-1">Nouveau code (4 chiffres)</label>
     <input class="fe-champ" id="nc-1" type="password" inputmode="numeric" maxlength="4" autocomplete="new-password" placeholder="••••">
@@ -2877,7 +2877,7 @@ function ecranRevisions(){
 
     <button class="lien-mini" style="margin-top:14px" data-go="cours">${ico('lire',13)} Anciens sujets et recherche dans les cours</button>
     ${!S.util.connecte ? `<div class="carte" style="margin-top:12px">
-      <p class="sous">${S.gratuit ? "Sans compte, tu peux lire les questions. Pour voir la correction et garder tes erreurs, crée ton compte : c'est gratuit." : "Sans compte, tu peux lire les questions. Pour voir la correction, crée ton compte gratuit : 10 corrections par jour, sans limite avec l'abonnement."}</p>
+      <p class="sous">${S.gratuit ? "Sans compte, tu peux lire les questions. Pour voir la correction et garder tes erreurs, crée ton compte : c'est gratuit." : "Sans compte, tu peux lire les questions. Pour voir la correction, crée ton compte gratuit : 5 corrections par jour, sans limite avec l'abonnement."}</p>
     </div>` : (!S.abo.actif && !S.gratuit ? `<div class="carte" style="margin-top:12px">
       <p class="sous">Abonnement gratuit : 5 corrections par jour, 15 questions par matière et 3 compositions offertes. L'abonnement payant les rend illimitées.</p>
     </div>` : '')}
@@ -4072,7 +4072,7 @@ function blocPoint2(){
       ${moy !== null ? `<p class="sous" style="margin:0 0 6px">Ta moyenne sur tes trois compositions : <b>${moy}/50</b>.</p>` : ''}
       ${rest !== null && rest > 0 ? `<p class="sous" style="margin:0 0 6px">Il te reste <b>${rest} sujet${rest > 1 ? 's' : ''}</b> à composer.</p>` : ''}
     </div>
-    ${offre ? `<p class="sous" style="margin:0 0 12px"><b>Vous avez atteint vos limites d'essai gratuit.</b> Faites l'abonnement, puis choisissez l'abonnement qui vous convient.</p>
+    ${offre ? `<p class="sous" style="margin:0 0 12px"><b>Vous avez atteint les limites de l'abonnement gratuit.</b> Choisissez l'abonnement qui vous convient pour continuer sans limite.</p>
       <button class="cta" data-go="abonnement">Faire l'abonnement</button>
       <button class="lien-mini" style="margin-top:8px" data-proche="mensuelle">${ico('partage',13)} Un proche paie pour moi</button>` : ''}
     <p class="sous" style="margin:12px 0 0;font-size:12.5px">La composition nationale reste gratuite.</p>`;
@@ -4689,7 +4689,7 @@ function blocPoint3(seuil, n, admis){
   return `
     ${manque > 0 ? `<div class="carte" style="margin-top:14px"><p class="sous" style="margin:0"><b>Il te manque ${manque} point${manque > 1 ? 's' : ''} pour le seuil.</b> Ta feuille détaillée te dit quoi réviser en premier.</p></div>` : ''}
     ${offre ? `<div class="carte" style="margin-top:14px;text-align:left">
-      <p class="sous" style="margin:0 0 10px"><b>Vous avez atteint vos limites d'essai gratuit.</b> Faites l'abonnement pour débloquer la feuille détaillée : ${mats.length ? E(mats.join(' et ')) : 'tes matières faibles'}, question par question, avec l'explication de chaque faute.</p>
+      <p class="sous" style="margin:0 0 10px"><b>Vous avez atteint les limites de l'abonnement gratuit.</b> Faites l'abonnement pour débloquer la feuille détaillée : ${mats.length ? E(mats.join(' et ')) : 'tes matières faibles'}, question par question, avec l'explication de chaque faute.</p>
       <button class="cta" data-go="abonnement">Faire l'abonnement</button>
       <button class="cta creux" style="margin-top:8px" data-copie-plus-tard="1">Plus tard</button>
     </div>` : (bloquee ? `<p class="sous" style="margin-top:14px;font-size:12.5px">La feuille détaillée fait partie de l'abonnement. <button class="lien-mini" data-go="abonnement">Voir mon abonnement</button></p>` : '')}`;
