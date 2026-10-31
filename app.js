@@ -5411,9 +5411,10 @@ function carteEpreuve(){
       ? `<div class="cn-inscrit">${ico('coche',15)} Inscrit · rappel 20 minutes avant le début</div>`
       : `<button class="cta" style="margin-top:12px" data-inscrire-nat="${E(ep.id)}">M'inscrire à la composition</button>`;
   } else if(ep.etat === 'en_cours'){
+    const finis = Math.max(0, (ep.participants || 0) - (ep.composent || 0));
     corps = `<p class="cn-quand"><span class="cn-direct"><i></i>En cours</span> fin à ${heureH(ep.fin_le)}</p>
       ${rebours(ep.fin_le)}
-      <p class="sous cn-faits">${faits}${ep.composent > 0 ? ` · <span class="num">${ep.composent}</span> en salle` : ''}</p>`;
+      <p class="sous cn-faits">${faits}${ep.composent > 0 ? ` · <span class="num">${ep.composent}</span> en salle` : ''}${finis > 0 ? ` · <span class="num">${finis}</span> ${finis > 1 ? 'ont' : 'a'} déjà fini` : ''}</p>`;
     bouton = moi && moi.terminee
       ? `<p class="sous" style="margin-top:8px">Copie remise. Les résultats sont publiés à ${heureH(ep.fin_le)}.</p>`
       : `<button class="cta" style="margin-top:12px" data-rejoindre="${E(ep.id)}">Entrer en salle de composition</button>`;
