@@ -1395,7 +1395,52 @@ function installerAppli(){
   if(CONTACT.playStore) return window.open(CONTACT.playStore, '_blank', 'noopener');
   if(S.installer){ S.installer.prompt(); S.installer.userChoice.then(() => { S.installer = null; }); return; }
   if(estInstallee()) return toast('L\'application est déjà installée sur ce téléphone.');
+  /* Pas de fenêtre d'installation : on est sans doute dans WhatsApp ou Facebook, ou sur un iPhone.
+     Au lieu de ne rien faire, on guide la personne (Android : vers Chrome ; iPhone : Safari). */
+  if(/iPhone|iPad|iPod/i.test(navigator.userAgent)) return fenetreInstallerPas('iphone');
+  if(/Android/i.test(navigator.userAgent)) return fenetreInstallerPas(new URLSearchParams(location.search).get('via') === 'chrome' ? 'manuel' : 'chrome');
   toast('Dans Chrome : touchez le menu ⋮ en haut à droite, puis « Installer l\'application ».', 7000);
+}
+function fenetreInstallerPas(type){
+  const v = document.getElementById('voile'); if(!v) return;
+  S.modal = 'rappel'; v.hidden = false;
+  const fermer = '<button class="lien" style="display:block;margin:12px auto 0" data-rappel-fermer="1">Fermer</button>';
+  const T = {
+    chrome: ['Ouvrez dans Chrome', 'L\'installation ne se fait pas depuis cette fenêtre. Touchez Continuer : le site s\'ouvre dans Chrome, et l\'installation s\'y fait.', '<button class="cta" data-ouvrir-chrome="1">Continuer</button>'],
+    manuel: ['Installer depuis le menu', 'Touchez les trois points ⋮ en haut à droite, puis « Installer l\'application » ou « Ajouter à l\'écran d\'accueil ». Dans WhatsApp ou Facebook, choisissez d\'abord « Ouvrir dans le navigateur ».', ''],
+    iphone: ['Installer sur iPhone', 'Ouvrez ce site dans Safari. Touchez le bouton Partager (le carré avec une flèche), puis « Sur l\'écran d\'accueil ».', '']
+  }[type] || [];
+  v.innerHTML = `<div class="panneau pop-nat" role="dialog" aria-modal="true" aria-labelledby="pr-titre">
+    <button class="pn-x" data-rappel-fermer="1" aria-label="Fermer">×</button>
+    <h3 id="pr-titre">${T[0]}</h3><p class="intro">${T[1]}</p>${T[2]}${fermer}</div>`;
+  pister('INSTALL_GUIDE_SHOWN', { type });
+}
+/* « Continuer » : on envoie la page dans Chrome, sur l'écran d'installation. Si le téléphone refuse, on montre le menu à la main. */
+function ouvrirDansChrome(){
+  pister('INSTALL_OPEN_CHROME');
+  const u = new URL(location.href);
+  u.searchParams.set('installer', '1'); u.searchParams.set('via', 'chrome');
+  const secours = u.toString();
+  location.href = 'intent://' + u.host + u.pathname + u.search + '#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=' + encodeURIComponent(secours) + ';end';
+  setTimeout(() => { if(!document.hidden && S.modal === 'rappel') fenetreInstallerPas('manuel'); }, 2000);
+}
+/* Première ouverture de l'application installée : un seul écran pour les notifications, une fois. */
+function inviterNotifsPremiereOuverture(essai){
+  if(!estInstallee() || lireReglages().notifsOuverture || !pushPossible() || Notification.permission !== 'default') return;
+  const v = document.getElementById('voile');
+  if(!S.util.connecte || S.rappel || S.ecran === 'compte' || S.modal || !v || !v.hidden || enComposition() || document.getElementById('invitation')){
+    if((essai || 0) < 6) setTimeout(() => inviterNotifsPremiereOuverture((essai || 0) + 1), 6000);
+    return;
+  }
+  ecrireReglage('notifsOuverture', true);
+  S.modal = 'rappel'; v.hidden = false;
+  v.innerHTML = `<div class="panneau pop-nat" role="dialog" aria-modal="true" aria-labelledby="pr-titre">
+    <button class="pn-x" data-rappel-fermer="1" aria-label="Fermer">×</button>
+    <h3 id="pr-titre">Activer les notifications</h3>
+    <p class="intro">Recevez vos rappels de révision et l'annonce des compositions, même quand l'application est fermée.</p>
+    <button class="cta" data-notifs-lien="1">Activer les notifications</button>
+    <button class="lien" style="display:block;margin:12px auto 0" data-rappel-fermer="1">Plus tard</button></div>`;
+  pister('INSTALL_FIRST_OPEN_NOTIFS_SHOWN');
 }
 
 async function marquerNotifsLues(id){
@@ -6463,7 +6508,8 @@ document.addEventListener('click', ev => {
   if(d.rappelActiver) return activerRappel(d.rappelActiver, 0);
   if(d.rappelRetirer) return retirerRappel();
   if(d.installerLien){ pister('INSTALL_LINK_CLICKED'); return installerAppli(); }
-  if(d.notifsLien){ pister('INSTALL_LINK_NOTIFS'); return activerRappel(18, 0); }
+  if(d.ouvrirChrome) return ouvrirDansChrome();
+  if(d.notifsLien){ pister('INSTALL_LINK_NOTIFS'); fermerFenetreRappel(); return activerRappel(18, 0); }
   if(d.reagir) return reagir(d.reagir);
   if(d.partageQuestion){
     const q = ((S.fil && S.fil.liste) || []).find(x => x.id === d.partageQuestion);
@@ -8440,6 +8486,7 @@ function invitationNotifsApresInscription(){
 })();
 
 ouvrirLienDirect();
+setTimeout(inviterNotifsPremiereOuverture, 9000);
 rendre();
 
 /* Deux parcours en alternance, par blocs de 20 nouveaux visiteurs (le serveur compte) */
