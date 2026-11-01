@@ -5293,6 +5293,8 @@ async function chargerJournee(){
     if(!S.details) chargerDetails();
   }catch(e){}
 }
+/* Le candidat doit d'abord poser les yeux sur l'accueil : la fenêtre de la nationale vient après 12 secondes. */
+const T_OUVERTURE = Date.now(), DELAI_NATIONALE = 12000, DELAI_BOUTON_CANAL = 40000;
 async function chargerEpreuve(){
   if(!base) return;
   try{
@@ -5301,7 +5303,7 @@ async function chargerEpreuve(){
     S.epreuve = data || null;
     memoEcrire('epreuve', S.epreuve, true);
     if(change && ['aujourdhui','gagnants'].includes(S.ecran)) rendre();
-    setTimeout(proposerNationale, 900);
+    setTimeout(proposerNationale, Math.max(900, DELAI_NATIONALE - (Date.now() - T_OUVERTURE)));
   }catch(e){}
   try{
     const { data } = await base.rpc('derniere_nationale');
@@ -7812,7 +7814,7 @@ function initialesCompte(){
    plus du tout une fois la chaîne rejointe */
 function majBoutonCanal(){
   let r = {}; try{ r = lireReglages() || {}; }catch(e){}
-  const veut = S.ecran === 'aujourdhui' && !!CONTACT.canal && !r['inv_whatsapp_fait'] && !S.modal && !enComposition();
+  const veut = S.ecran === 'aujourdhui' && !!CONTACT.canal && !r['inv_whatsapp_fait'] && !S.modal && !enComposition() && !document.getElementById('invitation') && (Date.now() - T_OUVERTURE) > DELAI_BOUTON_CANAL;
   let b = document.getElementById('fab-canal');
   if(!veut){ if(b) b.remove(); return; }
   if(!b){
@@ -7825,6 +7827,7 @@ function majBoutonCanal(){
   const nav = document.getElementById('nav');
   b.style.setProperty('--nav-h', ((nav && nav.offsetHeight) || 0) + 'px');
 }
+setInterval(() => { if(!document.hidden) majBoutonCanal(); }, 4000);
 function apptete(){
   majBoutonCanal();
   const t = document.getElementById('apptete');
@@ -8475,11 +8478,11 @@ function planifierInvitations(){
     fenetreInvitation(Object.assign({ cle }, config));
   }, delai);
   /* installation : vers 1 minute, sans bouton « Plus tard » ; si le téléphone refuse, on redemande après 1 heure */
-  essayer(60000, 'install', () => !estInstallee() && !CONTACT.playStore,
+  essayer(180000, 'install', () => !estInstallee() && !CONTACT.playStore,
     { icone:'telecharger', titre:'Installer Mon Concours', texte:'Installez l\'application sur votre téléphone : elle s\'ouvre comme une application, même avec peu de réseau.',
       oui:'Installer l\'application', obligatoire:true, sansFait:true, action: () => installerAppli() }, 3600000);
   /* communauté WhatsApp : 2 minutes, 10 minutes, 1 heure ; plus jamais une fois rejointe */
-  [120000, 600000, 3600000].forEach((d, i) => essayer(d, 'whatsapp', () => !!CONTACT.canal,
+  [300000, 900000, 3600000].forEach((d, i) => essayer(d, 'whatsapp', () => !!CONTACT.canal,
     { icone:'whatsapp', titre:TEXTES_WHATSAPP[i].titre, texte:TEXTES_WHATSAPP[i].texte, oui:'Rejoindre la communauté', rappel:i,
       action: () => { window.open(CONTACT.canal, '_blank', 'noopener'); pister('WHATSAPP_JOINED_CLICK', {}); } }, 120000));
   /* notifications : mêmes moments, décalés d'une minute pour ne pas empiler deux fenêtres ; s'arrête dès qu'elles sont acceptées */
@@ -8488,7 +8491,7 @@ function planifierInvitations(){
     'Vous n\'avez pas encore autorisé les notifications. Sans elles, vous ne serez pas prévenu des compositions ni de vos rappels.',
     'Dernier rappel : autorisez les notifications pour recevoir vos rappels et ne pas rater la composition nationale.'
   ];
-  [180000, 660000, 3660000].forEach((d, i) => {
+  [420000, 1200000, 3660000].forEach((d, i) => {
     setTimeout(() => { if(S.util.connecte && !S.rappel) chargerRappel(); }, d - 15000);
     essayer(d, 'notifs', notifsAEncourager,
       { icone:'cloche', titre:i ? 'Notifications toujours coupées' : 'Être prévenu à temps', texte:TEXTES_NOTIFS[i], oui:'Autoriser les notifications', rappel:i, sansFait:true,
