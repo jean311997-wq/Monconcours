@@ -2271,7 +2271,18 @@ function blocFinEssai(){
    y restent jusqu'au lendemain. Le reste de l'écran ne change pas, et chaque bloc retrouve sa place ensuite. */
 /* le jour se compte à l'heure de Ouagadougou (= UTC), comme partout ailleurs dans la composition nationale */
 const memeJourQue = iso => !!iso && new Date(iso).toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10);
+/* Un nouveau venu (sans compte, ou première visite il y a moins de 3 jours) voit toujours l'actualité en premier ;
+   la composition ne passe en haut que pour les habitués. */
+function nouveauVenu(){
+  if(!S.util.connecte) return true;
+  try{
+    const r = lireReglages();
+    if(!r.premiere_visite){ ecrireReglage('premiere_visite', Date.now()); return true; }
+    return Date.now() - r.premiere_visite < 3 * 86400000;
+  }catch(e){ return false; }
+}
 function nationaleEnHaut(){
+  if(nouveauVenu()) return false;
   const ep = S.epreuve;
   if(ep && (ep.etat === 'en_cours' || (ep.etat === 'a_venir' && memeJourQue(ep.debut_le)) || (ep.etat === 'terminee' && memeJourQue(ep.fin_le)))) return true;
   const d = S.derniereNat;
