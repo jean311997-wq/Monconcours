@@ -2301,7 +2301,6 @@ function ecranAujourdhui(){
     ${nationaleEnHaut() ? `<section class="nat-jour" aria-label="Composition nationale du jour">${carteEpreuve()}${blocDerniereNationale()}</section>` : ''}
     <div class="tete-jour">
       <span class="eyebrow">${dateDuJour()}</span>
-      ${nationaleEnHaut() ? '' : compteARebours()}
     </div>
     ${!navigator.onLine ? carteHorsLigne() : ''}
 
@@ -7832,7 +7831,7 @@ function majBoutonCanal(){
     b = document.createElement('button');
     b.id = 'fab-canal'; b.type = 'button'; b.className = 'fab-canal'; b.dataset.canalTete = '1';
     b.setAttribute('aria-label', 'Rejoindre la chaîne WhatsApp de Mon Concours');
-    b.innerHTML = logoReseau('whatsapp') + '<span>Chaîne WhatsApp</span>';
+    b.innerHTML = logoReseau('whatsapp');
     document.body.appendChild(b);
   }
   const nav = document.getElementById('nav');
