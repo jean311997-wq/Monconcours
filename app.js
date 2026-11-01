@@ -6509,6 +6509,12 @@ document.addEventListener('click', ev => {
   if(d.rappelActiver) return activerRappel(d.rappelActiver, 0);
   if(d.rappelRetirer) return retirerRappel();
   if(d.installerLien){ pister('INSTALL_LINK_CLICKED'); return installerAppli(); }
+  if(d.canalTete){
+    pister('WHATSAPP_JOINED_CLICK', { source:'entete' });
+    ecrireReglage('inv_whatsapp_fait', true);
+    window.open(CONTACT.canal, '_blank', 'noopener');
+    return apptete();
+  }
   if(d.ouvrirChrome) return ouvrirDansChrome();
   if(d.notifsLien){ pister('INSTALL_LINK_NOTIFS'); fermerFenetreRappel(); return activerRappel(18, 0); }
   if(d.reagir) return reagir(d.reagir);
@@ -7803,10 +7809,15 @@ function apptete(){
     inscription:'', connexion:'', resultat:'étape 3 sur 3', actualite:'ce matin',
     pourtoi:'pour toi', qdj:'question du jour', gagnants:'classement', notion:'notion du jour', defi:'défi', top:'top 10', parcours:'mon parcours'}[S.ecran] || '';
   const nonLues = S.notifications.filter(n => !n.lue).length;
+  /* bouton WhatsApp : sur l'accueil seulement, et plus du tout une fois la chaîne rejointe */
+  let reglagesTete = {}; try{ reglagesTete = lireReglages() || {}; }catch(e){}
+  const avecWa = S.ecran === 'aujourdhui' && !!CONTACT.canal && !reglagesTete['inv_whatsapp_fait'];
+  t.classList.toggle('tete-wa', avecWa);
   t.innerHTML = `${logoSvg(24)}<span class="mot">MON <i>CONCOURS</i></span>
     <span class="droite">${droite}</span>
     <button class="bouton-tete cloche" data-notifs="1" aria-label="Notifications${nonLues?', ' + nonLues + ' non lues':''}">
       ${ico('cloche',17)}${nonLues ? `<i class="pastille-cloche">${nonLues > 9 ? '9+' : nonLues}</i>` : ''}</button>
+    ${avecWa ? `<button class="bouton-tete tete-canal" data-canal-tete="1" aria-label="Rejoindre la chaîne WhatsApp de Mon Concours" title="Chaîne WhatsApp">${logoReseau('whatsapp')}</button>` : ''}
     <button class="bouton-tete ${MUSIQUE.actif?'actif':''}" data-musique="1"
       aria-pressed="${MUSIQUE.actif}"
       aria-label="${MUSIQUE.actif?'Arrêter la musique':'Mettre une musique douce'}">
