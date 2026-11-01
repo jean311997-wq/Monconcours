@@ -872,7 +872,7 @@ function ecranResultat(){
 
 /* --- parcours C : le plan de rattrapage et les prix, juste après la feuille corrigée --- */
 function blocPlanPaiement(faibles){
-  if(S.gratuit || estAbonne()) return '';
+  if(S.gratuit || estAbonnePaye()) return '';
   const cible = faibles.length ? faibles.slice(0,2).map(x => E(x)).join(' et ') : 'les matières du concours';
   const f = FORMULES, an = f.annuelle;
   const ligne = (k, nom, sous) => `<div class="carte" style="margin-bottom:10px">
@@ -1355,6 +1355,11 @@ function ouvrirNotif(n){
   }
   if(genre === 'compte') return aller('compte');
   if(genre === 'abonnement'){ chargerPromo().then(() => aller('abonnement')); return; }
+  if(genre === 'conseiller'){
+    pister('PAY_ADVISOR_WHATSAPP', { point:'relance', formule:null });
+    window.open('https://wa.me/226' + numeroConseiller() + '?text=' + encodeURIComponent(messageConseiller(S.choixFormule || 'mensuelle')), '_blank', 'noopener');
+    return aller('abonnement');
+  }
   if(genre === 'fautes') return lancerFautes();
   if(genre === 'reprendre') return aller(repriseCible(id) || 'aujourdhui');
   if(genre === 'parcours') return aller('parcours');
@@ -2250,6 +2255,7 @@ function blocPromo(){
   </div>`;
 }
 function blocFinEssai(){
+  return '';   /* l'essai de 3 jours passe en silence : les limites apparaissent d'elles-mêmes ensuite */
   const a = S.abo || {};
   if(S.gratuit || !S.util.connecte || !a.actif || a.formule !== 'essai' || a.jours_restants > 2) return '';
   const reste = a.jours_restants <= 0 ? 'se termine aujourd\'hui' : a.jours_restants === 1 ? 'se termine demain' : 'se termine dans 2 jours';
@@ -2573,6 +2579,8 @@ const OPERATEURS = {
 };
 const numPaie = op => (CONTACT.paiement && CONTACT.paiement[op]) || CONTACT.adminTel;
 const estAbonne = () => !!(S.abo && S.abo.actif);
+/* abonnement payé : pendant l'essai de 3 jours, les offres restent visibles (sans rien bloquer) */
+const estAbonnePaye = () => estAbonne() && S.abo.formule !== 'essai';
 /* Le candidat peut recevoir plusieurs propositions d'abonnement ; seul « À demain » les suspend 3 jours. */
 function peutProposer(point){
   if(S.gratuit || estAbonne()) return false;
@@ -2804,6 +2812,7 @@ function ecranPaiement(){
         <button class="mini" style="margin-top:8px" data-copier-num="${E(numPaie(op))}">Copier le numéro</button>
       </div>
       <button class="cta" style="margin-top:18px" data-paiefin="1">J'ai payé<small>Je vais envoyer ma capture</small></button>
+      <a class="cta creux" style="margin-top:10px;display:block;text-decoration:none" href="https://wa.me/226${numeroConseiller()}?text=${encodeURIComponent(messageConseiller(f.cle))}" target="_blank" rel="noopener" data-conseiller-wa="paiement-etape1" data-conseiller-formule="${E(f.cle)}">${logoReseau('whatsapp')} Un souci pour envoyer l'argent ?<small>Un conseiller vous guide sur WhatsApp</small></a>
       <button class="lien" data-paieannul="1">Annuler</button>
       ${blocAlternatives(f.cle)}
     </div>`;
@@ -5923,8 +5932,9 @@ function ecranGagnants(){
     ${m && maCompo ? `<button class="cta creux" style="margin-top:9px" data-correction-nat="${E(maCompo)}">${ico('lire',16)} Voir ma correction</button>` : ''}
     ${!m && S.epreuve && S.epreuve.id !== c.id && S.epreuve.etat === 'a_venir' && !S.epreuve.inscrit ? `<div class="carte" style="margin-top:12px;text-align:left"><p class="sous" style="margin:0 0 10px">Prochaine composition nationale : ${E(dateLongue(S.epreuve.debut_le))} à ${heureH(S.epreuve.debut_le)}. Venez composer et voir votre nom dans ce classement.</p>
       <button class="cta" data-inscrire-nat="${E(S.epreuve.id)}">M'inscrire à la composition</button></div>` : ''}
-    ${m && peutProposer(4) ? `<div class="carte" style="margin-top:12px;text-align:left"><p class="sous" style="margin:0 0 10px">Pour préparer la prochaine nationale, faites l'abonnement.</p>
-      <button class="cta" data-go="abonnement">Faire l'abonnement</button></div>` : ''}
+    ${m && peutProposer(4) ? `<div class="carte" style="margin-top:12px;text-align:left"><p class="sous" style="margin:0 0 10px">${m.rang ? 'Vous êtes ' + r(Number(m.rang)) + ' sur ' + E(c.participants) + '. ' : ''}Pour monter à la prochaine nationale, entraînez-vous sans limite : abonnement Mois, ${E(FORMULES.mensuelle.prix)}, soit ${E(FORMULES.mensuelle.jour)}.</p>
+      <button class="cta" data-pass="mensuelle">Je m'abonne · ${E(FORMULES.mensuelle.prix)}</button>
+      <button class="cta creux" style="margin-top:8px" data-go="abonnement">Voir les abonnements</button></div>` : ''}
     ${podium.length ? `<div class="felicitations">
       <div class="eyebrow" style="color:var(--or)">Félicitations</div>
       <p>Bravo à <b>${E(podium[0].nom)}</b>, major de la composition avec <b class="num">${podium[0].score}/${podium[0].sur}</b>${c.recompense ? `. ${E(c.recompense)} lui revient` : ''}.${podium.length > 1 ? ' Bravo aussi à ' + podium.slice(1).map(l => '<b>' + E(l.nom) + '</b> (' + l.rang + 'e)').join(' et ') + '.' : ''}</p>
@@ -6431,7 +6441,7 @@ window.addEventListener('popstate', ev => {
 /* Les nouveaux boutons ont leur propre écouteur : le grand aiguillage
    plus bas reste tel quel. */
 document.addEventListener('click', ev => {
-  const t = ev.target.closest('[data-abo-matiere],[data-corr-nat],[data-fin-essai-non],[data-fin-essai-oui],[data-class-fermer],[data-class-voir],[data-quitter],[data-quitter-oui],[data-quitter-non],[data-son],[data-correction-differee],[data-gagnants],[data-pourtoi],[data-fil-rep],[data-fil-suiv],[data-qdj-rep],[data-qp-rep],[data-signaler],[data-signal-envoi],[data-objectif],[data-rejoindre],[data-rappel-activer],[data-rappel-retirer],[data-reagir],[data-partage-question],[data-partage-qdj],[data-partage-rang],[data-carte-resultat],[data-sortir-reprise],[data-inscrire-nat],[data-correction-nat],[data-nat-oui],[data-nat-non],[data-resultats-pdf],[data-telecharger-mat],[data-rappel-heure],[data-rappel-inter],[data-rappel-oui],[data-rappel-autre],[data-rappel-plus-tard],[data-rappel-fermer],[data-rappel-masquer],[data-rappel-wa],[data-installe-d],[data-installer-lien],[data-notifs-lien],[data-notifs-d],[data-paiement-plus-tard]');
+  const t = ev.target.closest('[data-abo-matiere],[data-corr-nat],[data-fin-essai-non],[data-fin-essai-oui],[data-class-fermer],[data-class-voir],[data-quitter],[data-quitter-oui],[data-quitter-non],[data-son],[data-correction-differee],[data-gagnants],[data-pourtoi],[data-fil-rep],[data-fil-suiv],[data-qdj-rep],[data-qp-rep],[data-signaler],[data-signal-envoi],[data-objectif],[data-rejoindre],[data-rappel-activer],[data-rappel-retirer],[data-reagir],[data-partage-question],[data-partage-qdj],[data-partage-rang],[data-carte-resultat],[data-sortir-reprise],[data-inscrire-nat],[data-correction-nat],[data-nat-oui],[data-nat-non],[data-resultats-pdf],[data-telecharger-mat],[data-rappel-heure],[data-rappel-inter],[data-rappel-oui],[data-rappel-autre],[data-rappel-plus-tard],[data-rappel-fermer],[data-rappel-masquer],[data-rappel-wa],[data-installe-d],[data-installer-lien],[data-notifs-lien],[data-notifs-d],[data-paiement-plus-tard],[data-ouvrir-chrome],[data-canal-tete]');
   if(!t) return;
   const d = t.dataset;
   try{ const cle = Object.keys(d)[0]; pister('BUTTON_CLICKED', { valeur: String(d[cle]).slice(0,40) }, cle); }catch(e){}
