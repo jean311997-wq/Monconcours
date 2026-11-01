@@ -677,13 +677,13 @@ body{background:var(--encre);padding:0;overflow:hidden}
 /* très petits écrans (320 px) : l'en-tête d'un visiteur (4 boutons) doit tenir sans déborder */
 @media(max-width:360px){.apptete{padding:8px;gap:4px}.apptete .mot{font-size:13px;margin-left:2px}}
 @media(max-width:340px){.apptete .mot{font-size:12px}.bouton-tete{min-width:36px;padding:6px 7px}}
-/* bouton WhatsApp de l'en-tête : pulsation douce quatre fois, puis fixe */
-.bouton-tete.tete-canal{padding:0;width:40px;border-color:#25D366;background:rgba(37,211,102,.12);animation:pulseCanal 1.6s ease-in-out 4}
-.bouton-tete.tete-canal svg{width:22px;height:22px}
-@keyframes pulseCanal{0%,100%{box-shadow:0 0 0 0 rgba(37,211,102,.55)}50%{box-shadow:0 0 0 7px rgba(37,211,102,0)}}
-@media(prefers-reduced-motion:reduce){.bouton-tete.tete-canal{animation:none}}
-/* avec le bouton WhatsApp, l'en-tête reste sur une ligne à 360 px */
-@media(max-width:400px){.apptete.tete-wa{padding:8px 6px;gap:3px}.apptete.tete-wa .bouton-tete{min-width:36px;padding:6px 7px}.apptete.tete-wa .bouton-tete.tete-canal{width:36px;padding:0}.apptete.tete-wa .mot{font-size:12px;margin-left:1px}}
+/* bouton flottant WhatsApp : en bas à droite, au-dessus de la barre du bas ; pulsation 4 fois, puis fixe */
+.fab-canal{position:fixed;right:14px;bottom:calc(var(--nav-h,0px) + env(safe-area-inset-bottom,0px) + 14px);z-index:40;display:flex;align-items:center;gap:8px;
+  height:48px;padding:0 16px 0 12px;border-radius:24px;background:#25D366;color:#06371c;font-weight:700;font-size:13px;box-shadow:0 6px 18px rgba(0,0,0,.35);animation:pulseFab 1.6s ease-in-out 4}
+.fab-canal svg{width:24px;height:24px;flex:none}
+.fab-canal svg *{fill:currentColor}
+@keyframes pulseFab{0%,100%{box-shadow:0 6px 18px rgba(0,0,0,.35),0 0 0 0 rgba(37,211,102,.6)}50%{box-shadow:0 6px 18px rgba(0,0,0,.35),0 0 0 10px rgba(37,211,102,0)}}
+@media(prefers-reduced-motion:reduce){.fab-canal{animation:none}}
 .logo{flex:none;display:block}
 
 /* ---------- SURCOUCHE ---------- */

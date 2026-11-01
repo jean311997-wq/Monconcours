@@ -6513,7 +6513,7 @@ document.addEventListener('click', ev => {
     pister('WHATSAPP_JOINED_CLICK', { source:'entete' });
     ecrireReglage('inv_whatsapp_fait', true);
     window.open(CONTACT.canal, '_blank', 'noopener');
-    return apptete();
+    return majBoutonCanal();
   }
   if(d.ouvrirChrome) return ouvrirDansChrome();
   if(d.notifsLien){ pister('INSTALL_LINK_NOTIFS'); fermerFenetreRappel(); return activerRappel(18, 0); }
@@ -7798,7 +7798,25 @@ function initialesCompte(){
   const m = String((S.util && S.util.nom) || '').trim().split(/\s+/).filter(Boolean);
   return ((m[0] || '?')[0] + (m.length > 1 ? m[m.length - 1][0] : '')).toUpperCase();
 }
+/* bouton flottant WhatsApp : en bas à droite, au-dessus de la barre du bas, sur l'accueil seulement ;
+   plus du tout une fois la chaîne rejointe */
+function majBoutonCanal(){
+  let r = {}; try{ r = lireReglages() || {}; }catch(e){}
+  const veut = S.ecran === 'aujourdhui' && !!CONTACT.canal && !r['inv_whatsapp_fait'] && !S.modal && !enComposition();
+  let b = document.getElementById('fab-canal');
+  if(!veut){ if(b) b.remove(); return; }
+  if(!b){
+    b = document.createElement('button');
+    b.id = 'fab-canal'; b.type = 'button'; b.className = 'fab-canal'; b.dataset.canalTete = '1';
+    b.setAttribute('aria-label', 'Rejoindre la chaîne WhatsApp de Mon Concours');
+    b.innerHTML = logoReseau('whatsapp') + '<span>Chaîne WhatsApp</span>';
+    document.body.appendChild(b);
+  }
+  const nav = document.getElementById('nav');
+  b.style.setProperty('--nav-h', ((nav && nav.offsetHeight) || 0) + 'px');
+}
 function apptete(){
+  majBoutonCanal();
   const t = document.getElementById('apptete');
   if(SANS_TETE.includes(S.ecran)){ t.style.display='none'; return; }
   t.style.display='flex';
@@ -7809,15 +7827,10 @@ function apptete(){
     inscription:'', connexion:'', resultat:'étape 3 sur 3', actualite:'ce matin',
     pourtoi:'pour toi', qdj:'question du jour', gagnants:'classement', notion:'notion du jour', defi:'défi', top:'top 10', parcours:'mon parcours'}[S.ecran] || '';
   const nonLues = S.notifications.filter(n => !n.lue).length;
-  /* bouton WhatsApp : sur l'accueil seulement, et plus du tout une fois la chaîne rejointe */
-  let reglagesTete = {}; try{ reglagesTete = lireReglages() || {}; }catch(e){}
-  const avecWa = S.ecran === 'aujourdhui' && !!CONTACT.canal && !reglagesTete['inv_whatsapp_fait'];
-  t.classList.toggle('tete-wa', avecWa);
   t.innerHTML = `${logoSvg(24)}<span class="mot">MON <i>CONCOURS</i></span>
     <span class="droite">${droite}</span>
     <button class="bouton-tete cloche" data-notifs="1" aria-label="Notifications${nonLues?', ' + nonLues + ' non lues':''}">
       ${ico('cloche',17)}${nonLues ? `<i class="pastille-cloche">${nonLues > 9 ? '9+' : nonLues}</i>` : ''}</button>
-    ${avecWa ? `<button class="bouton-tete tete-canal" data-canal-tete="1" aria-label="Rejoindre la chaîne WhatsApp de Mon Concours" title="Chaîne WhatsApp">${logoReseau('whatsapp')}</button>` : ''}
     <button class="bouton-tete ${MUSIQUE.actif?'actif':''}" data-musique="1"
       aria-pressed="${MUSIQUE.actif}"
       aria-label="${MUSIQUE.actif?'Arrêter la musique':'Mettre une musique douce'}">
