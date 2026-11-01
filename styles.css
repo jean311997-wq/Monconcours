@@ -1987,3 +1987,13 @@ body.sans-anim .stat-comm .sc-new.jamais{animation:none}
 .nat-jour .carte.nationale{margin-top:0}
 .nat-jour .derniere-nat{margin-top:12px}
 .tag-neuf{margin-left:0}
+
+.fenetre-evt.guide-compo .fe-carte{max-height:92vh;overflow:auto;text-align:left}
+.fenetre-evt.guide-compo .fe-titre{font-size:22px;margin:4px 0 14px}
+.gc-etapes{list-style:none;margin:0 0 14px;padding:0;counter-reset:gc}
+.gc-etapes li{counter-increment:gc;position:relative;padding:0 0 12px 38px;display:flex;flex-direction:column;gap:2px}
+.gc-etapes li::before{content:counter(gc);position:absolute;left:0;top:0;width:26px;height:26px;border-radius:50%;background:var(--cachet,#13805A);color:#fff;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center}
+.gc-etapes b{font-size:15px}
+.gc-etapes span,.gc-retard span{font-size:13.5px;line-height:1.5;color:var(--craie2)}
+.gc-retard{display:flex;flex-direction:column;gap:3px;padding:12px;border-radius:12px;border:1px solid var(--trait);margin-bottom:16px}
+.gc-retard b{font-size:14px}

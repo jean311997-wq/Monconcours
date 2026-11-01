@@ -1262,6 +1262,24 @@ function fenetreAnnonce(n){
   f.setAttribute('aria-label', n.titre || 'Message de Mon Concours');
   const [genre] = String(n.lien || '').split(':');
   const suite = { abonnement:'Voir mon abonnement', compte:'Ouvrir mon compte', parcours:'Ouvrir mon parcours', offre:'Voir l\'offre', communaute:'Entrer dans la communauté' }[genre];
+  const guide = String(n.lien || '') === 'annonce:guide-compo';
+  if(guide){
+    f.classList.add('guide-compo');
+    f.innerHTML = `<div class="fe-carte">
+      <div class="fe-marque" style="color:var(--erreur,#C2392E)">IMPORTANT</div>
+      <h2 class="fe-titre">Comment se passe une composition ?</h2>
+      <ol class="gc-etapes">
+        <li><b>Je m'inscris.</b><span>C'est gratuit. Sans inscription, vous ne pouvez pas entrer.</span></li>
+        <li><b>Je viens à l'heure.</b><span>La composition commence à 18 h, heure du Burkina. Tous les candidats composent en même temps, sur le même sujet.</span></li>
+        <li><b>J'entre dans la salle de composition.</b><span>À 18 h, le bouton « Entrer » apparaît. Le temps de la composition est de 30 minutes.</span></li>
+        <li><b>Je compose.</b><span>Je m'assois, je noircis ma feuille de réponses et je valide avant la fin du temps.</span></li>
+        <li><b>Je regarde mon classement.</b><span>Il paraît juste après la composition, avec votre rang parmi tous les candidats.</span></li>
+        <li><b>Je regarde mes erreurs et je m'améliore.</b><span>Chaque erreur est corrigée et expliquée, pour mieux réussir la prochaine fois.</span></li>
+      </ol>
+      <div class="gc-retard"><b>Je suis en retard, puis-je encore composer ?</b><span>Oui. Vous pouvez entrer tant que l'heure de la composition n'est pas terminée. Le temps qui vous reste est celui qui reste jusqu'à la fin.</span></div>
+      <button class="cta" data-fe="fermer">J'ai compris</button>
+    </div>`;
+  } else
   f.innerHTML = `<div class="fe-carte">
     <div class="fe-badge" aria-hidden="true">${reponse ? '✉' : '📣'}</div>
     <div class="fe-marque">Mon Concours · ${reponse ? 'Réponse de l\'administration' : 'Message de l\'équipe'}</div>
@@ -1279,12 +1297,12 @@ function fenetreAnnonce(n){
   f.addEventListener('click', e => {
     const b = e.target.closest('[data-fe]');
     if(b) fermer(b.dataset.fe === 'suite');
-    else if(e.target === f) fermer(false);
+    else if(e.target === f && !guide) fermer(false);
   });
-  f.addEventListener('keydown', e => { if(e.key === 'Escape') fermer(false); });
+  f.addEventListener('keydown', e => { if(e.key === 'Escape' && !guide) fermer(false); });
   document.body.appendChild(f);
   setTimeout(() => { f.classList.add('vu'); const b = f.querySelector('button'); if(b) b.focus(); }, 30);
-  pister(reponse ? 'ADMIN_REPLY_POPUP' : 'ADMIN_ANNOUNCE_POPUP', {});
+  pister(reponse ? 'ADMIN_REPLY_POPUP' : (guide ? 'COMPO_GUIDE_SHOWN' : 'ADMIN_ANNOUNCE_POPUP'), {});
 }
 /* L'administrateur a demandé un nouveau code : à la prochaine ouverture, on le demande deux fois */
 async function verifierChangementCode(force){
