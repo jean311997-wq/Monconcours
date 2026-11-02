@@ -2604,11 +2604,20 @@ const estAbonne = () => !!(S.abo && S.abo.actif);
 const estAbonnePaye = () => estAbonne() && S.abo.formule !== 'essai';
 /* Le candidat peut recevoir plusieurs propositions d'abonnement ; seul « À demain » les suspend 3 jours. */
 function peutProposer(point){
-  if(S.gratuit || estAbonne()) return false;
+  const blocage = point >= 1 && point <= 3;     /* le candidat est arrêté : le chemin pour continuer doit toujours se voir */
+  if(S.gratuit || (blocage ? estAbonnePaye() : estAbonne())) return false;
   const t = lireReglages().pass_demain;
-  if(t && Date.now() - t < 3 * 86400000) return false;
+  if(!blocage && t && Date.now() - t < 3 * 86400000) return false;
   if(S.propositionPoint !== point){ S.propositionPoint = point; pister('PAYWALL_VIEWED', { point }); }
   return true;
+}
+/* Les deux abonnements, prêts à toucher : c'est ce qui s'affiche partout où le candidat est arrêté. */
+function offreDeuxPrix(){
+  const f = FORMULES;
+  const bouton = (k, sous, creux) => `<button class="cta${creux ? ' creux' : ''}" style="margin-top:9px" data-pass="${k}">${E(f[k].n)} · ${f[k].ancien ? '<s style="opacity:.6;font-weight:400">' + E(f[k].ancien) + '</s> ' : ''}${E(f[k].prix)}<small${creux ? ' style="color:inherit;opacity:.75"' : ''}>${sous}</small></button>`;
+  return bouton('annuelle', '12 mois sans limite · ' + E(f.annuelle.jour), false) +
+    bouton('mensuelle', '30 jours sans limite · ' + E(f.mensuelle.jour), true) +
+    `<button class="lien-mini" style="margin-top:8px" data-proche="mensuelle">${ico('partage',13)} Un proche paie pour moi</button>`;
 }
 /* Ce qui est payant : un seul passage. Un visiteur crée d'abord son compte ;
    un compte sans abonnement arrive directement sur les abonnements, avec la raison. */
@@ -4084,9 +4093,8 @@ function ecranQcm(){
               : `<b>Vous avez atteint votre limite gratuite du jour.</b>Vos 5 corrections du jour sont faites : elles reviennent demain. Pour continuer maintenant, faites l'abonnement.`)
           : `<b>${c.connexion ? 'Compte nécessaire' : 'Correction indisponible'}</b>${E(c.message || '')}`}
       </div>
-      ${offre ? `<button class="cta" style="margin-top:12px" data-go="abonnement">Faire l'abonnement</button>` : ''}
+      ${offre ? `<div style="margin-top:12px">${offreDeuxPrix()}</div>` : ''}
       ${c.quota ? (c.motif === 'matiere' ? `<button class="cta creux" style="margin-top:9px" data-go="revisions">Choisir une autre matière</button>` : `<button class="cta creux" style="margin-top:9px" data-demain="1">À demain</button>`) : ''}
-      ${offre ? `<button class="lien-mini" style="margin-top:6px" data-proche="mensuelle">${ico('partage',13)} Un proche paie pour moi</button>` : ''}
       ${c.connexion ? `<button class="cta" style="margin-top:12px" data-modal="inscription">Créer mon compte gratuit</button>` : ''}
       ${c.reseau ? `<button class="cta" style="margin-top:12px" data-qcm-relancer="1">Réessayer</button>` : ''}
       ${c.quota ? '' : `<button class="cta creux" style="margin-top:9px" data-qsuiv="1">Question suivante →</button>`}`;
@@ -4150,11 +4158,9 @@ function blocPoint2(){
   return `
     <div class="carte" style="text-align:left;margin:0 0 14px">
       ${moy !== null ? `<p class="sous" style="margin:0 0 6px">Ta moyenne sur tes trois compositions : <b>${moy}/50</b>.</p>` : ''}
-      ${rest !== null && rest > 0 ? `<p class="sous" style="margin:0 0 6px">Il te reste <b>${rest} sujet${rest > 1 ? 's' : ''}</b> à composer.</p>` : ''}
+      ${rest !== null && rest > 0 ? `<p class="sous" style="margin:0 0 6px">${rest > 10 ? 'De <b>nombreux autres sujets</b> t\'attendent.' : 'Il te reste <b>' + rest + ' sujet' + (rest > 1 ? 's' : '') + '</b> à composer.'}</p>` : ''}
     </div>
-    ${offre ? `<p class="sous" style="margin:0 0 12px"><b>Vous avez atteint les limites de l'abonnement gratuit.</b> Choisissez l'abonnement qui vous convient pour continuer sans limite.</p>
-      <button class="cta" data-go="abonnement">Faire l'abonnement</button>
-      <button class="lien-mini" style="margin-top:8px" data-proche="mensuelle">${ico('partage',13)} Un proche paie pour moi</button>` : ''}
+    ${offre ? `<p class="sous" style="margin:0 0 6px"><b>Pour continuer à composer sans limite, choisissez votre abonnement.</b></p>${offreDeuxPrix()}` : ''}
     <p class="sous" style="margin:12px 0 0;font-size:12.5px">La composition nationale reste gratuite.</p>`;
 }
 function ecranCompoAttente(){
@@ -4166,7 +4172,7 @@ function ecranCompoAttente(){
       ? 'La connexion est lente, on insiste. Ne quittez pas cette page : le sujet arrive.'
       : 'Le sujet arrive. Le chronomètre ne démarre qu\'une fois la feuille affichée.',
     connexion: 'Crée ton compte gratuit : tes 3 premières compositions sont offertes.',
-    abonnement: '',
+    abonnement: S.compoMessage || 'Pour composer d\'autres sujets, choisissez votre abonnement.',
     erreur: S.compoMessage || 'Le sujet n\'a pas pu être chargé.'
   };
   vue().innerHTML = `
@@ -4770,8 +4776,8 @@ function blocPoint3(seuil, n, admis){
     ${manque > 0 ? `<div class="carte" style="margin-top:14px"><p class="sous" style="margin:0"><b>Il te manque ${manque} point${manque > 1 ? 's' : ''} pour le seuil.</b> Ta feuille détaillée te dit quoi réviser en premier.</p></div>` : ''}
     ${offre ? `<div class="carte" style="margin-top:14px;text-align:left">
       <p class="sous" style="margin:0 0 10px"><b>Vous avez atteint les limites de l'abonnement gratuit.</b> Faites l'abonnement pour débloquer la feuille détaillée : ${mats.length ? E(mats.join(' et ')) : 'tes matières faibles'}, question par question, avec l'explication de chaque faute.</p>
-      <button class="cta" data-go="abonnement">Faire l'abonnement</button>
-      <button class="cta creux" style="margin-top:8px" data-copie-plus-tard="1">Plus tard</button>
+      ${offreDeuxPrix()}
+      <button class="lien-mini" style="margin-top:8px" data-copie-plus-tard="1">Plus tard</button>
     </div>` : (bloquee ? `<p class="sous" style="margin-top:14px;font-size:12.5px">La feuille détaillée fait partie de l'abonnement. <button class="lien-mini" data-go="abonnement">Voir mon abonnement</button></p>` : '')}`;
 }
 
@@ -5955,9 +5961,8 @@ function ecranGagnants(){
     ${m && maCompo ? `<button class="cta creux" style="margin-top:9px" data-correction-nat="${E(maCompo)}">${ico('lire',16)} Voir ma correction</button>` : ''}
     ${!m && S.epreuve && S.epreuve.id !== c.id && S.epreuve.etat === 'a_venir' && !S.epreuve.inscrit ? `<div class="carte" style="margin-top:12px;text-align:left"><p class="sous" style="margin:0 0 10px">Prochaine composition nationale : ${E(dateLongue(S.epreuve.debut_le))} à ${heureH(S.epreuve.debut_le)}. Venez composer et voir votre nom dans ce classement.</p>
       <button class="cta" data-inscrire-nat="${E(S.epreuve.id)}">M'inscrire à la composition</button></div>` : ''}
-    ${m && peutProposer(4) ? `<div class="carte" style="margin-top:12px;text-align:left"><p class="sous" style="margin:0 0 10px">${m.rang ? 'Vous êtes ' + r(Number(m.rang)) + ' sur ' + E(c.participants) + '. ' : ''}Pour monter à la prochaine nationale, entraînez-vous sans limite : abonnement Mois, ${E(FORMULES.mensuelle.prix)}, soit ${E(FORMULES.mensuelle.jour)}.</p>
-      <button class="cta" data-pass="mensuelle">Je m'abonne · ${E(FORMULES.mensuelle.prix)}</button>
-      <button class="cta creux" style="margin-top:8px" data-go="abonnement">Voir les abonnements</button></div>` : ''}
+    ${m && peutProposer(4) ? `<div class="carte" style="margin-top:12px;text-align:left"><p class="sous" style="margin:0 0 10px">${m.rang ? 'Vous êtes ' + r(Number(m.rang)) + ' sur ' + E(c.participants) + '. ' : ''}Pour monter à la prochaine nationale, entraînez-vous sans limite :</p>
+      ${offreDeuxPrix()}</div>` : ''}
     ${podium.length ? `<div class="felicitations">
       <div class="eyebrow" style="color:var(--or)">Félicitations</div>
       <p>Bravo à <b>${E(podium[0].nom)}</b>, major de la composition avec <b class="num">${podium[0].score}/${podium[0].sur}</b>${c.recompense ? `. ${E(c.recompense)} lui revient` : ''}.${podium.length > 1 ? ' Bravo aussi à ' + podium.slice(1).map(l => '<b>' + E(l.nom) + '</b> (' + l.rang + 'e)').join(' et ') + '.' : ''}</p>
