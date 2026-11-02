@@ -355,6 +355,34 @@ async function vueMusique(){
   });
 }
 
+/* ---------- paiements abandonnés : relance WhatsApp en un clic ---------- */
+function messageRelance(c){
+  const f = c.formule === 'annuelle' ? 'l\'abonnement Année (4 000 F)' : c.formule === 'mensuelle' ? 'l\'abonnement Mois (1 000 F)' : 'votre abonnement';
+  return 'Bonjour ' + (c.nom || '').trim() + ', c\'est Mon Concours. Vous aviez choisi ' + f + ' mais le paiement ne s\'est pas terminé. Vous avez eu un souci avec Orange Money ou Wave ? Dites-moi, je vous aide à le finir en 2 minutes.';
+}
+async function chargerAbandonnes(){
+  const zone = $('#pai-aband'); if(!zone) return;
+  if(!(A.admin || A.investisseur)){ zone.remove(); return; }
+  const { data, error } = await db.rpc('admin_paiements_abandonnes');
+  if(error || !data || !data.ok){ zone.innerHTML = '<h3 style="margin:0 0 6px">Paiements abandonnés</h3><p style="margin:0">' + E((data && data.message) || (error && error.message) || 'Indisponible.') + '</p>'; return; }
+  const liste = data.liste || [];
+  const reste = liste.filter(c => !c.envoye_le).length;
+  zone.innerHTML = '<h3 style="margin:0 0 6px">Paiements abandonnés · ' + reste + ' à relancer</h3>' +
+    '<p style="margin:0 0 10px;color:var(--craie2);font-size:13px">Ils ont choisi un abonnement sans payer. Touchez « WhatsApp » : le message est déjà écrit, il reste à l\'envoyer. La liste se met à jour toute seule ; ceux qui paient disparaissent.</p>' +
+    (liste.length ? liste.map(c => {
+      const tel = String(c.telephone || '').replace(/\D/g, '');
+      const lien = 'https://wa.me/' + (tel.length === 8 ? '226' + tel : tel) + '?text=' + encodeURIComponent(messageRelance(c));
+      const vu = c.derniere ? new Date(c.derniere).toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit' }) : '—';
+      return '<div class="ligne-aband" style="display:flex;gap:8px;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid var(--trait,#2a2a2a)' + (c.envoye_le ? ';opacity:.55' : '') + '">' +
+        '<div style="min-width:0"><b>' + E(c.nom || 'Candidat') + '</b><br><span style="font-size:12px;color:var(--craie2)">' + E(c.telephone) + ' · ' + E(c.formule || '—') + ' · vu le ' + vu + (c.envoye_le ? ' · relancé' : '') + '</span></div>' +
+        '<a class="mini" data-relance="' + E(c.user_id) + '" href="' + E(lien) + '" target="_blank" rel="noopener">' + (c.envoye_le ? 'Renvoyer' : 'WhatsApp') + '</a></div>';
+    }).join('') : '<p style="margin:0">Personne à relancer pour le moment.</p>');
+  zone.querySelectorAll('[data-relance]').forEach(a => a.addEventListener('click', () => {
+    db.rpc('admin_marquer_relance', { p_user: a.dataset.relance });
+    const l = a.closest('.ligne-aband'); if(l){ l.style.opacity = '.55'; a.textContent = 'Renvoyer'; }
+  }));
+}
+
 /* ---------- paiements ---------- */
 const NOM_PASS = { semaine:'Abonnement Semaine', mensuelle:'Abonnement Mois', annuelle:'Abonnement Année' };
 const NOM_OPERATEUR = { orange_money:'Orange Money', moov_money:'Moov Money', wave:'Wave', code:'Code', admin:'Activé par l\'équipe' };
@@ -366,6 +394,7 @@ async function vuePaiements(){
        le nom et le montant, puis confirmez ou refusez. La confirmation active
        immédiatement l'abonnement du candidat.</p>
   </div>
+  <div class="carte" id="pai-aband"><h3 style="margin:0 0 6px">Paiements abandonnés</h3><p style="margin:0">Chargement…</p></div>
   <div id="pai-plus"></div>
   <div class="carte"><h3 style="margin:0 0 8px">Toutes les demandes, une par une</h3><div id="pai-liste">Chargement…</div></div>
   <div class="carte" style="margin-top:14px">
@@ -393,6 +422,7 @@ async function vuePaiements(){
   </div>`;
 
   if(window.ADMIN && window.ADMIN.paiementsPlus) window.ADMIN.paiementsPlus($('#pai-plus'), vuePaiements);
+  chargerAbandonnes();
   $('#act-go').onclick = async () => {
     const msg = $('#act-msg'); msg.textContent = '…';
     const { data, error } = await db.rpc('admin_activer_pass', { p_telephone: $('#act-tel').value, p_formule: $('#act-formule').value, p_note: $('#act-note').value });
