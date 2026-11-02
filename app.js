@@ -1362,6 +1362,7 @@ function ouvrirNotif(n){
   const [genre, id] = String(n.lien || '').split(':');
   if(genre === 'copie' && id) return feuilleArchive(id);
   if(genre === 'epreuve' && id){
+    if(S.epreuve && S.epreuve.id === id && salleOuverte(S.epreuve) && S.util.connecte) return entrerEnSalle(id, 'notification');
     if(S.epreuve && S.epreuve.id === id && S.epreuve.etat !== 'terminee') return aller('aujourdhui');
     chargerClassement(id); return aller('gagnants');
   }
@@ -5329,6 +5330,10 @@ async function chargerEpreuve(){
     const change = !pareil(data || null, S.epreuve);
     S.epreuve = data || null;
     memoEcrire('epreuve', S.epreuve, true);
+    if(S.lienSalle && S.epreuve && S.epreuve.id === S.lienSalle){
+      const idSalle = S.lienSalle; S.lienSalle = null;
+      if(salleOuverte(S.epreuve) && S.util.connecte && !enComposition()) return entrerEnSalle(idSalle, 'lien');
+    }
     if(change && ['aujourdhui','gagnants'].includes(S.ecran)) rendre();
     setTimeout(proposerNationale, Math.max(900, DELAI_NATIONALE - (Date.now() - T_OUVERTURE)));
   }catch(e){}
@@ -5553,6 +5558,18 @@ function proposerNationale(){
     </div>
   </div>`;
 }
+/* Entrer en salle de composition : depuis le bouton de la carte, une notification ou un lien. */
+function entrerEnSalle(id, origine){
+  if(!S.util.connecte){ S.modal = 'inscription'; S.erreur = ''; return surcouche(); }
+  const v = document.getElementById('voile'); if(v){ v.hidden = true; v.innerHTML = ''; } S.modal = null;
+  S.reponses = {}; S.corrige = false; S.grilleNote = null; S.corrigeServeur = null; effacerEpreuve();
+  S.compoTab = 'feuille'; S.sujetVu = false; S.apercu = null; S.compositionId = null; S.remiseEtat = null;
+  S.grille.length = 0; S.compoEtat = null; S.correctionLe = null;
+  S.rejoindre = id;
+  pister('NATIONAL_JOINED', origine ? { origine } : undefined);
+  return aller('grille');
+}
+const salleOuverte = ep => !!(ep && ep.etat === 'en_cours' && !(ep.moi && ep.moi.terminee));
 async function inscrireNationale(id, depuisPopup){
   if(!S.util.connecte){
     document.getElementById('voile').hidden = true; S.modal = null;
@@ -5567,6 +5584,15 @@ async function inscrireNationale(id, depuisPopup){
     if(S.epreuve && S.epreuve.id === id){ S.epreuve.inscrit = true; S.epreuve.inscrits = data.inscrits; }
     pister('NATIONAL_REGISTERED', { nom: afficher });
     const v = document.getElementById('voile');
+    /* il vient de dire oui : c'est le moment de lui proposer d'être prévenu avant le début */
+    if(notifsAEncourager() && !document.getElementById('invitation')){
+      if(v){ v.hidden = true; v.innerHTML = ''; } S.modal = null;
+      fenetreInvitation({ cle:'notifs', icone:'cloche', titre:'Vous êtes inscrit',
+        texte:'Autorisez les notifications pour être prévenu avant le début de la composition. Vous pourrez entrer même en retard, tant que la composition n\'est pas terminée.',
+        oui:'Me prévenir', rappel:0, sansFait:true, action: () => activerRappel(18, 0) });
+      if(S.ecran === 'aujourdhui') rendre();
+      return;
+    }
     if(depuisPopup && v && !v.hidden){
       v.innerHTML = `<div class="panneau pop-nat" role="dialog" aria-modal="true">
         <div class="pn-ok">${ico('coche',28)}</div>
@@ -6420,7 +6446,7 @@ function ouvrirLienDirect(){
   let cible = null;
   if(p.get('q') === 'jour') cible = 'qdj';
   else if(/^[0-9a-f-]{36}$/i.test(p.get('question') || '')){ cible = 'question'; S.lienQuestion = p.get('question'); S.qp = null; }
-  else if(/^[0-9a-f-]{36}$/i.test(p.get('epreuve') || '')){ cible = 'gagnants'; S.lienEpreuve = p.get('epreuve'); S.classementEp = null; }
+  else if(/^[0-9a-f-]{36}$/i.test(p.get('epreuve') || '')){ cible = 'gagnants'; S.lienEpreuve = p.get('epreuve'); S.classementEp = null; S.lienSalle = p.get('epreuve'); }
   else if(/^[0-9a-f-]{36}$/i.test(p.get('defi') || '')){ cible = 'defi'; S.lienDefi = p.get('defi'); S.defi = { etat:'chargement', id:p.get('defi') }; }
   else if(/^[0-9a-f-]{36}$/i.test(p.get('copie') || '')){ const id = p.get('copie'); setTimeout(() => feuilleArchive(id), 1500); }
   else if(p.get('reprendre') === 'cours' || p.get('reprendre') === 'qcm') cible = repriseCible(p.get('reprendre'));
@@ -6522,15 +6548,7 @@ document.addEventListener('click', ev => {
     pister('DAILY_GOAL_SET', { objectif:o });
     return;
   }
-  if(d.rejoindre){
-    if(!S.util.connecte){ S.modal = 'inscription'; S.erreur = ''; return surcouche(); }
-    S.reponses = {}; S.corrige = false; S.grilleNote = null; S.corrigeServeur = null; effacerEpreuve();
-    S.compoTab = 'feuille'; S.sujetVu = false; S.apercu = null; S.compositionId = null; S.remiseEtat = null;
-    S.grille.length = 0; S.compoEtat = null; S.correctionLe = null;
-    S.rejoindre = d.rejoindre;
-    pister('NATIONAL_JOINED');
-    return aller('grille');
-  }
+  if(d.rejoindre) return entrerEnSalle(d.rejoindre);
   if(d.rappelInter !== undefined){
     if(S.rappel) return retirerRappel();
     const h = document.getElementById('rappel-h'), m = document.getElementById('rappel-m');
