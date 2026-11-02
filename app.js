@@ -2281,7 +2281,7 @@ function blocFinEssai(){
   const f = FORMULES.mensuelle;
   return `<div class="carte fin-essai" role="status">
     <div class="fe-ligne"><b>Votre essai ${reste}</b></div>
-    <p class="sous" style="margin:6px 0 12px">Ensuite, l'abonnement gratuit garde 5 corrections par jour, 15 questions par matière et 3 compositions. Pour tout garder sans limite : ${E(f.n)}, ${E(f.prix)} pour 30 jours, soit ${E(f.jour)}.</p>
+    <p class="sous" style="margin:6px 0 12px">Ensuite, l'abonnement gratuit garde 5 corrections par jour, 15 questions par matière et 4 compositions. Pour tout garder sans limite : ${E(f.n)}, ${E(f.prix)} pour 30 jours, soit ${E(f.jour)}.</p>
     <button class="cta" data-pass="mensuelle">Garder l'accès complet · ${E(f.prix)}</button>
     <button class="cta creux" style="margin-top:8px" data-go="abonnement">Voir tous les abonnements</button>
   </div>`;
@@ -2969,7 +2969,7 @@ function ecranRevisions(){
     ${!S.util.connecte ? `<div class="carte" style="margin-top:12px">
       <p class="sous">${S.gratuit ? "Sans compte, tu peux lire les questions. Pour voir la correction et garder tes erreurs, crée ton compte : c'est gratuit." : "Sans compte, tu peux lire les questions. Pour voir la correction, crée ton compte gratuit : 5 corrections par jour, sans limite avec l'abonnement."}</p>
     </div>` : (!S.abo.actif && !S.gratuit ? `<div class="carte" style="margin-top:12px">
-      <p class="sous">Abonnement gratuit : 5 corrections par jour, 15 questions par matière et 3 compositions offertes. L'abonnement payant les rend illimitées.</p>
+      <p class="sous">Abonnement gratuit : 5 corrections par jour, 15 questions par matière et 4 compositions offertes. L'abonnement payant les rend illimitées.</p>
     </div>` : '')}
   </div>`;
 }
@@ -4158,7 +4158,7 @@ function blocPoint2(){
   const offre = peutProposer(2);
   return `
     <div class="carte" style="text-align:left;margin:0 0 14px">
-      ${moy !== null ? `<p class="sous" style="margin:0 0 6px">Ta moyenne sur tes trois compositions : <b>${moy}/50</b>.</p>` : ''}
+      ${moy !== null ? `<p class="sous" style="margin:0 0 6px">Ta moyenne sur tes compositions : <b>${moy}/50</b>.</p>` : ''}
       ${rest !== null && rest > 0 ? `<p class="sous" style="margin:0 0 6px">${rest > 10 ? 'De <b>nombreux autres sujets</b> t\'attendent.' : 'Il te reste <b>' + rest + ' sujet' + (rest > 1 ? 's' : '') + '</b> à composer.'}</p>` : ''}
     </div>
     ${offre ? `<p class="sous" style="margin:0 0 6px"><b>Pour continuer à composer sans limite, choisissez votre abonnement.</b></p>${offreDeuxPrix()}` : ''}
@@ -4167,12 +4167,12 @@ function blocPoint2(){
 function ecranCompoAttente(){
   const etat = S.compoEtat;
   const titres = { chargement:'Préparation du sujet…', connexion:'Un compte est nécessaire',
-    abonnement:'Tes 3 compositions offertes sont faites', erreur:'Composition indisponible' };
+    abonnement:'Tes 4 compositions offertes sont faites', erreur:'Composition indisponible' };
   const textes = {
     chargement: S.compoLent
       ? 'La connexion est lente, on insiste. Ne quittez pas cette page : le sujet arrive.'
       : 'Le sujet arrive. Le chronomètre ne démarre qu\'une fois la feuille affichée.',
-    connexion: 'Crée ton compte gratuit : tes 3 premières compositions sont offertes.',
+    connexion: 'Crée ton compte gratuit : tes 4 premières compositions sont offertes.',
     abonnement: S.compoMessage || 'Pour composer d\'autres sujets, choisissez votre abonnement.',
     erreur: S.compoMessage || 'Le sujet n\'a pas pu être chargé.'
   };
@@ -5496,7 +5496,7 @@ function rappelFinEssai(essai){
     <button class="pn-x" data-fin-essai-non="1" aria-label="Fermer">×</button>
     <div class="eyebrow" style="color:var(--or)">Votre essai gratuit</div>
     <h3 id="pfe-titre">${S.abo.jours_restants > 0 ? 'Il se termine demain' : 'Il se termine aujourd\'hui'}</h3>
-    <p class="intro">Ensuite, l'abonnement gratuit garde 5 corrections par jour, 15 questions par matière et 3 compositions. Pour tout garder sans limite : ${E(f.n || 'Abonnement Mois')}, ${E(f.prix || '1 000 FCFA')} pour 30 jours.</p>
+    <p class="intro">Ensuite, l'abonnement gratuit garde 5 corrections par jour, 15 questions par matière et 4 compositions. Pour tout garder sans limite : ${E(f.n || 'Abonnement Mois')}, ${E(f.prix || '1 000 FCFA')} pour 30 jours.</p>
     <button class="cta" data-fin-essai-oui="1">Choisir mon abonnement</button>
   </div>`;
   pister('TRIAL_END_POPUP');
