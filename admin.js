@@ -357,8 +357,9 @@ async function vueMusique(){
 
 /* ---------- paiements abandonnés : relance WhatsApp en un clic ---------- */
 function messageRelance(c){
-  const f = c.formule === 'annuelle' ? 'l\'abonnement Année (4 000 F)' : c.formule === 'mensuelle' ? 'l\'abonnement Mois (1 000 F)' : 'votre abonnement';
-  return 'Bonjour ' + (c.nom || '').trim() + ', c\'est Mon Concours. Vous aviez choisi ' + f + ' mais le paiement ne s\'est pas terminé. Vous avez eu un souci avec Orange Money ou Wave ? Dites-moi, je vous aide à le finir en 2 minutes.';
+  const f = c.formule === 'annuelle' ? 'l\'abonnement Année (4 000 F)' : c.formule === 'mensuelle' ? 'l\'abonnement Mois (1 000 F)' : 'ton abonnement';
+  const prenom = (c.nom || '').trim().split(/\s+/)[0];
+  return 'Bonjour ' + prenom + ', c\'est Mon Concours. Tu avais choisi ' + f + (c.concours ? ' pour préparer le concours ' + c.concours : '') + ' mais le paiement ne s\'est pas terminé. Un souci avec Orange Money ou Wave ? Dis-moi, je t\'aide à le finir en 2 minutes.';
 }
 async function chargerAbandonnes(){
   const zone = $('#pai-aband'); if(!zone) return;

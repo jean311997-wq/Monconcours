@@ -722,7 +722,30 @@ function ecranTest(){
     },1000);
   }
 }
+/* « Remettre » avec des questions sans réponse : on prévient avant d'envoyer. Le temps écoulé remet toujours, sans demander. */
+function confirmerRemise(sans, avecMoyenne, quandOui, repondues){
+  const ancien = document.getElementById('confirm-remise'); if(ancien) ancien.remove();
+  const ov = document.createElement('div');
+  ov.id = 'confirm-remise'; ov.setAttribute('role','dialog'); ov.setAttribute('aria-modal','true');
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9100;display:flex;align-items:center;justify-content:center;padding:20px';
+  ov.innerHTML = `<div style="background:var(--ardoise);border:1px solid var(--trait);border-radius:16px;padding:22px 18px;width:100%;max-width:360px;box-shadow:0 8px 32px rgba(0,0,0,.35)">
+    <div style="font-size:18px;font-weight:700;margin-bottom:8px">Il te reste ${sans} question${sans>1?'s':''} sans réponse.</div>
+    <p class="sous" style="margin:0 0 6px">Remettre quand même ?</p>
+    ${avecMoyenne ? '<p class="sous" style="margin:0 0 ' + (repondues < 10 ? 6 : 14) + 'px;font-size:13px">Ceux qui composent jusqu\'au bout font 33/50 en moyenne.</p>' : '<div style="height:8px"></div>'}
+    ${avecMoyenne && repondues < 10 ? '<p class="sous" style="margin:0 0 14px;font-size:13px">Avec moins de 10 réponses, cette composition ne compte pas parmi tes compositions offertes.</p>' : ''}
+    <button class="cta" data-cr="non" style="margin-top:0">Continuer à composer</button>
+    <button class="cta creux" data-cr="oui" style="margin-top:9px">Remettre quand même</button>
+  </div>`;
+  ov.addEventListener('click', e => {
+    const b = e.target.closest('[data-cr]');
+    if(!b && e.target !== ov) return;
+    ov.remove();
+    if(b && b.dataset.cr === 'oui') quandOui();
+  });
+  document.body.appendChild(ov);
+}
 function remettreTest(){
+  const cr = document.getElementById('confirm-remise'); if(cr) cr.remove();
   if(S.testTimer){clearInterval(S.testTimer);S.testTimer=null;}
   S.testCorrige = true;
   ecrireMemoire(Object.assign({}, lireMemoire() || {}, { testFait:true }));
@@ -802,7 +825,11 @@ function ecranResultat(){
   const faibles = Object.keys(dom).filter(d=>dom[d].f>0).sort((a,b)=>dom[b].f-dom[a].f);
   const solide = n >= 6;
 
-  const analyse = solide
+  const analyse = n <= 1
+    ? `Ce test te donne un point de départ, pas un verdict. ${faibles.length?`Tu as surtout perdu des points en ${faibles.slice(0,2).join(' et ').toLowerCase()}.`:''} Reprends tes fautes une par une : elles reviennent jusqu'à être acquises, et la note monte vite quand on part de là.`
+    : n <= 3
+    ? `Il y a beaucoup à reprendre, et c'est normal pour un premier test. ${faibles.length?`Tes pertes se concentrent sur ${faibles.slice(0,2).join(' et ').toLowerCase()}.`:''} Commence par tes fautes, puis une matière à la fois.`
+    : solide
     ? `Tu as des bases solides${forces.length?` — ${forces.slice(0,2).join(' et ').toLowerCase()} ${forces.length>1?'ne te posent':'ne te pose'} pas de problème`:''}. Mais ${faibles.length?`${faibles.length>1?'certaines lacunes précises':'une lacune précise'} — ${faibles.slice(0,2).join(', ').toLowerCase()} —`:'quelques lacunes'} peuvent te coûter des points le jour du concours.`
     : `Les bases sont là, mais elles ne tiennent pas encore sous chronomètre. ${faibles.length?`Tes pertes se concentrent sur ${faibles.slice(0,2).join(' et ').toLowerCase()}.`:''} Ce n'est pas un problème d'intelligence : c'est un problème d'entraînement, et il se règle.`;
 
@@ -821,7 +848,7 @@ function ecranResultat(){
       <div class="note-legende">
         <div class="l1">Note obtenue</div>
         <div class="l2">${n} bonne${n>1?'s':''} réponse${n>1?'s':''} sur 10 questions</div>
-        <div class="l3 ${solide?'ok':''}">${solide?'Bonne base de départ':'Base à consolider'}</div>
+        <div class="l3 ${solide?'ok':''}">${solide?'Bonne base de départ':(n<=3?'Point de départ':'Base à consolider')}</div>
       </div>
     </div>
 
@@ -862,7 +889,7 @@ function ecranResultat(){
 
     ${S.parcours === 'B' || S.parcours === 'C' ? feuilleTestCorrigee() : ''}
     ${S.parcours === 'C' ? blocPlanPaiement(faibles) : ''}
-    <button class="cta" style="margin-top:18px" data-entrer="1">${S.parcours === 'B' || S.parcours === 'C' ? 'Continuer dans l\'application' : 'Entrer dans l\'application'}<small>Actualité · révisions · composition · erreurs</small></button>
+    <button class="cta" style="margin-top:18px" data-entrer="1" data-fautes="${n < 10 ? 1 : 0}">${n < 10 ? 'Reprendre mes fautes maintenant' : (S.parcours === 'B' || S.parcours === 'C' ? 'Continuer dans l\'application' : 'Entrer dans l\'application')}<small>${n < 10 ? (10 - n) + ' faute' + (10 - n > 1 ? 's' : '') + ' dans « Mes erreurs »' : 'Actualité · révisions · composition · erreurs'}</small></button>
   </div>`;
   /* Parcours D : proposer le paiement après 3 secondes, avec bouton "Plus tard" */
   if(S.parcours === 'D'){
@@ -2099,7 +2126,9 @@ async function ouvrirComposition(){
       S.compoEtat = data && data.connexion ? 'connexion' : data && data.abonnement ? 'abonnement' : 'erreur';
       if(S.compoEtat === 'abonnement' && base){ base.rpc('mes_sujets_restants').then(({ data: sr }) => { S.sujetsRestants = sr; if(S.ecran === 'grille') rendre(); }, () => {}); }
       S.compoMessage = (data && data.message) || 'Composition indisponible.';
+      S.compoDebloqueNotifs = !!(data && data.debloque_par_notifs);
     } else {
+      S.compoDebloqueNotifs = false;
       if(S.compositionId && S.compositionId !== data.id){ S.reponses = {}; effacerEpreuve(); }
       S.compositionId = data.id;
       S.sujetRef = data.sujet || '';
@@ -2159,6 +2188,13 @@ async function cloturerComposition(){
       if(data.corrige) S.grille.forEach((g, i) => { const b = S.corrigeServeur[i]; g.bonnes = b || []; g.i = (b && b.length) ? b[0] : null; });
       S.remiseEtat = 'ok';
       S.derniereCompo = S.compositionId;
+      if(data.corrige && base){
+        const cid = S.compositionId;
+        base.rpc('ma_copie', { p_composition: cid }).then(({ data: c }) => {
+          if(!c || !c.ok || !c.questions || S.derniereCompo !== cid) return;
+          c.questions.forEach((q, i) => { if(S.grille[i]){ S.grille[i].taux = q.taux; S.grille[i].expl = q.explication; } });
+        }, () => {});
+      }
       S.compositionId = null;
       effacerEpreuve();
       chargerCahier(); chargerProgression(); chargerCompositions();
@@ -2253,9 +2289,8 @@ function blocInscriptionVisiteur(){
   return `<div class="carte inscr-visiteur" role="region" aria-label="Créer mon compte">
     <div class="iv-titre">Créez votre compte gratuit</div>
     <ol class="iv-etapes">
-      <li><b>1</b><span>Touchez le bouton vert ci-dessous</span></li>
-      <li><b>2</b><span>Écrivez votre nom et votre numéro de téléphone</span></li>
-      <li><b>3</b><span>Choisissez un code de 4 chiffres : c'est tout</span></li>
+      <li><b>1</b><span>Écrivez votre nom et votre numéro de téléphone</span></li>
+      <li><b>2</b><span>Choisissez un code de 4 chiffres : c'est tout</span></li>
     </ol>
     <button class="cta" data-modal="inscription">Je m'inscris gratuitement<small>30 secondes · sans e-mail · sans carte bancaire</small></button>
     <button class="lien" style="display:block;margin:10px auto 0" data-modal="connexion">J'ai déjà un compte : me connecter</button>
@@ -2281,7 +2316,7 @@ function blocFinEssai(){
   const f = FORMULES.mensuelle;
   return `<div class="carte fin-essai" role="status">
     <div class="fe-ligne"><b>Votre essai ${reste}</b></div>
-    <p class="sous" style="margin:6px 0 12px">Ensuite, l'abonnement gratuit garde 5 corrections par jour, 15 questions par matière et 4 compositions. Pour tout garder sans limite : ${E(f.n)}, ${E(f.prix)} pour 30 jours, soit ${E(f.jour)}.</p>
+    <p class="sous" style="margin:6px 0 12px">Ensuite, l'abonnement gratuit garde 5 corrections par jour, 15 questions par matière et ${compoOffertes()} compositions. Pour tout garder sans limite : ${E(f.n)}, ${E(f.prix)} pour 30 jours, soit ${E(f.jour)}.</p>
     <button class="cta" data-pass="mensuelle">Garder l'accès complet · ${E(f.prix)}</button>
     <button class="cta creux" style="margin-top:8px" data-go="abonnement">Voir tous les abonnements</button>
   </div>`;
@@ -2300,6 +2335,25 @@ function nationaleEnHaut(){
   const d = S.derniereNat;
   return !!(d && memeJourQue(d.fin_le));
 }
+/* Le progrès du candidat, en clair : le compteur du mois, et le bilan court du dimanche soir */
+function blocProgres(){
+  const d = S.details;
+  if(!S.util.connecte || !d) return '';
+  const pl = (n, a, b) => n + ' ' + (n > 1 ? b : a);
+  const j = new Date(), dimanche = j.getUTCDay() === 0 && j.getUTCHours() >= 17;
+  const sem = [];
+  if(dimanche){
+    if(d.compos_semaine > 0) sem.push(pl(d.compos_semaine, 'composition', 'compositions'));
+    if(d.refermees_semaine > 0) sem.push(pl(d.refermees_semaine, 'erreur refermée', 'erreurs refermées'));
+    if(d.gain_points_semaine > 0) sem.push('+' + d.gain_points_semaine + ' point' + (d.gain_points_semaine > 1 ? 's' : ''));
+  }
+  const mois = d.refermees_mois > 0;
+  if(!sem.length && !mois) return '';
+  return `<div class="carte progres" role="status" style="margin:0 0 12px">
+    ${sem.length ? `<p style="margin:0 0 ${mois ? 6 : 0}px"><b>Cette semaine :</b> ${E(sem.join(', '))}</p>` : ''}
+    ${mois ? `<p style="margin:0"><b class="num" style="font-size:22px">${d.refermees_mois}</b> ${d.refermees_mois > 1 ? 'erreurs refermées' : 'erreur refermée'} ce mois</p>` : ''}
+  </div>`;
+}
 function ecranAujourdhui(){
   const f = S.taches.filter(Boolean).length;
   const enCours = !S.corrige && Object.keys(S.reponses).length > 0;
@@ -2310,6 +2364,7 @@ function ecranAujourdhui(){
     ${blocPromo()}
     ${blocFinEssai()}
     ${blocBandeauRappel()}
+    ${blocProgres()}
     ${nationaleEnHaut() ? `<section class="nat-jour" aria-label="Composition nationale du jour">${carteEpreuve()}${blocDerniereNationale()}</section>` : ''}
     <div class="tete-jour">
       <span class="eyebrow">${dateDuJour()}</span>
@@ -2613,10 +2668,20 @@ function peutProposer(point){
   return true;
 }
 /* Les deux abonnements, prêts à toucher : c'est ce qui s'affiche partout où le candidat est arrêté. */
+/* Au blocage : ce que le candidat a déjà fait, avec ses propres chiffres */
+function ligneBilanPerso(){
+  if(!S.util.connecte) return '';
+  const d = S.details || {};
+  const c = typeof d.compos_total === 'number' ? d.compos_total : ((S.stats && S.stats.compositions) || 0), e = d.refermees_total || 0;
+  if(!c && !e) return '';
+  const fait = [c ? 'fait ' + c + ' composition' + (c > 1 ? 's' : '') : '', e ? (c ? 'refermé ' : 'refermé ') + e + ' erreur' + (e > 1 ? 's' : '') : ''].filter(Boolean).join(' et ');
+  return `<p class="sous bilan-perso" style="margin:0 0 12px;text-align:left"><b>Tu as déjà ${fait}.</b> Avec l'abonnement : tout le reste, sans limite.</p>`;
+}
 function offreDeuxPrix(){
   const f = FORMULES;
   const bouton = (k, sous, creux) => `<button class="cta${creux ? ' creux' : ''}" style="margin-top:9px" data-pass="${k}">${E(f[k].n)} · ${f[k].ancien ? '<s style="opacity:.6;font-weight:400">' + E(f[k].ancien) + '</s> ' : ''}${E(f[k].prix)}<small${creux ? ' style="color:inherit;opacity:.75"' : ''}>${sous}</small></button>`;
-  return bouton('annuelle', '12 mois sans limite · ' + E(f.annuelle.jour), false) +
+  return ligneBilanPerso() + blocConseiller('mensuelle', 'blocage') +
+    bouton('annuelle', '12 mois sans limite · ' + E(f.annuelle.jour), false) +
     bouton('mensuelle', '30 jours sans limite · ' + E(f.mensuelle.jour), true) +
     `<button class="lien-mini" style="margin-top:8px" data-proche="mensuelle">${ico('partage',13)} Un proche paie pour moi</button>`;
 }
@@ -2646,7 +2711,9 @@ function numeroConseiller(){
 function messageConseiller(cle){
   const f = cle && FORMULES[cle];
   const tel = (S.util && S.util.tel) ? S.util.tel : '';
-  return 'Bonjour, je veux m\'abonner à Mon Concours' + (f ? ' (' + f.n + ', ' + f.prix + ')' : '') +
+  const prenom = ((S.util && S.util.nom) || '').trim().split(/\s+/)[0];
+  const qui = (prenom && !/^candidat$/i.test(prenom) ? 'je suis ' + prenom + (S.nomConcours ? ' et je prépare le concours ' + S.nomConcours : '') + '. ' : '');
+  return 'Bonjour, ' + qui + 'Je veux m\'abonner à Mon Concours' + (f ? ' (' + f.n + ', ' + f.prix + ')' : '') +
     '. Mon numéro de compte : ' + (tel || '(mon numéro)') + '. Pouvez-vous m\'aider à payer ?';
 }
 function blocConseiller(cle, point){
@@ -2656,7 +2723,14 @@ function blocConseiller(cle, point){
     <div class="ou-sep"><span>ou payer vous-même</span></div>
   </div>`;
 }
-document.addEventListener('click', ev => {
+document.addEventListener('click', async ev => {
+  if(ev.target.closest && ev.target.closest('[data-debloquer-notifs]')){
+    pister('OFFER_B_NOTIFS_CLICK');
+    await activerRappel(18, 0);
+    await chargerOffreCompo();
+    if(S.rappel && S.rappel.actif){ S.compoDebloqueNotifs = false; ouvrirComposition(); }
+    return;
+  }
   const a = ev.target.closest && ev.target.closest('[data-conseiller-wa]');
   if(a){ pister('PAY_ADVISOR_WHATSAPP', { point: a.dataset.conseillerWa, formule: a.dataset.conseillerFormule || null }); }
 });
@@ -2741,7 +2815,8 @@ function ecranAbonnement(){
     ${paiement ? `
     <div class="carte" style="margin:14px 0;text-align:center">
       <div class="eyebrow">Capture reçue</div>
-      <p class="sous" style="margin:6px 0 0">Votre paiement du ${new Date(paiement.cree_le).toLocaleDateString('fr-FR')} est en cours de vérification : deux heures au plus. Vous recevrez une notification dès que c'est confirmé.</p>
+      <p class="sous" style="margin:6px 0 0">Votre paiement du ${new Date(paiement.cree_le).toLocaleDateString('fr-FR')} est en cours de vérification. Validation en 5 minutes en moyenne. Vous recevrez une notification dès que c'est confirmé.</p>
+      <p class="sous" style="margin:8px 0 0">Tu veux aller plus vite ? <a href="tel:+226${numeroConseiller()}" data-pister-appel="1">Appelle le +226 ${fmtTel(numeroConseiller())}</a> pour signaler ton paiement.</p>
     </div>` : `
     ${blocConseiller('', 'abonnement')}
     <div class="libelle" style="margin-top:6px">Choisissez votre abonnement</div>
@@ -2820,7 +2895,8 @@ function ecranPaiement(){
         <div class="l">capture reçue</div>
       </div>
       <h1 class="titre" style="font-size:24px">Votre paiement est en<br>cours de vérification</h1>
-      <p class="sous" style="margin:12px 0 6px">Nous vérifions votre capture, au plus tard dans les 2 heures. Vous recevrez une notification : paiement confirmé, ou rejeté avec la raison.</p>
+      <p class="sous" style="margin:12px 0 6px">Nous vérifions votre capture : validation en 5 minutes en moyenne. Vous recevrez une notification : paiement confirmé, ou rejeté avec la raison.</p>
+      <p class="sous" style="margin:0 0 6px">Tu veux aller plus vite ? <a href="tel:+226${numeroConseiller()}" data-pister-appel="1">Appelle le +226 ${fmtTel(numeroConseiller())}</a> pour signaler ton paiement.</p>
       <div class="carte" style="margin-top:16px;text-align:left">
         <div class="mat"><div class="nom">Moyen de paiement<em>${O.nom} · au +226 ${E(S.paieTel)}</em></div><div class="val">✓</div></div>
         <div class="mat"><div class="nom">Abonnement demandé<em>${f.n} · ${f.per}</em></div><div class="val num">${f.prix}</div></div>
@@ -2969,7 +3045,7 @@ function ecranRevisions(){
     ${!S.util.connecte ? `<div class="carte" style="margin-top:12px">
       <p class="sous">${S.gratuit ? "Sans compte, tu peux lire les questions. Pour voir la correction et garder tes erreurs, crée ton compte : c'est gratuit." : "Sans compte, tu peux lire les questions. Pour voir la correction, crée ton compte gratuit : 5 corrections par jour, sans limite avec l'abonnement."}</p>
     </div>` : (!S.abo.actif && !S.gratuit ? `<div class="carte" style="margin-top:12px">
-      <p class="sous">Abonnement gratuit : 5 corrections par jour, 15 questions par matière et 4 compositions offertes. L'abonnement payant les rend illimitées.</p>
+      <p class="sous">Abonnement gratuit : 5 corrections par jour, 15 questions par matière et ${compoOffertes()} compositions offertes. L'abonnement payant les rend illimitées.</p>
     </div>` : '')}
   </div>`;
 }
@@ -3581,7 +3657,9 @@ function htmlFeuilleComposition(source){
     return '<div class="q"><div class="qt"><b>' + (i+1) + '.</b> ' + E(g.q) +
       ' <span class="etat ' + etat + '">' + (etat === 'juste' ? 'juste' : etat === 'fausse' ? 'fausse' : 'blanche') + '</span></div><ol type="a">' +
       g.o.map((o, k) => '<li class="' + (bonnes.includes(k) ? 'bonne' : (r.includes(k) ? 'mauvaise' : '')) + '">' + E(o) +
-        (bonnes.includes(k) ? ' ✓' : (r.includes(k) ? ' ✗' : '')) + '</li>').join('') + '</ol></div>';
+        (bonnes.includes(k) ? ' ✓' : (r.includes(k) ? ' ✗' : '')) + '</li>').join('') + '</ol>' +
+      (typeof g.taux === 'number' ? '<div style="font:11px Helvetica,Arial,sans-serif;color:#555;margin:3px 0 0 22px">' + g.taux + ' % des candidats ont trouvé</div>' : '') +
+      (g.expl ? '<div style="font-size:11.5px;margin:4px 0 0 22px;padding:5px 8px;border-left:3px solid #0E7A54;background:#F3F7F5"><b>Pourquoi ?</b> ' + E(g.expl) + '</div>' : '') + '</div>';
   }).join('');
 
   const html = '<!doctype html><html lang="fr"><head><meta charset="utf-8">' +
@@ -3789,7 +3867,7 @@ function feuilleArchive(id){
     if(data.correction_le){ toast('Composition nationale : la feuille corrigée sera disponible à ' + heureFr(data.correction_le) + '.'); return null; }
     const grille = [], reponses = {};
     (data.questions || []).forEach((q, i) => {
-      grille.push({ q:q.enonce, o:q.options || [], bonnes:q.bonnes || [], m:q.matiere || null });
+      grille.push({ q:q.enonce, o:q.options || [], bonnes:q.bonnes || [], m:q.matiere || null, taux:q.taux, expl:q.explication });
       if(q.choisies && q.choisies.length) reponses[i] = q.choisies.map(Number);
     });
     return htmlFeuilleComposition({ grille, reponses, note:data.note || 0, duree:data.duree || 0,
@@ -3814,7 +3892,7 @@ function toutesCompositions(){
       if(!data || !data.ok || data.correction_le) continue;
       const grille = [], reponses = {};
       (data.questions || []).forEach((q, k) => {
-        grille.push({ q:q.enonce, o:q.options || [], bonnes:q.bonnes || [], m:q.matiere || null });
+        grille.push({ q:q.enonce, o:q.options || [], bonnes:q.bonnes || [], m:q.matiere || null, taux:q.taux, expl:q.explication });
         if(q.choisies && q.choisies.length) reponses[k] = q.choisies.map(Number);
       });
       const h = htmlFeuilleComposition({ grille, reponses, note:data.note || 0, duree:data.duree || 0,
@@ -4167,12 +4245,12 @@ function blocPoint2(){
 function ecranCompoAttente(){
   const etat = S.compoEtat;
   const titres = { chargement:'Préparation du sujet…', connexion:'Un compte est nécessaire',
-    abonnement:'Tes 4 compositions offertes sont faites', erreur:'Composition indisponible' };
+    abonnement:'Tes ' + compoOffertes() + ' compositions offertes sont faites', erreur:'Composition indisponible' };
   const textes = {
     chargement: S.compoLent
       ? 'La connexion est lente, on insiste. Ne quittez pas cette page : le sujet arrive.'
       : 'Le sujet arrive. Le chronomètre ne démarre qu\'une fois la feuille affichée.',
-    connexion: 'Crée ton compte gratuit : tes 4 premières compositions sont offertes.',
+    connexion: 'Crée ton compte gratuit : tes premières compositions sont offertes.',
     abonnement: S.compoMessage || 'Pour composer d\'autres sujets, choisissez votre abonnement.',
     erreur: S.compoMessage || 'Le sujet n\'a pas pu être chargé.'
   };
@@ -4183,6 +4261,7 @@ function ecranCompoAttente(){
     <p class="sous" style="margin:10px 0 18px">${E(textes[etat] || textes.erreur)}</p>
     ${etat === 'connexion' ? `<button class="cta" data-modal="inscription">Créer mon compte</button>
       <button class="lien" data-modal="connexion">J'ai déjà un compte</button>` : ''}
+    ${etat === 'abonnement' && S.compoDebloqueNotifs ? `<button class="cta" data-debloquer-notifs="1" style="margin-bottom:12px">Activer les notifications<small>Ta 4ᵉ composition offerte s'ouvre aussitôt</small></button>` : ''}
     ${etat === 'abonnement' ? blocPoint2() : ''}
     ${etat === 'erreur' ? `<button class="cta" data-compo-relancer="1">Réessayer</button>` : ''}
     ${etat !== 'chargement' ? `<button class="cta creux" style="margin-top:9px" data-go="revisions">Réviser en attendant</button>` : ''}
@@ -4622,6 +4701,7 @@ function feuilleOptique(){
 
 function remettre(){
   if(S.corrige) return;
+  const cr = document.getElementById('confirm-remise'); if(cr) cr.remove();
   if(S.timer){clearInterval(S.timer);S.timer=null;}
   S.corrige = true; S.taches[1] = true; sauverTaches(); S.sessionCounter++;
   noterSucces('composition');
@@ -5496,7 +5576,7 @@ function rappelFinEssai(essai){
     <button class="pn-x" data-fin-essai-non="1" aria-label="Fermer">×</button>
     <div class="eyebrow" style="color:var(--or)">Votre essai gratuit</div>
     <h3 id="pfe-titre">${S.abo.jours_restants > 0 ? 'Il se termine demain' : 'Il se termine aujourd\'hui'}</h3>
-    <p class="intro">Ensuite, l'abonnement gratuit garde 5 corrections par jour, 15 questions par matière et 4 compositions. Pour tout garder sans limite : ${E(f.n || 'Abonnement Mois')}, ${E(f.prix || '1 000 FCFA')} pour 30 jours.</p>
+    <p class="intro">Ensuite, l'abonnement gratuit garde 5 corrections par jour, 15 questions par matière et ${compoOffertes()} compositions. Pour tout garder sans limite : ${E(f.n || 'Abonnement Mois')}, ${E(f.prix || '1 000 FCFA')} pour 30 jours.</p>
     <button class="cta" data-fin-essai-oui="1">Choisir mon abonnement</button>
   </div>`;
   pister('TRIAL_END_POPUP');
@@ -6631,7 +6711,14 @@ document.addEventListener('click', ev => {
    top 10, propositions de questions, parcours, carte de progression,
    pause de série, concours visé, plein écran, concentration, installation.
    ===================================================================== */
+/* Les compositions offertes : 4 (version A) ou 3 + 1 après activation des notifications (version B test). Le serveur décide. */
+const compoOffertes = () => (S.offreCompo && S.offreCompo.offertes) || 4;
+async function chargerOffreCompo(){
+  if(!base || !S.util.connecte) return;
+  try{ const { data } = await base.rpc('mon_offre_compositions'); if(data) S.offreCompo = data; }catch(e){}
+}
 async function chargerDetails(){
+  chargerOffreCompo();
   if(!base || !S.util.connecte) return;
   try{ const { data } = await base.rpc('mes_details'); if(data){ const ch = !pareil(data, S.details); S.details = data; memoEcrire('details', data, true); if(ch) rafraichirSiVisible(); verifierNiveau(); setTimeout(notificationsDuJour, 2500); } }catch(e){}
   chargerElan();
@@ -8250,7 +8337,8 @@ document.addEventListener('click', ev=>{
     S.cahierDepuisGrille = true; S.cahierFiltre=false; return aller('cahier'); }
   if(d.entrer){
     pister('APP_ENTERED', { note_diagnostic: S.testNote });
-    aller('aujourdhui');
+    if(d.fautes === '1' && S.cahier.length){ pister('ERRORS_OPENED', { depuis: 'resultat_test' }); S.cahierDepuisGrille = true; S.cahierFiltre = false; aller('cahier'); }
+    else aller('aujourdhui');
     if(!S.modalDejaVu && !S.util.connecte){
       clearTimeout(S.minuteur);
       bienvenue();
@@ -8404,7 +8492,11 @@ document.addEventListener('click', ev=>{
     pister('DIAGNOSTIC_ANSWER_SELECTED', { question: q + 1 });
     return ecranTest();
   }
-  if(d.tremettre) return remettreTest();
+  if(d.tremettre){
+    const sans = 10 - Object.keys(S.testRep).filter(k => (S.testRep[k] || []).length).length;
+    if(sans > 0) return confirmerRemise(sans, false, remettreTest);
+    return remettreTest();
+  }
 
   if(d.compotab){
     basculerCompoTab(d.compotab);
@@ -8433,7 +8525,11 @@ document.addEventListener('click', ev=>{
     return;
   }
 
-  if(d.remettre) return remettre();
+  if(d.remettre){
+    const rep = Object.keys(S.reponses).filter(k => (S.reponses[k] || []).length).length, sans = S.grille.length - rep;
+    if(sans > 0) return confirmerRemise(sans, true, remettre, rep);
+    return remettre();
+  }
 
   if(d.recommencer){
     reinitialiserComposition();
