@@ -106,7 +106,7 @@ const A = {
   session: null,
   profil: null,
   equipe: false,
-  vue: 'tableau',
+  vue: 'priorites',
   ref: { matieres: [], concours: [], chapitres: [] },
   aValider: 0
 };
@@ -173,6 +173,8 @@ async function entrer(session){
   if(h0 && document.querySelector('#menu [data-vue="' + h0.replace(/[^a-z_]/g, '') + '"]')) A.vue = h0.replace(/[^a-z_]/g, '');
   rendre();
   majPastilles();
+  rafraichirPastillePrio();
+  clearInterval(minuteurPrio); minuteurPrio = setInterval(rafraichirPastillePrio, 120000);
   if(window.ADMIN && window.ADMIN.apresEntree) window.ADMIN.apresEntree();
 }
 /* les pastilles du menu (à valider, au dépôt), quelle que soit la page ouverte */
@@ -266,13 +268,97 @@ function rendre(){
   const plus = window.ADMIN && window.ADMIN.vues && window.ADMIN.vues[A.vue];
   if(plus){ try{ history.replaceState(null, '', '#' + A.vue); }catch(e){} $('#vue').scrollTop = 0; plus(); return; }
   try{ history.replaceState(null, '', '#' + A.vue); }catch(e){}
-  ({ tableau:vueTableau, bannissement:vueBannissement, acces:vueAcces, apercu:vueApercu, analyse:vueAnalyse, direct:vueDirect, comportement:vueComportement,
+  ({ priorites:vuePriorites, tableau:vueTableau, bannissement:vueBannissement, acces:vueAcces, apercu:vueApercu, analyse:vueAnalyse, direct:vueDirect, comportement:vueComportement,
      pedagogie:vuePedagogie, candidats:vueCandidats,
      depot:vueDepot, import:vueImport, bibliotheque:vueBibliotheque,
      validation:vueValidation, questions:vueQuestions, sujets:vueSujets, actualites:vueActualites,
      referentiel:vueReferentiel, journal:vueJournal, musique:vueMusique, paiements:vuePaiements,
      collectives:vueCollectives, signalements:vueSignalements, avis:vueAvis, indicateurs:vueIndicateurs, propositions:vuePropositions }[A.vue] || vueTableau)();
   $('#vue').scrollTop = 0;
+}
+
+
+/* =====================================================================
+   PRIORITÉS — ce qui attend l'équipe, dans l'ordre, avec l'action prête
+   ===================================================================== */
+const allerA = v => { A.vue = v; rendre(); };
+function lienWa(tel, texte){
+  const t = String(tel || '').replace(/\D/g, '');
+  return 'https://wa.me/' + (t.length === 8 ? '226' + t : t) + '?text=' + encodeURIComponent(texte);
+}
+function messageRenouvellement(c){
+  const prenom = (c.nom || '').trim().split(/\s+/)[0];
+  const fin = new Date(c.fin_le).toLocaleDateString('fr-FR', { day:'numeric', month:'long' });
+  return 'Bonjour ' + prenom + ', c\'est Mon Concours. Ton abonnement se termine le ' + fin + (c.concours ? ' et tu prépares le concours ' + c.concours : '') + '. Pour continuer sans coupure, tu peux le renouveler dans l\'application : Mois 1 000 F, Année 4 000 F. Je t\'aide si tu veux.';
+}
+async function lirePriorites(){
+  const peutRelancer = !!(A.admin || A.investisseur);
+  const [r, ab] = await Promise.all([
+    db.rpc('admin_priorites'),
+    peutRelancer ? db.rpc('admin_paiements_abandonnes') : Promise.resolve({ data: null })
+  ]);
+  if(r.error || !r.data || !r.data.ok) return { erreur: (r.error && r.error.message) || 'Lecture impossible.' };
+  const p = r.data;
+  const abandonnes = ab && ab.data && ab.data.ok ? (ab.data.liste || []).filter(c => !c.envoye_le) : [];
+  const h = p.prochaine_nationale ? (new Date(p.prochaine_nationale) - Date.now()) / 3600000 : null;
+  const items = [];
+  const ajouter = (niveau, titre, detail, bouton, vue, extra) => items.push(Object.assign({ niveau, titre, detail, bouton, vue }, extra || {}));
+  if(p.paiements) ajouter('urgent', p.paiements + ' paiement' + (p.paiements > 1 ? 's' : '') + ' à vérifier', p.paiement_age_min != null ? 'Le plus ancien attend depuis ' + (p.paiement_age_min >= 60 ? Math.round(p.paiement_age_min / 60) + ' h' : p.paiement_age_min + ' min') + '. Confirmer active l\'abonnement tout de suite.' : '', 'Vérifier maintenant', 'paiements');
+  if(abandonnes.length) ajouter('urgent', abandonnes.length + ' paiement' + (abandonnes.length > 1 ? 's' : '') + ' abandonné' + (abandonnes.length > 1 ? 's' : '') + ' à relancer', 'Le système a déjà envoyé sa notification. Un message WhatsApp personnel double les chances.', 'Voir la liste', 'paiements', { personnes: abandonnes.slice(0, 3).map(c => ({ id: c.user_id, nom: c.nom, tel: c.telephone, lien: lienWa(c.telephone, messageRelance(c)), mot: 'WhatsApp' })) });
+  if((p.expirent || []).length) ajouter('urgent', p.expirent.length + ' abonnement' + (p.expirent.length > 1 ? 's' : '') + ' se termine' + (p.expirent.length > 1 ? 'nt' : '') + ' dans 3 jours', 'Un mot avant la fin vaut mieux qu\'une relance après.', '', 'paiements', { personnes: p.expirent.slice(0, 5).map(c => ({ nom: c.nom, tel: c.telephone, lien: lienWa(c.telephone, messageRenouvellement(c)), mot: 'Prévenir', sous: 'fin le ' + new Date(c.fin_le).toLocaleDateString('fr-FR', { day:'numeric', month:'short' }) })) });
+  if(p.signalements) ajouter('urgent', p.signalements + ' signalement' + (p.signalements > 1 ? 's' : '') + ' nouveau' + (p.signalements > 1 ? 'x' : ''), 'Une question signalée fausse nuit à la crédibilité tant qu\'elle reste en ligne.', 'Traiter', 'signalements');
+  if(h === null) ajouter('urgent', 'Aucune composition nationale programmée', 'Le rendez-vous est ce qui fait revenir les candidats.', 'Programmer', 'collectives');
+  else if(h < 48) ajouter('important', 'Composition nationale dans ' + (h < 1 ? 'moins d\'une heure' : Math.round(h) + ' h'), 'Vérifier le sujet et l\'annonce pour le canal WhatsApp.', 'Voir la nationale', 'collectives');
+  if(p.propositions) ajouter('important', p.propositions + ' question' + (p.propositions > 1 ? 's' : '') + ' proposée' + (p.propositions > 1 ? 's' : '') + ' par des candidats', 'Le candidat est prévenu quand sa question entre dans la banque.', 'Examiner', 'propositions');
+  if(p.avis) ajouter('important', p.avis + ' avis à lire', 'Les meilleurs peuvent passer en vitrine.', 'Lire', 'avis');
+  if(p.validation) ajouter('important', p.validation + ' question' + (p.validation > 1 ? 's' : '') + ' à valider', 'Propositions de la file de validation.', 'Valider', 'validation');
+  if(p.depots) ajouter('important', p.depots + ' document' + (p.depots > 1 ? 's' : '') + ' à ranger', '', 'Ranger', 'depot');
+  return { items, total: items.filter(i => i.niveau === 'urgent').length + items.filter(i => i.niveau === 'important').length, urgents: items.filter(i => i.niveau === 'urgent').length };
+}
+function carteLpriorite(it){
+  const couleur = it.niveau === 'urgent' ? 'var(--rouge-texte,#EF7B6E)' : 'var(--or,#E3A82B)';
+  return '<div class="carte prio" style="margin-bottom:10px;border-left:4px solid ' + couleur + '">' +
+    '<div style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap">' +
+      '<div style="min-width:0;flex:1 1 220px"><b style="font-size:15px">' + E(it.titre) + '</b>' +
+        (it.detail ? '<div style="font-size:12.5px;color:var(--craie2);margin-top:3px">' + E(it.detail) + '</div>' : '') + '</div>' +
+      (it.bouton ? '<button class="mini" data-prio-vue="' + E(it.vue) + '">' + E(it.bouton) + '</button>' : '') +
+    '</div>' +
+    (it.personnes ? '<div style="margin-top:8px">' + it.personnes.map(c =>
+      '<div class="ligne-prio" style="display:flex;gap:8px;align-items:center;justify-content:space-between;padding:7px 0;border-top:1px solid var(--trait,#2a2a2a)">' +
+        '<div style="min-width:0"><b>' + E(c.nom || 'Candidat') + '</b><br><span style="font-size:12px;color:var(--craie2)">' + E(c.tel || '') + (c.sous ? ' · ' + E(c.sous) : '') + '</span></div>' +
+        '<a class="mini" ' + (c.id ? 'data-relance="' + E(c.id) + '" ' : '') + 'style="display:inline-block;text-decoration:none;background:var(--laterite,#13805A);color:#fff;padding:7px 13px;border-radius:9px;font-size:13px;font-weight:600;white-space:nowrap" href="' + E(c.lien) + '" target="_blank" rel="noopener">' + E(c.mot) + '</a></div>').join('') + '</div>' : '') +
+  '</div>';
+}
+async function vuePriorites(){
+  $('#vue').innerHTML = `
+    <h2 class="titre">Priorités</h2>
+    <p class="sous" style="margin-bottom:14px">Ce qui attend l'équipe, dans l'ordre. Chaque bouton ouvre directement l'action à faire.</p>
+    <div id="zone-prio"><div class="carte"><div class="vide">Chargement…</div></div></div>`;
+  const z = document.getElementById('zone-prio');
+  let r;
+  try{ r = await lirePriorites(); }catch(e){ r = { erreur: 'Lecture impossible.' }; }
+  if(!document.getElementById('zone-prio') || A.vue !== 'priorites') return;
+  if(r.erreur){ z.innerHTML = '<div class="carte"><p>' + E(r.erreur) + '</p><button class="mini" id="prio-reessai">Réessayer</button></div>'; document.getElementById('prio-reessai').onclick = vuePriorites; return; }
+  if(!r.items.length){ z.innerHTML = '<div class="carte"><b>Rien d\'urgent.</b><div class="sous" style="margin-top:4px">Tout est à jour. Reviens dans quelques heures.</div></div>'; majPastillePrio(0); return; }
+  const urgents = r.items.filter(i => i.niveau === 'urgent'), importants = r.items.filter(i => i.niveau !== 'urgent');
+  z.innerHTML = (urgents.length ? '<div class="libelle">À faire maintenant<span>' + urgents.length + '</span></div>' + urgents.map(carteLpriorite).join('') : '') +
+    (importants.length ? '<div class="libelle" style="margin-top:14px">Ensuite<span>' + importants.length + '</span></div>' + importants.map(carteLpriorite).join('') : '');
+  z.querySelectorAll('[data-prio-vue]').forEach(b => b.onclick = () => allerA(b.dataset.prioVue));
+  z.querySelectorAll('[data-relance]').forEach(a => a.addEventListener('click', () => {
+    db.rpc('admin_marquer_relance', { p_user: a.dataset.relance });
+    const l = a.closest('.ligne-prio'); if(l){ l.style.opacity = '.45'; a.textContent = 'Envoyé'; }
+  }));
+  majPastillePrio(r.urgents);
+}
+function majPastillePrio(n){
+  const p = document.getElementById('pastille-prio');
+  if(p){ p.hidden = !n; p.textContent = n || ''; }
+}
+/* le décompte du menu se met à jour seul, sans jamais gêner l'écran ouvert */
+let minuteurPrio = null;
+async function rafraichirPastillePrio(){
+  if(document.hidden || !db) return;
+  try{ const r = await lirePriorites(); if(!r.erreur) majPastillePrio(r.urgents); }catch(e){}
 }
 
 /* ---------- musique de travail ---------- */
@@ -376,7 +462,7 @@ async function chargerAbandonnes(){
       const vu = c.derniere ? new Date(c.derniere).toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit' }) : '—';
       return '<div class="ligne-aband" style="display:flex;gap:8px;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid var(--trait,#2a2a2a)' + (c.envoye_le ? ';opacity:.55' : '') + '">' +
         '<div style="min-width:0"><b>' + E(c.nom || 'Candidat') + '</b><br><span style="font-size:12px;color:var(--craie2)">' + E(c.telephone) + ' · ' + E(c.formule || '—') + ' · vu le ' + vu + (c.envoye_le ? ' · relancé' : '') + '</span></div>' +
-        '<a class="mini" data-relance="' + E(c.user_id) + '" href="' + E(lien) + '" target="_blank" rel="noopener">' + (c.envoye_le ? 'Renvoyer' : 'WhatsApp') + '</a></div>';
+        '<a class="mini" data-relance="' + E(c.user_id) + '" style="display:inline-block;text-decoration:none;background:var(--laterite,#13805A);color:#fff;padding:7px 13px;border-radius:9px;font-size:13px;font-weight:600;white-space:nowrap" href="' + E(lien) + '" target="_blank" rel="noopener">' + (c.envoye_le ? 'Renvoyer' : 'WhatsApp') + '</a></div>';
     }).join('') : '<p style="margin:0">Personne à relancer pour le moment.</p>');
   zone.querySelectorAll('[data-relance]').forEach(a => a.addEventListener('click', () => {
     db.rpc('admin_marquer_relance', { p_user: a.dataset.relance });
@@ -2850,8 +2936,14 @@ async function vueTableau(){
     <h2 class="titre">Tableau de bord</h2>
     <p class="sous">La croissance, qui est là en ce moment, et ce que les candidats font vraiment. Mis à jour toutes les minutes.</p>
     ${choixPeriode([[7,'7 jours'],[30,'30 jours'],[90,'90 jours']])}
+    <div id="bandeau-prio"></div>
     <div id="zone-tableau">Chargement…</div>`;
   brancherPeriode(vueTableau);
+  lirePriorites().then(r => {
+    const b = document.getElementById('bandeau-prio'); if(!b || r.erreur || !r.urgents) return;
+    b.innerHTML = '<div class="carte cliquable" style="margin-bottom:12px;border-left:4px solid var(--rouge-texte,#EF7B6E)" id="bandeau-prio-clic"><b>' + r.urgents + ' priorité' + (r.urgents > 1 ? 's' : '') + ' à traiter maintenant</b> <span style="color:var(--craie2)">· ' + E(r.items.filter(i => i.niveau === 'urgent').map(i => i.titre).slice(0, 2).join(' · ')) + '</span></div>';
+    document.getElementById('bandeau-prio-clic').onclick = () => allerA('priorites');
+  }).catch(() => {});
   const { data: t, error } = await rpcPeriode('tableau_de_bord', j);
   if(error) return erreur(error, 'Lecture impossible');
   const z = document.getElementById('zone-tableau');
