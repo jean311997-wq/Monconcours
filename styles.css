@@ -2011,3 +2011,4 @@ body.sans-anim .stat-comm .sc-new.jamais{animation:none}
 .av-table td:first-child,.av-table th:first-child{text-align:left}
 .av-table .non{color:var(--craie2)}
 .av-table .oui{color:var(--vert-texte);font-weight:700}
+.offre-tete{margin-bottom:16px}

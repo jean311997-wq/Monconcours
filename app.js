@@ -902,11 +902,7 @@ function blocPlanPaiement(faibles){
   if(S.gratuit || estAbonnePaye()) return '';
   const cible = faibles.length ? faibles.slice(0,2).map(x => E(x)).join(' et ') : 'les matières du concours';
   const f = FORMULES, an = f.annuelle;
-  const ligne = (k, nom, sous) => `<div class="carte" style="margin-bottom:10px">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
-        <b>${nom}</b><span class="num">${f[k].ancien ? '<s style="opacity:.55;font-weight:400">' + E(f[k].ancien) + '</s> ' : ''}<b>${E(f[k].prix)}</b></span></div>
-      <p class="sous" style="margin:4px 0 8px">${sous}</p>
-      <button class="mini" data-pass="${k}">Choisir cet abonnement</button></div>`;
+  const ligne = (k, nom, sous) => carteFormule(k, sous);
   return `<div class="bonne-nouvelle" style="margin-top:18px">
     <h2>Ton plan pour rattraper ${cible}</h2>
     <p class="sous" style="margin:0 0 10px">La première séance est ouverte pour toi dans l'application. Le plan complet se débloque avec un pass.</p>
@@ -2677,13 +2673,56 @@ function ligneBilanPerso(){
   const fait = [c ? 'fait ' + c + ' composition' + (c > 1 ? 's' : '') : '', e ? (c ? 'refermé ' : 'refermé ') + e + ' erreur' + (e > 1 ? 's' : '') : ''].filter(Boolean).join(' et ');
   return `<p class="sous bilan-perso" style="margin:0 0 12px;text-align:left"><b>Tu as déjà ${fait}.</b> Avec l'abonnement : tout le reste, sans limite.</p>`;
 }
+/* ---- Offre unifiée (maquette C) : ses chiffres, conseiller WhatsApp, année en avant, avantages courts ---- */
+function chiffresPerso(){
+  if(!S.util.connecte) return { c:0, e:0, p:0, moy:null };
+  const d = S.details || {};
+  const c = typeof d.compos_total === 'number' ? d.compos_total : ((S.stats && S.stats.compositions) || 0);
+  const cs = ((S.journee && S.journee.compositions) || []).filter(x => x.sur > 0 && !x.collective);
+  const moy = cs.length ? Math.round(cs.reduce((t, x) => t + x.score / x.sur * 50, 0) / cs.length) : null;
+  return { c, e: d.refermees_total || 0, p: d.gain_points_semaine || 0, moy };
+}
+function enteteBilan(){
+  const x = chiffresPerso();
+  if(!x.c && !x.e) return '';
+  const fait = [x.c ? 'fait ' + x.c + ' composition' + (x.c > 1 ? 's' : '') : '', x.e ? 'refermé ' + x.e + ' erreur' + (x.e > 1 ? 's' : '') : ''].filter(Boolean).join(' et ');
+  const t = (v, l) => `<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+  const tuiles = [x.moy !== null ? t(x.moy + '/50', 'ta moyenne') : '', x.e ? t(x.e, 'erreurs refermées') : '', x.p > 0 ? t('+' + x.p, 'points cette semaine') : ''].join('');
+  return `<div class="offre-tete"><h1 class="titre" style="font-size:21px;line-height:1.2">Tu as déjà ${fait}.</h1>
+    <p class="sous" style="margin:6px 0 0">Ne t'arrête pas là : continue sans limite jusqu'au concours.</p>
+    ${tuiles ? `<div class="av-stats">${tuiles}</div>` : ''}</div>`;
+}
+function carteFormule(k, sous){
+  const f = FORMULES[k], an = k === 'annuelle';
+  const base = formulesBase();
+  const douze = base.mensuelle.montant * 12;
+  const sousDef = an
+    ? (f.ancien ? '12 mois sans limite' : '12 mois sans limite' + (douze > f.montant ? ', <s>au lieu de ' + E(fmtFcfa(douze)) + '</s> en payant mois par mois' : ''))
+    : '30 jours sans limite';
+  return `<div class="formule ${an ? 'reco' : ''} ${f.ancien ? 'flash' : ''}">
+    ${f.ancien ? '<span class="ruban">promotion</span>' : an ? '<span class="ruban">recommandé</span>' : ''}
+    <div class="haut"><span class="nom">${E(f.n)}</span>
+      <span class="prix">${f.ancien ? `<s class="barre">${E(f.ancien)}</s> ` : ''}${E(f.prix)}</span></div>
+    <p class="sous" style="margin:4px 0 0">${sous || sousDef}</p>
+    ${f.ancien ? `<div class="flash-reste">${E(S.promo ? promoFin() : '')}</div>` : ''}
+    <button class="cta${an ? '' : ' creux'}" style="margin-top:12px" data-pass="${k}">${an ? 'Choisir l\'année' : 'Choisir le mois'}</button>
+  </div>`;
+}
+function avantagesListe(){
+  return `<ul class="inclus-liste" style="margin-top:16px">
+    <li>Mes erreurs revient chaque jour, jusqu'à ce que tu aies juste</li>
+    <li>Feuille corrigée de mes erreurs détaillées en PDF</li>
+    <li>Compositions chronométrées, sans limite, avec ton classement</li>
+    <li>Cours et questions sans connexion</li>
+  </ul>
+  <p class="sous" style="margin:14px 0 0;text-align:center;font-size:12.5px">Orange Money, Moov Money ou Wave.<br>Validation souvent en quelques minutes.</p>`;
+}
+function offreC(point, cleConseiller, alternatives, sansEntete){
+  return (sansEntete ? '' : enteteBilan()) + blocConseiller(cleConseiller, point) +
+    carteFormule('annuelle') + carteFormule('mensuelle') + (alternatives || '') + avantagesListe();
+}
 function offreDeuxPrix(){
-  const f = FORMULES;
-  const bouton = (k, sous, creux) => `<button class="cta${creux ? ' creux' : ''}" style="margin-top:9px" data-pass="${k}">${E(f[k].n)} · ${f[k].ancien ? '<s style="opacity:.6;font-weight:400">' + E(f[k].ancien) + '</s> ' : ''}${E(f[k].prix)}<small${creux ? ' style="color:inherit;opacity:.75"' : ''}>${sous}</small></button>`;
-  return ligneBilanPerso() + blocConseiller('mensuelle', 'blocage') +
-    bouton('annuelle', '12 mois sans limite', false) +
-    bouton('mensuelle', '30 jours sans limite', true) +
-    `<button class="lien-mini" style="margin-top:8px" data-proche="mensuelle">${ico('partage',13)} Un proche paie pour moi</button>`;
+  return offreC('blocage', 'mensuelle', `<button class="lien-mini" style="margin-top:12px" data-proche="mensuelle">${ico('partage',13)} Un proche paie pour moi</button>`);
 }
 /* Ce qui est payant : un seul passage. Un visiteur crée d'abord son compte ;
    un compte sans abonnement arrive directement sur les abonnements, avec la raison. */
@@ -2798,7 +2837,7 @@ function ecranAbonnement(){
     </div>
     <p class="sous" style="margin:14px 0 4px">Pour prolonger, choisissez un abonnement : il s'ajoute à la fin du vôtre.</p>` : `
     ${S.raisonAbo ? `<div class="raison-abo"><span>${ico('cadenas',16)}</span><p>${E(S.raisonAbo)}</p></div>` : ''}
-    ${avantagesPremium()}`}
+    ${enteteBilan() || '<h1 class="titre">Prépare ton concours<br>sans limite</h1>'}`}
 
     ${S.paiementEtat && S.paiementEtat.statut === 'confirme' ? `
     <div class="carte" style="margin:14px 0;text-align:center">
@@ -2817,39 +2856,8 @@ function ecranAbonnement(){
       <p class="sous" style="margin:6px 0 0">Votre paiement du ${new Date(paiement.cree_le).toLocaleDateString('fr-FR')} est en cours de vérification. Validation souvent en quelques minutes. Vous recevrez une notification dès que c'est confirmé.</p>
       <p class="sous" style="margin:8px 0 0">Tu veux aller plus vite ? <a href="tel:+226${numeroConseiller()}" data-pister-appel="1">Appelle le +226 ${fmtTel(numeroConseiller())}</a> pour signaler ton paiement.</p>
     </div>` : `
-    ${blocConseiller('', 'abonnement')}
-    <div class="libelle" style="margin-top:6px">Choisissez votre abonnement</div>
-    ${Object.keys(FORMULES).map(k => {
-      const f = FORMULES[k];
-      return `<div class="formule ${f.reco ? 'reco' : ''} ${f.ancien ? 'flash' : ''}">
-        ${f.ancien ? '<span class="ruban">promotion</span>' : f.reco ? '<span class="ruban">recommandé</span>' : ''}
-        <div class="haut"><span class="nom">${f.n}</span>
-          <span class="prix">${f.ancien ? `<s class="barre">${f.ancien}</s> ` : ''}${f.prix} <em>${f.per}</em></span></div>
-        ${f.ancien ? `<div class="flash-reste">${E(S.promo ? promoFin() : '')}</div>` : ''}
-        <button class="mini" style="margin-top:12px" data-pass="${k}">Choisir cet abonnement</button>
-      </div>`;
-    }).join('')}
-    ${blocAlternatives()}`}
+    ${offreC('abonnement', '', blocAlternatives(), true)}`}
   </div>`;
-}
-/* Écran d'abonnement : ce que le candidat a déjà fait, ce que l'abonnement change, gratuit contre abonné */
-function avantagesPremium(){
-  const d = S.details || {};
-  const c = typeof d.compos_total === 'number' ? d.compos_total : ((S.stats && S.stats.compositions) || 0);
-  const e = d.refermees_total || 0, p = d.gain_points_semaine || 0;
-  const actif = S.util.connecte && (c || e);
-  const stat = (v, l) => `<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`;
-  const item = (n, t, s) => `<div class="av-ligne"><span class="av-n">${n}</span><div><b>${t}</b><p>${s}</p></div></div>`;
-  return `
-    ${actif ? `<div class="eyebrow">Ton abonnement</div>
-    <h1 class="titre">Tu as déjà commencé.<br>Garde ton rythme.</h1>
-    <div class="av-stats">${stat(c, 'compositions faites')}${stat(e, 'erreurs refermées')}${p > 0 ? stat('+' + p, 'points cette semaine') : ''}</div>`
-    : `<h1 class="titre">Prépare ton concours<br>sans limite</h1>`}
-    <div class="libelle" style="margin-top:20px">Ce que ça change pour toi</div>
-    ${item(1, 'Tu refermes chaque erreur', 'Mes erreurs revient tous les jours, jusqu\'à ce que tu aies juste.')}
-    ${item(2, 'Tu vois où tu perds des points', 'Feuille corrigée de mes erreurs détaillées en PDF : la bonne réponse, le pourquoi, et le % de candidats qui ont trouvé.')}
-    ${item(3, 'Tu t\'entraînes comme le jour J', 'Compositions chronométrées, sans limite, avec ton classement.')}
-    ${item(4, 'Tu révises sans connexion', 'Cours en PDF et questions hors ligne, même sans réseau.')}`;
 }
 
 function ecranPaiement(){
