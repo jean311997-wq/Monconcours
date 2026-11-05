@@ -2895,7 +2895,7 @@ function ecranPaiement(){
         <div class="l">capture reçue</div>
       </div>
       <h1 class="titre" style="font-size:24px">Votre paiement est en<br>cours de vérification</h1>
-      <p class="sous" style="margin:12px 0 6px">Nous vérifions votre capture : validation en 5 minutes en moyenne. Vous recevrez une notification : paiement confirmé, ou rejeté avec la raison.</p>
+      <p class="sous" style="margin:12px 0 6px">Nous vérifions votre capture : validation souvent en quelques minutes. Vous recevrez une notification : paiement confirmé, ou rejeté avec la raison.</p>
       <p class="sous" style="margin:0 0 6px">Tu veux aller plus vite ? <a href="tel:+226${numeroConseiller()}" data-pister-appel="1">Appelle le +226 ${fmtTel(numeroConseiller())}</a> pour signaler ton paiement.</p>
       <div class="carte" style="margin-top:16px;text-align:left">
         <div class="mat"><div class="nom">Moyen de paiement<em>${O.nom} · au +226 ${E(S.paieTel)}</em></div><div class="val">✓</div></div>
