@@ -2840,7 +2840,6 @@ function avantagesPremium(){
   const actif = S.util.connecte && (c || e);
   const stat = (v, l) => `<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`;
   const item = (n, t, s) => `<div class="av-ligne"><span class="av-n">${n}</span><div><b>${t}</b><p>${s}</p></div></div>`;
-  const ligne = (a, g, ab) => `<tr><td>${a}</td><td class="non">${g}</td><td class="oui">${ab}</td></tr>`;
   return `
     ${actif ? `<div class="eyebrow">Ton abonnement</div>
     <h1 class="titre">Tu as déjà commencé.<br>Garde ton rythme.</h1>
@@ -2848,18 +2847,9 @@ function avantagesPremium(){
     : `<h1 class="titre">Prépare ton concours<br>sans limite</h1>`}
     <div class="libelle" style="margin-top:20px">Ce que ça change pour toi</div>
     ${item(1, 'Tu refermes chaque erreur', 'Mes erreurs revient tous les jours, jusqu\'à ce que tu aies juste.')}
-    ${item(2, 'Tu vois où tu perds des points', 'Feuille corrigée détaillée en PDF : la bonne réponse, le pourquoi, et le % de candidats qui ont trouvé.')}
+    ${item(2, 'Tu vois où tu perds des points', 'Feuille corrigée de mes erreurs détaillées en PDF : la bonne réponse, le pourquoi, et le % de candidats qui ont trouvé.')}
     ${item(3, 'Tu t\'entraînes comme le jour J', 'Compositions chronométrées, sans limite, avec ton classement.')}
-    ${item(4, 'Tu révises sans connexion', 'Cours en PDF et questions hors ligne, même sans réseau.')}
-    <div class="carte" style="margin:14px 0 4px;padding:6px 12px">
-      <table class="av-table"><tr><th></th><th>Gratuit</th><th>Abonné</th></tr>
-        ${ligne('Corrections', '5 par jour', 'Sans limite')}
-        ${ligne('Questions par matière', '15', 'Toutes')}
-        ${ligne('Compositions', String(compoOffertes()), 'Sans limite')}
-        ${ligne('Feuille détaillée PDF', '—', '✓')}
-        ${ligne('Hors ligne', '—', '✓')}
-      </table>
-    </div>`;
+    ${item(4, 'Tu révises sans connexion', 'Cours en PDF et questions hors ligne, même sans réseau.')}`;
 }
 
 function ecranPaiement(){
