@@ -1997,3 +1997,17 @@ body.sans-anim .stat-comm .sc-new.jamais{animation:none}
 .gc-etapes span,.gc-retard span{font-size:13.5px;line-height:1.5;color:var(--craie2)}
 .gc-retard{display:flex;flex-direction:column;gap:3px;padding:12px;border-radius:12px;border:1px solid var(--trait);margin-bottom:16px}
 .gc-retard b{font-size:14px}
+
+/* Écran d'abonnement : avantages */
+.av-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px;margin-top:14px}
+.av-ligne{display:flex;gap:12px;padding:11px 0;border-top:1px solid var(--trait)}
+.av-ligne:first-of-type{border-top:0}
+.av-n{flex:none;width:32px;height:32px;border-radius:10px;background:var(--vert-fond);border:1px solid var(--vert-bord);color:var(--vert-texte);display:grid;place-items:center;font-weight:800;font-size:14px}
+.av-ligne b{display:block;font-size:15px;margin-bottom:2px}
+.av-ligne p{font-size:13px;color:var(--craie2);line-height:1.4}
+.av-table{width:100%;border-collapse:collapse;font-size:13px}
+.av-table th,.av-table td{padding:9px 4px;border-top:1px solid var(--trait);text-align:center}
+.av-table th{border-top:0;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--craie2);font-weight:600}
+.av-table td:first-child,.av-table th:first-child{text-align:left}
+.av-table .non{color:var(--craie2)}
+.av-table .oui{color:var(--vert-texte);font-weight:700}

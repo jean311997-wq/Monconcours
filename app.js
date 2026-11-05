@@ -2316,7 +2316,7 @@ function blocFinEssai(){
   const f = FORMULES.mensuelle;
   return `<div class="carte fin-essai" role="status">
     <div class="fe-ligne"><b>Votre essai ${reste}</b></div>
-    <p class="sous" style="margin:6px 0 12px">Ensuite, l'abonnement gratuit garde 5 corrections par jour, 15 questions par matière et ${compoOffertes()} compositions. Pour tout garder sans limite : ${E(f.n)}, ${E(f.prix)} pour 30 jours, soit ${E(f.jour)}.</p>
+    <p class="sous" style="margin:6px 0 12px">Ensuite, l'abonnement gratuit garde 5 corrections par jour, 15 questions par matière et ${compoOffertes()} compositions. Pour tout garder sans limite : ${E(f.n)}, ${E(f.prix)} pour 30 jours.</p>
     <button class="cta" data-pass="mensuelle">Garder l'accès complet · ${E(f.prix)}</button>
     <button class="cta creux" style="margin-top:8px" data-go="abonnement">Voir tous les abonnements</button>
   </div>`;
@@ -2681,8 +2681,8 @@ function offreDeuxPrix(){
   const f = FORMULES;
   const bouton = (k, sous, creux) => `<button class="cta${creux ? ' creux' : ''}" style="margin-top:9px" data-pass="${k}">${E(f[k].n)} · ${f[k].ancien ? '<s style="opacity:.6;font-weight:400">' + E(f[k].ancien) + '</s> ' : ''}${E(f[k].prix)}<small${creux ? ' style="color:inherit;opacity:.75"' : ''}>${sous}</small></button>`;
   return ligneBilanPerso() + blocConseiller('mensuelle', 'blocage') +
-    bouton('annuelle', '12 mois sans limite · ' + E(f.annuelle.jour), false) +
-    bouton('mensuelle', '30 jours sans limite · ' + E(f.mensuelle.jour), true) +
+    bouton('annuelle', '12 mois sans limite', false) +
+    bouton('mensuelle', '30 jours sans limite', true) +
     `<button class="lien-mini" style="margin-top:8px" data-proche="mensuelle">${ico('partage',13)} Un proche paie pour moi</button>`;
 }
 /* Ce qui est payant : un seul passage. Un visiteur crée d'abord son compte ;
@@ -2798,8 +2798,7 @@ function ecranAbonnement(){
     </div>
     <p class="sous" style="margin:14px 0 4px">Pour prolonger, choisissez un abonnement : il s'ajoute à la fin du vôtre.</p>` : `
     ${S.raisonAbo ? `<div class="raison-abo"><span>${ico('cadenas',16)}</span><p>${E(S.raisonAbo)}</p></div>` : ''}
-    <h1 class="titre">Prépare ton concours<br>sans limite</h1>
-    <p class="sous" style="margin:10px 0 18px">Corrections illimitées, compositions illimitées, feuille corrigée détaillée, plan de révision et mode hors ligne.</p>`}
+    ${avantagesPremium()}`}
 
     ${S.paiementEtat && S.paiementEtat.statut === 'confirme' ? `
     <div class="carte" style="margin:14px 0;text-align:center">
@@ -2831,19 +2830,36 @@ function ecranAbonnement(){
       </div>`;
     }).join('')}
     ${blocAlternatives()}`}
-
-    <div class="bloc inclus">
-      <div class="libelle">Chaque abonnement comprend</div>
-      <ul class="inclus-liste">
-        <li>Corrections illimitées, tous les jours</li>
-        <li>Compositions illimitées</li>
-        <li>Feuille corrigée détaillée en PDF</li>
-        <li>Cours en PDF et lecture sans connexion</li>
-        <li>Packs de questions hors ligne</li>
-        <li>Plan de révision de la semaine</li>
-      </ul>
-    </div>
   </div>`;
+}
+/* Écran d'abonnement : ce que le candidat a déjà fait, ce que l'abonnement change, gratuit contre abonné */
+function avantagesPremium(){
+  const d = S.details || {};
+  const c = typeof d.compos_total === 'number' ? d.compos_total : ((S.stats && S.stats.compositions) || 0);
+  const e = d.refermees_total || 0, p = d.gain_points_semaine || 0;
+  const actif = S.util.connecte && (c || e);
+  const stat = (v, l) => `<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+  const item = (n, t, s) => `<div class="av-ligne"><span class="av-n">${n}</span><div><b>${t}</b><p>${s}</p></div></div>`;
+  const ligne = (a, g, ab) => `<tr><td>${a}</td><td class="non">${g}</td><td class="oui">${ab}</td></tr>`;
+  return `
+    ${actif ? `<div class="eyebrow">Ton abonnement</div>
+    <h1 class="titre">Tu as déjà commencé.<br>Garde ton rythme.</h1>
+    <div class="av-stats">${stat(c, 'compositions faites')}${stat(e, 'erreurs refermées')}${p > 0 ? stat('+' + p, 'points cette semaine') : ''}</div>`
+    : `<h1 class="titre">Prépare ton concours<br>sans limite</h1>`}
+    <div class="libelle" style="margin-top:20px">Ce que ça change pour toi</div>
+    ${item(1, 'Tu refermes chaque erreur', 'Mes erreurs revient tous les jours, jusqu\'à ce que tu aies juste.')}
+    ${item(2, 'Tu vois où tu perds des points', 'Feuille corrigée détaillée en PDF : la bonne réponse, le pourquoi, et le % de candidats qui ont trouvé.')}
+    ${item(3, 'Tu t\'entraînes comme le jour J', 'Compositions chronométrées, sans limite, avec ton classement.')}
+    ${item(4, 'Tu révises sans connexion', 'Cours en PDF et questions hors ligne, même sans réseau.')}
+    <div class="carte" style="margin:14px 0 4px;padding:6px 12px">
+      <table class="av-table"><tr><th></th><th>Gratuit</th><th>Abonné</th></tr>
+        ${ligne('Corrections', '5 par jour', 'Sans limite')}
+        ${ligne('Questions par matière', '15', 'Toutes')}
+        ${ligne('Compositions', String(compoOffertes()), 'Sans limite')}
+        ${ligne('Feuille détaillée PDF', '—', '✓')}
+        ${ligne('Hors ligne', '—', '✓')}
+      </table>
+    </div>`;
 }
 
 function ecranPaiement(){
