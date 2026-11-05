@@ -2815,7 +2815,7 @@ function ecranAbonnement(){
     ${paiement ? `
     <div class="carte" style="margin:14px 0;text-align:center">
       <div class="eyebrow">Capture reçue</div>
-      <p class="sous" style="margin:6px 0 0">Votre paiement du ${new Date(paiement.cree_le).toLocaleDateString('fr-FR')} est en cours de vérification. Validation en 5 minutes en moyenne. Vous recevrez une notification dès que c'est confirmé.</p>
+      <p class="sous" style="margin:6px 0 0">Votre paiement du ${new Date(paiement.cree_le).toLocaleDateString('fr-FR')} est en cours de vérification. Validation souvent en quelques minutes. Vous recevrez une notification dès que c'est confirmé.</p>
       <p class="sous" style="margin:8px 0 0">Tu veux aller plus vite ? <a href="tel:+226${numeroConseiller()}" data-pister-appel="1">Appelle le +226 ${fmtTel(numeroConseiller())}</a> pour signaler ton paiement.</p>
     </div>` : `
     ${blocConseiller('', 'abonnement')}
