@@ -1811,10 +1811,15 @@ async function reprendreSession(){
   try{ await reprendreSession0(); }finally{ S.sessionPrete = true; chargerEpreuve(); setTimeout(() => rappelFinEssai(0), 5000); setTimeout(() => proposerRappel(0), 12000); }
 }
 async function reprendreSession0(){
-  const { data } = await base.auth.getSession();
+  let data = null, erreurSession = null;
+  try{ ({ data, error: erreurSession } = await base.auth.getSession()); }catch(e){ erreurSession = e; }
   if(!data || !data.session){
-    /* La session du serveur a expiré : on corrige l'affichage optimiste,
-       mais le candidat reste sur l'application, pas sur les trois étapes. */
+    /* Réseau ou serveur indisponible : on garde le candidat connecté et on réessaie plus tard.
+       On ne l'oublie que si la session a réellement expiré (réponse sans erreur). */
+    if(erreurSession){
+      clearTimeout(S.retrySession); S.retrySession = setTimeout(reprendreSession0, 20000);
+      return;
+    }
     if(S.util.connecte){ S.util = {nom:'', tel:'', pin:'', connecte:false}; oublierIdentite(); rendre(); }
     return;
   }
@@ -1852,15 +1857,7 @@ function brancherBase(){
   if(base) return;
   try{
     if(typeof supabase === 'undefined' || !supabase.createClient) return;
-    /* une lecture qui traîne plus de 25 s est abandonnée : l'écran affiche l'erreur ou le cache au lieu de rester figé.
-       Les écritures (remise, paiement, envoi de preuve) ne sont jamais coupées. */
-    const fetchAvecDelai = (url, opts = {}) => {
-      const lecture = !opts.method || opts.method === 'GET' || opts.method === 'HEAD';
-      if(!lecture || opts.signal || !String(url).includes('/rest/v1/')) return fetch(url, opts);
-      const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 25000);
-      return fetch(url, Object.assign({}, opts, { signal: ctl.signal })).finally(() => clearTimeout(t));
-    };
-    base = supabase.createClient(BASE_URL, BASE_CLE, { auth: { persistSession: true }, global: { fetch: fetchAvecDelai } });
+    base = supabase.createClient(BASE_URL, BASE_CLE, { auth: { persistSession: true } });
   }catch(e){ base = null; return; }
 
   /* on étale les appels pour ne pas saturer une connexion lente */
