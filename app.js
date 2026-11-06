@@ -350,7 +350,13 @@ window.addEventListener('beforeunload', e => {
 (function reprendreReglages(){
   const r = lireReglages();
   if(r.theme === 'sombre' || r.theme === 'clair') S.theme = r.theme;
-  if(['A','B','C'].includes(r.parcours)) S.parcours = r.parcours;
+  if(['A','B','C','D','X'].includes(r.parcours)) S.parcours = r.parcours;
+  /* Lien d'aperçu : ?apercu=xx1 montre le parcours XX1, ?apercu=actuel le parcours habituel */
+  try{
+    const ap = new URLSearchParams(location.search).get('apercu');
+    if(ap === 'xx1'){ S.parcours = 'X'; ecrireReglage('parcours', 'X'); ecrireReglage('apercuX', true); }
+    else if(ap === 'actuel'){ S.parcours = 'B'; ecrireReglage('parcours', 'B'); ecrireReglage('apercuX', false); }
+  }catch(e){}
   /* S.taches est un TABLEAU. Object.assign en aurait fait un objet,
      qui n'a pas de .filter : l'accueil plantait et l'écran restait noir. */
   if(Array.isArray(r.taches) && r.tachesJour === new Date().toDateString()){
@@ -557,13 +563,14 @@ const ONGLETS = [
 ];
 function nav(){
   const n = $('#nav'), r = $('#rail');
-  const cache = ['engagement','testIntro','test','resultat','verrou','verrou_d','seance','inscription','connexion','paiement'].includes(S.ecran);
+  const cache = ['engagement','testIntro','test','resultat','verrou','verrou_d','seance','inscription','connexion','paiement','xreprise','xbravo'].includes(S.ecran);
   n.style.display = cache ? 'none' : 'grid';
   r.style.display = cache ? 'none' : '';
   const app = document.querySelector('.app'); if(app) app.classList.toggle('sans-rail', cache);
   if(cache) return;
-  n.style.gridTemplateColumns = 'repeat(5,1fr)';
-  n.innerHTML = ONGLETS.map(o=>{
+  const OG = estXX1() ? ONGLETS_X : ONGLETS;
+  n.style.gridTemplateColumns = 'repeat(' + OG.length + ',1fr)';
+  n.innerHTML = OG.map(o=>{
     const on = (o.id===S.ecran || (o.id==='grille'&&S.ecran==='copie')
       || (o.id==='aujourdhui'&&['actualite','pourtoi','qdj','gagnants','correctionnat','question','notion','recherche','defi','top','proposer'].includes(S.ecran))
       || (o.id==='compte'&&(S.ecran==='parcours'||S.ecran==='communaute'))
@@ -572,7 +579,7 @@ function nav(){
     const centre = o.id === 'grille' ? ' pivot' : '';
     return `<button class="${on}${centre}" data-go="${o.id}"${on?' aria-current="page"':''}>${p}<span class="g">${ico(o.g, o.id==='grille'?26:19)}</span>${o.l}</button>`;
   }).join('');
-  r.innerHTML = ONGLETS.map(o=>{
+  r.innerHTML = OG.map(o=>{
     const on = (o.id===S.ecran || (o.id==='grille'&&S.ecran==='copie')
       || (o.id==='aujourdhui'&&['actualite','pourtoi','qdj','gagnants','correctionnat','question','notion','recherche','defi','top','proposer'].includes(S.ecran))
       || (o.id==='compte'&&(S.ecran==='parcours'||S.ecran==='communaute'))
@@ -766,7 +773,7 @@ function remettreTest(){
   if(corps){
     const s=document.createElement('div'); s.className='scan'; corps.appendChild(s);
     setTimeout(()=>{ s.remove(); pister('DIAGNOSTIC_RESULT_VIEWED', { note: S.testNote, parcours: S.parcours });
-      if((S.parcours === 'B' || S.parcours === 'C') && !S.util.connecte){ pister('RESULT_LOCKED'); aller('verrou'); }
+      if((S.parcours === 'B' || S.parcours === 'C' || S.parcours === 'X') && !S.util.connecte){ pister('RESULT_LOCKED'); aller('verrou'); }
       else if(S.parcours === 'D' && !S.util.connecte){ pister('RESULT_LOCKED'); aller('verrou_d'); }
       else aller('resultat'); }, 1600);
   }
@@ -2361,6 +2368,7 @@ function ecranAujourdhui(){
   vue().innerHTML = `
   <div class="pad">
     ${salutAccueil()}
+    ${blocSeanceX()}
     ${blocInscriptionVisiteur()}
     ${blocPromo()}
     ${blocFinEssai()}
@@ -5764,6 +5772,7 @@ function ecranPourToi(){
     return;
   }
   if(f.idx >= f.liste.length){
+    if(f.seanceX) return finSeanceX(f, tete);
     vue().innerHTML = tete('POUR TOI · TERMINÉ') + `<div class="qzone" style="padding-top:18px">
       <h1 class="titre" style="font-size:26px">${f.liste.length} questions faites</h1>
       <div class="duo" style="margin-top:14px">
@@ -8159,7 +8168,7 @@ function rendre(){
     grille:ecranGrille, copie:ecranCopie,
     cahier:ecranCahier, lecteur:ecranLecteur, compte:ecranCompte,
     pourtoi:ecranPourToi, qdj:ecranQdj, question:ecranQuestionPartagee, gagnants:ecranGagnants, correctionnat:ecranCorrectionNat,
-    notion:ecranNotion, recherche:ecranRecherche, defi:ecranDefi, top:ecranTop, proposer:ecranProposer, parcours:ecranParcours, communaute:ecranCommunaute, horsligne:ecranHorsLigne, suppression:ecranSuppression}[S.ecran] || ecranAujourdhui);
+    notion:ecranNotion, recherche:ecranRecherche, defi:ecranDefi, top:ecranTop, proposer:ecranProposer, parcours:ecranParcours, xreprise:ecranRepriseX, xbravo:ecranBravoX, communaute:ecranCommunaute, horsligne:ecranHorsLigne, suppression:ecranSuppression}[S.ecran] || ecranAujourdhui);
 
   /* FILET — une erreur dans un seul écran ne doit plus jamais laisser
      le candidat devant une page noire. On affiche ce qui s'est passé
@@ -8182,7 +8191,7 @@ function rendre(){
 }
 
 document.addEventListener('click', ev=>{
-  const t = ev.target.closest('[data-matiere],[data-vers],[data-musique],[data-notifs],[data-notifs-tout],[data-notifs-vider],[data-notif-lire],[data-copier],[data-partage-natif],[data-fermer-partage],[data-paieretour],[data-preuve-modifier],[data-preuve-envoyer],[data-plan-faire],[data-plan-effacer],[data-copie-plus-tard],[data-pass],[data-proche],[data-code-ouvrir],[data-code-valider],[data-copier-num],[data-demain],[data-feuille],[data-lire-feuille],[data-lire-cahier],[data-lecteur-dl],[data-nivinfo],[data-archive],[data-toutes-compos],[data-partage],[data-oeil],[data-reinitialiser],[data-lire],[data-telecharger],[data-apercu],[data-saut],[data-compotab],[data-bascule-theme],[data-modal],[data-entrer],[data-bascule],[data-plustard],[data-deconnecter],[data-theme-choix],[data-erreursdusoir],[data-cible],[data-cours],[data-inscrire],[data-connecter],[data-oubli],[data-oubli-wa],[data-formule],[data-operateur],[data-payer],[data-paiefin],[data-paieannul],[data-go],[data-toutcahier],[data-actu],[data-actu-repli],[data-niv],[data-mat],[data-qcm],[data-qsuiv],[data-cahierfreq],[data-classement],[data-diagnostic],[data-defi],[data-duel],[data-badges],[data-phase],[data-conc],[data-dep],[data-test],[data-tb],[data-tremettre],[data-seance],[data-rep],[data-suivante],[data-b],[data-remettre],[data-recommencer],[data-reprise],[data-rr],[data-fin-reprise],[data-qcm-relancer],[data-compo-relancer],[data-remise-relancer],[data-recu]');
+  const t = ev.target.closest('[data-matiere],[data-vers],[data-musique],[data-notifs],[data-notifs-tout],[data-notifs-vider],[data-notif-lire],[data-copier],[data-partage-natif],[data-fermer-partage],[data-paieretour],[data-preuve-modifier],[data-preuve-envoyer],[data-plan-faire],[data-plan-effacer],[data-copie-plus-tard],[data-pass],[data-proche],[data-code-ouvrir],[data-code-valider],[data-copier-num],[data-demain],[data-feuille],[data-lire-feuille],[data-lire-cahier],[data-lecteur-dl],[data-nivinfo],[data-archive],[data-toutes-compos],[data-partage],[data-oeil],[data-reinitialiser],[data-lire],[data-telecharger],[data-apercu],[data-saut],[data-compotab],[data-bascule-theme],[data-modal],[data-entrer],[data-bascule],[data-plustard],[data-deconnecter],[data-theme-choix],[data-erreursdusoir],[data-cible],[data-cours],[data-inscrire],[data-connecter],[data-oubli],[data-oubli-wa],[data-formule],[data-operateur],[data-payer],[data-paiefin],[data-paieannul],[data-go],[data-toutcahier],[data-actu],[data-actu-repli],[data-niv],[data-mat],[data-qcm],[data-qsuiv],[data-cahierfreq],[data-classement],[data-diagnostic],[data-defi],[data-duel],[data-badges],[data-phase],[data-conc],[data-dep],[data-test],[data-tb],[data-tremettre],[data-seance],[data-rep],[data-suivante],[data-b],[data-remettre],[data-recommencer],[data-reprise],[data-xr-rep],[data-xr-suiv],[data-xseance],[data-xnotifs],[data-xinstall],[data-rr],[data-fin-reprise],[data-qcm-relancer],[data-compo-relancer],[data-remise-relancer],[data-recu]');
   if(!t) return;
   const d = t.dataset;
 
@@ -8216,10 +8225,11 @@ document.addEventListener('click', ev=>{
         S.niveauProfil = niveauBase();
         ecrireMemoire({ nom:f.nom.trim(), tel:tel, niveauProfil:S.niveauProfil });
         pister('ACCOUNT_CREATED', { niveau: S.niveau });
-        setTimeout(() => invitationNotifsApresInscription(), 7000);
+        noterParcoursCompte();
+        if(!estXX1()) setTimeout(() => invitationNotifsApresInscription(), 7000);
         S.modal = null; chargerProgression();
         if(S.defi && S.defi.etat === 'connexion') ouvrirDefi(S.defi.id);
-        else if(S.ecran === 'verrou' && S.testNote !== null) aller('resultat');
+        else if(S.ecran === 'verrou' && S.testNote !== null){ if(estXX1()) lancerRepriseX(); else aller('resultat'); }
         else if(S.ecran === 'verrou_d' && S.testNote !== null){ S.verrouDEtape = 2; aller('verrou_d'); }
         else aller('aujourdhui');
       });
@@ -8259,7 +8269,7 @@ document.addEventListener('click', ev=>{
       await reprendreSession();
       await chargerProgression();
       if(S.defi && S.defi.etat === 'connexion') ouvrirDefi(S.defi.id);
-      else if(S.ecran === 'verrou' && S.testNote !== null) aller('resultat');
+      else if(S.ecran === 'verrou' && S.testNote !== null){ if(estXX1()) lancerRepriseX(); else aller('resultat'); }
       else if(S.ecran === 'verrou_d' && S.testNote !== null){ S.verrouDEtape = 2; aller('verrou_d'); }
       else aller('aujourdhui');
     })();
@@ -8354,6 +8364,23 @@ document.addEventListener('click', ev=>{
   if(d.paieannul){ pister('PAYMENT_ABANDONED', { formule: S.choixFormule }); S.paieEtape = 0; return aller('abonnement'); }
   if(d.erreursdusoir){ pister('ERRORS_OPENED', { depuis: 'composition' });
     S.cahierDepuisGrille = true; S.cahierFiltre=false; return aller('cahier'); }
+  if(d.xrRep !== undefined){
+    const x = S.xr; if(!x || x.rep !== undefined) return;
+    x.rep = +d.xrRep;
+    const ok = x.rep === TEST[x.liste[x.idx]].i;
+    if(ok){ x.justes++; sonJuste(); } else sonFaux();
+    pister('XX1_REPRISE_REPONSE', { juste: ok, rang: x.idx + 1 });
+    return rendre();
+  }
+  if(d.xrSuiv){
+    const x = S.xr; if(!x) return;
+    x.idx++; x.rep = undefined;
+    if(x.idx >= x.liste.length){ pister('XX1_REPRISE_FINIE', { justes: x.justes, fautes: x.liste.length }); return aller('xbravo'); }
+    rendre(); vue().scrollTop = 0; return;
+  }
+  if(d.xseance){ pister('XX1_SEANCE_LANCEE', { depuis: d.xseance }); return lancerSeanceX(); }
+  if(d.xnotifs){ pister('XX1_NOTIFS_CLIC', { depuis: d.xnotifs }); return activerRappel(18, 0); }
+  if(d.xinstall){ pister('XX1_INSTALL_CLIC', { depuis: d.xinstall }); return installerAppli(); }
   if(d.entrer){
     pister('APP_ENTERED', { note_diagnostic: S.testNote });
     if(d.fautes === '1' && S.cahier.length){ pister('ERRORS_OPENED', { depuis: 'resultat_test' }); S.cahierDepuisGrille = true; S.cahierFiltre = false; aller('cahier'); }
@@ -8682,6 +8709,177 @@ function invitationNotifsApresInscription(){
   setTimeout(() => tente(0), 40000);
 })();
 
+/* =====================================================================
+   PARCOURS XX1 — groupe de test, par lots de 100 nouveaux visiteurs.
+   Jour 1 : reprise directe des fautes du test, une par une, avec la
+   correction ; puis une récompense, et seulement après : rappel,
+   installation, séance du jour. Chaque jour : « Ma séance du jour ».
+   Les parcours A, B, C, D ne passent jamais par ici.
+   ===================================================================== */
+function estXX1(){ return S.parcours === 'X'; }
+var ONGLETS_X = [
+  {id:'aujourdhui', g:'actualite', l:'Aujourd\'hui'},
+  {id:'grille',     g:'grille',    l:'Composer'},
+  {id:'cahier',     g:'erreurs',   l:'Mes erreurs'},
+  {id:'compte',     g:'compte',    l:'Moi'}
+];
+/* le groupe est noté sur le compte, pour comparer les groupes entre eux */
+function noterParcoursCompte(){
+  if(!S.parcours || !base) return;
+  const p = S.parcours + (lireReglages().apercuX ? '-apercu' : '');
+  try{ base.rpc('noter_parcours', { p_parcours: p }).then(() => {}, () => {}); }catch(e){}
+}
+function fautesDuTest(){
+  const f = [];
+  TEST.forEach((g, i) => { const r = S.testRep[i] || []; if(!(r.length === 1 && r[0] === g.i)) f.push(i); });
+  return f;
+}
+function lancerRepriseX(){
+  const liste = fautesDuTest();
+  S.xr = { liste, idx:0, rep:undefined, justes:0 };
+  pister('XX1_REPRISE_OUVERTE', { fautes: liste.length, note: S.testNote });
+  aller(liste.length ? 'xreprise' : 'xbravo');
+}
+/* série : un jour compte dès qu'une reprise ou une séance est faite */
+function joursX(){ const l = lireReglages().joursX; return Array.isArray(l) ? l : []; }
+function noterJourX(){
+  const j = new Date().toDateString(), l = joursX();
+  if(!l.includes(j)){ l.push(j); ecrireReglage('joursX', l.slice(-60)); }
+}
+function serieX(){
+  const l = new Set(joursX()), d = new Date();
+  if(!l.has(d.toDateString())) d.setDate(d.getDate() - 1);
+  let n = 0;
+  while(l.has(d.toDateString())){ n++; d.setDate(d.getDate() - 1); }
+  return n;
+}
+const seanceXFaite = () => lireReglages().seanceXJour === new Date().toDateString();
+
+function ecranRepriseX(){
+  const x = S.xr;
+  if(!x){
+    if(S.testNote === null || S.testNote === undefined || !Object.keys(S.testRep || {}).length){ S.ecran = 'aujourdhui'; return ecranAujourdhui(); }
+    const liste = fautesDuTest(); S.xr = { liste, idx:0, rep:undefined, justes:0 };
+    return ecranRepriseX();
+  }
+  if(x.idx >= x.liste.length){ S.ecran = 'xbravo'; return ecranBravoX(); }
+  const qi = x.liste[x.idx], g = TEST[qi], avant = (S.testRep[qi] || []).map(k => g.o[k]).join(' + ');
+  const rep = x.rep, repondu = rep !== undefined, juste = repondu && rep === g.i;
+  const k = x.liste.length;
+  vue().innerHTML = `
+  <div class="pad" style="padding-top:18px">
+    <div class="xr-tete">
+      <span class="pastille-etape">Ta note au test : <b class="num">${S.testNote}/10</b></span>
+      <span class="eyebrow num">${x.idx + 1} / ${k}</span>
+    </div>
+    <div class="progression" style="margin:10px 0 14px"><i class="on" style="flex:${x.idx + (repondu ? 1 : 0)}"></i><i style="flex:${k - x.idx - (repondu ? 1 : 0)}"></i></div>
+    ${x.idx === 0 && !repondu ? `<h1 class="titre" style="font-size:22px;margin-bottom:6px">On reprend tes ${k} faute${k > 1 ? 's' : ''}, une par une</h1>
+      <p class="sous" style="margin:0 0 14px">C'est là que tu gagnes des points le plus vite. Chaque question est corrigée et expliquée.</p>` : ''}
+    <div class="eyebrow" style="margin-bottom:6px">${E(g.d)}</div>
+    <div class="qtexte">${E(g.q)}</div>
+    ${!repondu ? `<p class="sous xr-avant">Au test, tu avais répondu ${avant ? '« ' + E(avant) + ' »' : 'rien'}. Essaie à nouveau.</p>` : ''}
+    ${g.o.map((o, i) => {
+      let c = '';
+      if(repondu){ if(i === g.i) c = 'juste'; else if(i === rep) c = 'faux'; }
+      return `<button class="opt ${c}" ${repondu ? 'disabled' : ''} data-xr-rep="${i}"><span class="lettre">${'ABCD'[i]}</span>${E(o)}</button>`;
+    }).join('')}
+    ${repondu ? `<div class="retour ${juste ? 'bien' : 'mal'}">
+        <b>${juste ? 'Juste, cette fois' : 'Pas encore'}</b>
+        ${juste ? '' : `<div style="margin-bottom:6px">La bonne réponse : <strong class="bonne-rep">${'ABCD'[g.i]}. ${E(g.o[g.i])}</strong></div>`}
+        ${g.e ? `<b style="margin-top:2px">Pourquoi ?</b>${E(g.e)}` : ''}
+        <div style="margin-top:6px;font-size:12.5px">${juste ? 'Elle reste dans « Mes erreurs » pour être revue une fois encore, puis elle sort.' : 'Elle reste dans « Mes erreurs » : elle reviendra jusqu\'à être acquise.'}</div>
+      </div>
+      <button class="cta" style="margin-top:14px" data-xr-suiv="1">${x.idx + 1 < k ? 'Faute suivante' : 'Voir mon bilan'}</button>` : ''}
+  </div>`;
+}
+
+/* les invitations arrivent après la récompense, jamais avant */
+function lignesSuiteX(depuis){
+  const l = [];
+  if(etatRappel() === 'possible') l.push(`<button class="etape actif" data-xnotifs="${depuis}">
+      <div class="puce">${ico('cloche', 15)}</div>
+      <div><h3>Me rappeler ma séance demain à 18 h</h3><p>Une notification, même quand tu es sur WhatsApp ou Facebook.</p></div>
+      <span class="fl-tache" aria-hidden="true">→</span></button>`);
+  if(!estInstallee()) l.push(`<button class="etape" data-xinstall="${depuis}">
+      <div class="puce">${ico('telecharger', 15)}</div>
+      <div><h3>Mettre Mon Concours sur mon écran d'accueil</h3><p>Il s'ouvre comme une application, même avec peu de réseau.</p></div>
+      <span class="fl-tache" aria-hidden="true">→</span></button>`);
+  return l.length ? `<div class="bloc"><div class="libelle">Pour que demain soit facile</div><div class="carte">${l.join('')}</div></div>` : '';
+}
+
+function ecranBravoX(){
+  noterJourX();
+  const x = S.xr || { liste:[], justes:0 }, k = x.liste.length, j = x.justes, reste = k - j, s = serieX() || 1;
+  if(!x.vu){ x.vu = true; pister('XX1_BRAVO_VU', { justes: j, fautes: k }); }
+  vue().innerHTML = `
+  <div class="pad" style="padding-top:22px">
+    <div class="pastille-etape">Jour 1 · fait</div>
+    <div class="x-bravo">
+      <div class="xb-serie">${ico('flamme', 26)}<span><b class="num">${s}</b> jour${s > 1 ? 's' : ''} de suite</span></div>
+      <h1 class="titre" style="font-size:25px;margin:12px 0 6px">${!k ? 'Aucune faute au test' : (j === k ? 'Toutes tes fautes sont reprises' : j + ' faute' + (j > 1 ? 's' : '') + ' reprise' + (j > 1 ? 's' : '') + ' juste' + (j > 1 ? 's' : '') + ' sur ' + k)}</h1>
+      <p class="sous" style="margin:0">${!k ? 'Belle copie. Ta séance du jour va te faire travailler au niveau du concours.'
+        : reste ? (reste > 1 ? `Les ${reste} qui résistent restent dans « Mes erreurs ». Tu les reverras jusqu'à ce qu'elles soient acquises.` : 'Celle qui résiste reste dans « Mes erreurs ». Tu la reverras jusqu\'à ce qu\'elle soit acquise.')
+        : 'Tu as compris chacune de tes fautes. Ta séance du jour continue sur les questions de ton niveau.'}</p>
+    </div>
+    <div class="duo" style="margin-top:14px">
+      <div class="stat"><div class="v num">${S.testNote}/10</div><div class="l">Note au test</div></div>
+      <div class="stat"><div class="v num">${j}/${k}</div><div class="l">Fautes reprises justes</div></div>
+    </div>
+    <button class="cta" style="margin-top:16px" data-xseance="bravo">Continuer : ma séance du jour<small>10 questions choisies pour toi · environ 8 min</small></button>
+    ${lignesSuiteX('bravo')}
+    <button class="lien" style="display:block;margin:14px auto 0" data-go="resultat">Revoir ma note et ma feuille corrigée</button>
+    <button class="lien" style="display:block;margin:6px auto 0" data-go="aujourdhui">Aller à l'accueil</button>
+  </div>`;
+}
+
+function lancerSeanceX(){
+  lancerFil(10);
+  if(S.fil){ S.fil.titre = 'MA SÉANCE DU JOUR'; S.fil.seanceX = true; }
+  if(S.ecran === 'pourtoi') rendre();
+}
+
+function finSeanceX(f, tete){
+  if(!f.finNotee){
+    f.finNotee = true; ecrireReglage('seanceXJour', new Date().toDateString()); noterJourX();
+    pister('XX1_SEANCE_FINIE', { justes: f.justes, n: f.liste.length });
+  }
+  const s = serieX() || 1, payant = estAbonnePaye() || S.gratuit;
+  vue().innerHTML = tete('MA SÉANCE DU JOUR · FAITE') + `<div class="qzone" style="padding-top:18px">
+    <div class="x-bravo">
+      <div class="xb-serie">${ico('flamme', 26)}<span><b class="num">${s}</b> jour${s > 1 ? 's' : ''} de suite</span></div>
+      <h1 class="titre" style="font-size:25px;margin:12px 0 6px">Séance faite : ${f.justes} sur ${f.liste.length}</h1>
+      <p class="sous" style="margin:0">${s > 1 ? 'Ta série tient. Reviens demain pour la garder.' : 'Le premier jour est le plus dur. Demain, une nouvelle séance t\'attend.'}</p>
+    </div>
+    <div class="duo" style="margin-top:14px">
+      <div class="stat"><div class="v num">${f.justes}</div><div class="l">Bonnes réponses</div></div>
+      <div class="stat"><div class="v num">${f.revues}</div><div class="l">Erreurs revues</div></div>
+    </div>
+    ${(f.fautes || []).length ? `<div class="bloc"><div class="libelle">À retenir avant de partir</div>
+      ${f.fautes.slice(0, 3).map(x => `<div class="err" style="margin-bottom:8px"><div class="q" style="font-size:13.5px">${E(x.q)}</div><div class="ligne">Bonne réponse : <b>${E(x.bon)}</b></div></div>`).join('')}</div>` : ''}
+    ${lignesSuiteX('seance')}
+    ${payant ? '' : `<div class="carte xs-offre">
+      <h3>Tu veux aller plus loin aujourd'hui ?</h3>
+      <p class="sous">Avec l'abonnement : corrections sans limite, compositions chronométrées avec ton classement, et la feuille corrigée de tes erreurs en PDF.</p>
+      <button class="cta creux" style="margin-top:10px" data-go="abonnement">Voir l'abonnement</button>
+    </div>`}
+    <button class="cta" style="margin-top:14px" data-pourtoi="10">Encore 10 questions</button>
+    <button class="cta creux" style="margin-top:9px" data-go="aujourdhui">Revenir à l'accueil</button>
+  </div>`;
+}
+
+function blocSeanceX(){
+  if(!estXX1() || !S.util.connecte) return '';
+  const fait = seanceXFaite(), s = serieX();
+  return `<div class="carte seance-x${fait ? ' fait' : ''}">
+    <div class="sx-tete"><span class="eyebrow">Ma séance du jour</span>${s ? `<span class="sx-serie">${ico('flamme', 14)} <b class="num">${s}</b> jour${s > 1 ? 's' : ''}</span>` : ''}</div>
+    <h2>${fait ? 'Séance faite aujourd\'hui' : '10 questions, environ 8 minutes'}</h2>
+    <p class="sous">${fait ? 'Reviens demain pour garder ta série. Tu peux en refaire une maintenant.' : 'Tes erreurs à reprendre d\'abord, puis des questions nouvelles de ton niveau.'}</p>
+    <button class="cta" style="margin-top:10px" data-xseance="accueil">${fait ? 'Encore une séance' : (s ? 'Commencer ma séance' : 'Commencer ma première séance')}</button>
+    <button class="lien-mini" style="margin-top:8px" data-go="revisions">${ico('revisions', 13)} Mes cours</button>
+  </div>`;
+}
+
+
 ouvrirLienDirect();
 setTimeout(inviterNotifsPremiereOuverture, 9000);
 rendre();
@@ -8692,7 +8890,7 @@ async function assignerParcours(){
   if(testDejaFait() || S.util.connecte || !base) return;
   try{
     const { data } = await base.rpc('attribuer_parcours');
-    if(['A','B','C','D'].includes(data)){
+    if(['A','B','C','D','X'].includes(data)){
       S.parcours = data; ecrireReglage('parcours', data);
       pister('PARCOURS_ASSIGNE', { parcours: data });
     }

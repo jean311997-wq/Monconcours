@@ -2012,3 +2012,20 @@ body.sans-anim .stat-comm .sc-new.jamais{animation:none}
 .av-table .non{color:var(--craie2)}
 .av-table .oui{color:var(--vert-texte);font-weight:700}
 .offre-tete{margin-bottom:16px}
+
+/* Parcours XX1 : reprise des fautes, récompense, séance du jour */
+.xr-tete{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.xr-tete b{color:var(--laterite-txt);font-weight:700}
+.xr-avant{margin:8px 0 12px;font-size:13px}
+.x-bravo{margin-top:12px}
+.xb-serie{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;background:var(--ardoise);border:1px solid var(--trait);color:var(--laterite-txt);font-size:13px}
+.xb-serie b{font-size:16px}
+.seance-x{margin:12px 0 14px;border-color:var(--laterite)}
+.seance-x.fait{border-color:var(--trait)}
+.seance-x h2{font-size:18px;margin:6px 0 4px}
+.seance-x .sous{margin:0;font-size:13px}
+.sx-tete{display:flex;justify-content:space-between;align-items:center}
+.sx-serie{display:inline-flex;align-items:center;gap:4px;color:var(--laterite-txt);font-size:12.5px}
+.xs-offre{margin-top:14px}
+.xs-offre h3{font-size:15px;margin-bottom:4px}
+.xs-offre .sous{margin:0;font-size:13px}
