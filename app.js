@@ -8719,6 +8719,7 @@ function invitationNotifsApresInscription(){
 function estXX1(){ return S.parcours === 'X'; }
 var ONGLETS_X = [
   {id:'aujourdhui', g:'actualite', l:'Aujourd\'hui'},
+  {id:'revisions',  g:'revisions', l:'Mes cours'},
   {id:'grille',     g:'grille',    l:'Composer'},
   {id:'cahier',     g:'erreurs',   l:'Mes erreurs'},
   {id:'compte',     g:'compte',    l:'Moi'}
