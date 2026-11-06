@@ -28,8 +28,15 @@ try{
     panne = "La bibliothèque Supabase n'a pas pu être téléchargée. "
           + "Vérifiez votre connexion, ou réessayez dans un instant.";
   }else{
+    /* aucun appel ne doit laisser l'écran figé : au-delà de 25 s, on abandonne et on propose de réessayer */
+    const fetchAvecDelai = (url, opts = {}) => {
+      if(String(url).includes('/storage/v1/') || opts.signal) return fetch(url, opts);
+      const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 25000);
+      return fetch(url, Object.assign({}, opts, { signal: ctl.signal })).finally(() => clearTimeout(t));
+    };
     db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-      auth: { persistSession: true, autoRefreshToken: true }
+      auth: { persistSession: true, autoRefreshToken: true },
+      global: { fetch: fetchAvecDelai }
     });
   }
 }catch(e){
@@ -139,10 +146,14 @@ async function demarrer(){
 async function entrer(session){
   A.session = session;
 
-  const { data: roles, error } = await db
-    .from('roles_utilisateur').select('role').eq('user_id', session.user.id);
-
-  if(error){ return refuser("Impossible de lire vos droits : " + error.message); }
+  attenteEntree(true);
+  let roles = null, error = null;
+  try{
+    ({ data: roles, error } = await db.from('roles_utilisateur').select('role').eq('user_id', session.user.id));
+  }catch(e){ error = e; }
+  attenteEntree(false);
+  /* panne ou lenteur du réseau : on ne déconnecte pas, on propose de réessayer */
+  if(error){ return entreeImpossible(session); }
 
   /* l'investisseur a exactement les mêmes droits que l'administrateur, sans aucune restriction */
   A.investisseur = (roles || []).some(r => r.role === 'investisseur');
@@ -152,8 +163,14 @@ async function entrer(session){
     return refuser("Ce compte n'a pas les droits d'administration. Attribuez-lui le rôle « admin » dans la table roles_utilisateur.");
   }
 
-  const { data: profil } = await db
-    .from('profils').select('nom').eq('id', session.user.id).maybeSingle();
+  let profil = null;
+  try{
+    const [p] = await Promise.all([
+      db.from('profils').select('nom').eq('id', session.user.id).maybeSingle(),
+      chargerReferentiel().catch(() => {})
+    ]);
+    profil = p && p.data;
+  }catch(e){}
   A.profil = profil;
 
   document.getElementById('portail').hidden = true;
@@ -168,7 +185,6 @@ async function entrer(session){
     const bienvenue = document.getElementById('bienvenue');
     if(bienvenue) bienvenue.hidden = false;
   }
-  await chargerReferentiel();
   const h0 = (location.hash || '').replace('#', '');
   if(h0 && document.querySelector('#menu [data-vue="' + h0.replace(/[^a-z_]/g, '') + '"]')) A.vue = h0.replace(/[^a-z_]/g, '');
   rendre();
@@ -190,6 +206,19 @@ async function majPastilles(){
   if(pa){ pa.hidden = !av.count; pa.textContent = av.count || ''; }
 }
 
+function attenteEntree(oui){
+  const z = document.getElementById('err-connexion'); if(!z) return;
+  if(oui){ z.textContent = 'Connexion à l\'espace admin…'; z.hidden = false; } else z.hidden = true;
+}
+function entreeImpossible(session){
+  const z = document.getElementById('err-connexion');
+  document.getElementById('portail').hidden = false;
+  document.getElementById('admin').hidden = true;
+  z.hidden = false;
+  z.innerHTML = 'La base répond lentement en ce moment. <button type="button" id="reessayer-entree" class="bouton" style="margin-left:8px">Réessayer</button>';
+  const b = document.getElementById('reessayer-entree');
+  if(b) b.onclick = () => entrer(session);
+}
 function refuser(message){
   const z = document.getElementById('err-connexion');
   z.textContent = message; z.hidden = false;

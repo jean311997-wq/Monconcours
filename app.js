@@ -1852,7 +1852,15 @@ function brancherBase(){
   if(base) return;
   try{
     if(typeof supabase === 'undefined' || !supabase.createClient) return;
-    base = supabase.createClient(BASE_URL, BASE_CLE, { auth: { persistSession: true } });
+    /* une lecture qui traîne plus de 25 s est abandonnée : l'écran affiche l'erreur ou le cache au lieu de rester figé.
+       Les écritures (remise, paiement, envoi de preuve) ne sont jamais coupées. */
+    const fetchAvecDelai = (url, opts = {}) => {
+      const lecture = !opts.method || opts.method === 'GET' || opts.method === 'HEAD';
+      if(!lecture || opts.signal || !String(url).includes('/rest/v1/')) return fetch(url, opts);
+      const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 25000);
+      return fetch(url, Object.assign({}, opts, { signal: ctl.signal })).finally(() => clearTimeout(t));
+    };
+    base = supabase.createClient(BASE_URL, BASE_CLE, { auth: { persistSession: true }, global: { fetch: fetchAvecDelai } });
   }catch(e){ base = null; return; }
 
   /* on étale les appels pour ne pas saturer une connexion lente */
