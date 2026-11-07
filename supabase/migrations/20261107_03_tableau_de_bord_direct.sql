@@ -1,0 +1,3 @@
+-- Tableau de bord : les chiffres du haut (inscrits, en ligne, actifs, questions, compositions) sont calculés en direct
+-- (public.tableau_de_bord_direct, ~30 ms) et fusionnés avec le détail lourd mis en cache.
+-- Crons cache-admin : toutes les 30 min (avant 10 min) ; cache-admin-periodes : toutes les heures à :15.
