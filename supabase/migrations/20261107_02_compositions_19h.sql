@@ -1,0 +1,2 @@
+-- Les compositions nationales passent de 18 h à 19 h (heure du Burkina = UTC).
+-- planifier_composition_nationale : interval '18 hours' -> '19 hours' ; compositions à venir décalées d'une heure.

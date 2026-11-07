@@ -1300,8 +1300,8 @@ function fenetreAnnonce(n){
       <h2 class="fe-titre">Comment se passe une composition ?</h2>
       <ol class="gc-etapes">
         <li><b>Je m'inscris.</b><span>C'est gratuit. Sans inscription, vous ne pouvez pas entrer.</span></li>
-        <li><b>Je viens à l'heure.</b><span>La composition commence à 18 h, heure du Burkina. Tous les candidats composent en même temps, sur le même sujet.</span></li>
-        <li><b>J'entre dans la salle de composition.</b><span>À 18 h, le bouton « Entrer » apparaît. Le temps de la composition est de 30 minutes.</span></li>
+        <li><b>Je viens à l'heure.</b><span>La composition commence à 19 h, heure du Burkina. Tous les candidats composent en même temps, sur le même sujet.</span></li>
+        <li><b>J'entre dans la salle de composition.</b><span>À 19 h, le bouton « Entrer » apparaît. Le temps de la composition est de 30 minutes.</span></li>
         <li><b>Je compose.</b><span>Je m'assois, je noircis ma feuille de réponses et je valide avant la fin du temps.</span></li>
         <li><b>Je regarde mon classement.</b><span>Il paraît juste après la composition, avec votre rang parmi tous les candidats.</span></li>
         <li><b>Je regarde mes erreurs et je m'améliore.</b><span>Chaque erreur est corrigée et expliquée, pour mieux réussir la prochaine fois.</span></li>
