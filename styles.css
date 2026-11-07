@@ -2031,3 +2031,5 @@ body.sans-anim .stat-comm .sc-new.jamais{animation:none}
 .xs-offre .sous{margin:0;font-size:13px}
 
 .avis-vitrine{transition:opacity .35s}.avis-vitrine.passe{opacity:0}.avis-accueil .avis-vitrine{margin-top:8px}@media (prefers-reduced-motion:reduce){.avis-vitrine{transition:none}}
+
+.mur-notifs{z-index:450!important;background:rgba(10,20,15,.96)!important}.mur-notifs .fe-carte{max-width:340px}

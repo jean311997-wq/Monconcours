@@ -6332,7 +6332,7 @@ function cleVapid(b64){
 }
 async function chargerRappel(){
   if(!base || !S.util.connecte) return;
-  try{ const { data } = await base.rpc('mon_rappel'); S.rappel = data || null; memoEcrire('rappel', S.rappel, true); rafraichirSiVisible(); }catch(e){}
+  try{ const { data } = await base.rpc('mon_rappel'); S.rappel = data || null; S.rappelCharge = true; memoEcrire('rappel', S.rappel, true); rafraichirSiVisible(); }catch(e){}
 }
 /* dans combien de temps sonne le prochain rappel ? */
 function delaiRappel(h, m){
@@ -6426,6 +6426,7 @@ const MOTS_RAPPEL = {
   bandeau:     ['Restez informé.', 'Revenir chaque jour fait gagner des points le jour du concours.']
 };
 function fenetreRappel(mode, motif){
+  if(document.getElementById('mur-notifs')) return;
   const v = document.getElementById('voile'); if(!v) return;
   S.modal = 'rappel'; v.hidden = false;
   let corps;
@@ -8914,6 +8915,78 @@ function blocSeanceX(){
   </div>`;
 }
 
+
+
+/* =====================================================================
+   MUR DES NOTIFICATIONS — obligatoire pour tout candidat connecté.
+   La fenêtre ne se ferme que par l'activation. Seul cas de sortie : un
+   appareil qui ne sait pas du tout recevoir de notifications.
+   Pour l'arrêter : NOTIFS_OBLIGATOIRES = false.
+   ===================================================================== */
+const NOTIFS_OBLIGATOIRES = true;
+function murNotifsEtat(){
+  if(!S.util.connecte) return 'ok';
+  if(!pushPossible()) return 'impossible';
+  if(Notification.permission === 'denied') return 'refuse';
+  if(Notification.permission === 'granted' && S.rappel && S.rappel.actif) return 'ok';
+  if(!S.rappelCharge) return 'attente';
+  return 'possible';
+}
+function murNotifsHtml(etat){
+  const iphone = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  let titre = 'Activez les notifications', texte = 'Pour continuer, autorisez les notifications. Vous serez prévenu de chaque composition nationale, de vos résultats et de votre classement, même quand l\'application est fermée.', bouton = 'Activer les notifications', plus = '';
+  if(etat === 'refuse'){
+    texte = 'Les notifications sont bloquées sur cet appareil. Touchez le cadenas à côté de l\'adresse du site, puis Notifications, puis Autoriser. Revenez ensuite ici.';
+    bouton = 'J\'ai autorisé';
+  } else if(etat === 'impossible'){
+    texte = iphone
+      ? 'Sur iPhone, ajoutez d\'abord Mon Concours à l\'écran d\'accueil : bouton Partager, puis « Sur l\'écran d\'accueil ». Ouvrez ensuite l\'application depuis son icône et autorisez les notifications.'
+      : 'Ce navigateur ne peut pas recevoir de notifications. Ouvrez Mon Concours dans Chrome, ou installez l\'application depuis le menu du navigateur.';
+    bouton = 'J\'ai compris, je vérifie';
+    plus = '<button class="lien" style="display:block;margin:12px auto 0" data-mur="passer">Continuer sans notifications</button>';
+  }
+  return `<div class="fe-carte">
+    <div class="fe-badge" aria-hidden="true">🔔</div>
+    <div class="fe-marque">Mon Concours · Obligatoire</div>
+    <h2 class="fe-titre">${titre}</h2>
+    <p class="fe-texte fe-long">${E(texte)}</p>
+    <button class="cta" data-mur="activer">${bouton}</button>${plus}
+  </div>`;
+}
+function verifierMurNotifs(){
+  if(!NOTIFS_OBLIGATOIRES) return;
+  let m = document.getElementById('mur-notifs');
+  const etat = murNotifsEtat();
+  const enCours = enComposition() || (S.ecran === 'grille' && !S.corrige && Object.keys(S.reponses || {}).length > 0);
+  const bloque = etat === 'possible' || etat === 'refuse' || (etat === 'impossible' && !S.murPasse);
+  if(!bloque || enCours){
+    if(m){ if(bloque && enCours) m.style.display = 'none'; else m.remove(); }
+    return;
+  }
+  if(!m){
+    m = document.createElement('div');
+    m.id = 'mur-notifs'; m.className = 'fenetre-evt annonce mur-notifs vu';
+    m.setAttribute('role', 'dialog'); m.setAttribute('aria-modal', 'true'); m.setAttribute('aria-label', 'Activer les notifications');
+    m.addEventListener('click', async e => {
+      const b = e.target.closest('[data-mur]'); if(!b) return;
+      if(b.dataset.mur === 'passer'){ S.murPasse = true; pister('MUR_NOTIFS_PASSE', {}); m.remove(); return; }
+      b.disabled = true;
+      try{
+        if(Notification && Notification.permission === 'denied'){ b.disabled = false; return majMur(); }
+        await activerRappel(18, 0);
+        if(Notification.permission === 'granted' && S.rappel && S.rappel.actif) pister('MUR_NOTIFS_ACTIVE', {});
+      }catch(err){}
+      b.disabled = false; majMur();
+    });
+    document.body.appendChild(m);
+    pister('MUR_NOTIFS_VU', { etat });
+  }
+  m.style.display = '';
+  if(m.dataset.etat !== etat){ m.dataset.etat = etat; m.innerHTML = murNotifsHtml(etat); }
+}
+function majMur(){ const m = document.getElementById('mur-notifs'); if(m) m.dataset.etat = ''; verifierMurNotifs(); }
+setInterval(verifierMurNotifs, 2500);
+document.addEventListener('visibilitychange', () => { if(!document.hidden) verifierMurNotifs(); });
 
 ouvrirLienDirect();
 setTimeout(inviterNotifsPremiereOuverture, 9000);
