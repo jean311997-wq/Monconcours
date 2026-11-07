@@ -619,18 +619,51 @@ const TEST = [
   {q:'Solution de l\'équation 2x + 6 = 0',
    o:['x = 3','x = −3','x = 12','x = −12'],i:1,d:'Logique et calcul',e:'2x + 6 = 0 donne 2x = −6, donc x = −3.'}
 ];
-/* Quelques avis réels de candidats, sans nom, choisis par l'équipe */
-function blocAvisVitrine(){
+/* Avis de candidats choisis par l'équipe : nom abrégé s'il est long, rotation automatique */
+function lignesAvis(n){
   const l = S.avisVitrine || [];
   if(!l.length) return '';
-  return `<div class="avis-vitrine">${l.map(a => `<blockquote>« ${E(a.message)} »<cite>Un candidat</cite></blockquote>`).join('')}</div>`;
+  const k = Math.min(n, l.length), p = (S.avisPos || 0) % l.length;
+  let h = '';
+  for(let i = 0; i < k; i++){
+    const a = l[(p + i) % l.length];
+    h += `<blockquote>« ${E(a.message)} »<cite>${E(a.nom || 'Un candidat')}</cite></blockquote>`;
+  }
+  return h;
 }
+function blocAvisVitrine(){
+  if(!(S.avisVitrine || []).length) return '';
+  return `<div class="avis-vitrine" data-avis-n="3">${lignesAvis(3)}</div>`;
+}
+function blocAvisAccueil(){
+  chargerAvisVitrine();
+  if(!(S.avisVitrine || []).length) return '';
+  return `<section class="bloc avis-accueil" aria-label="Ce que disent les candidats">
+    <div class="libelle">Ce que disent les candidats</div>
+    <div class="avis-vitrine" data-avis-n="1">${lignesAvis(1)}</div></section>`;
+}
+function majAvisDom(){
+  document.querySelectorAll('.avis-vitrine[data-avis-n]').forEach(c => { c.innerHTML = lignesAvis(+c.dataset.avisN || 1); });
+}
+setInterval(() => {
+  const l = S.avisVitrine || [];
+  if(l.length < 2 || document.hidden) return;
+  const cs = document.querySelectorAll('.avis-vitrine[data-avis-n]');
+  if(!cs.length) return;
+  S.avisPos = ((S.avisPos || 0) + 1) % l.length;
+  cs.forEach(c => { c.classList.add('passe'); });
+  setTimeout(() => { majAvisDom(); document.querySelectorAll('.avis-vitrine.passe').forEach(c => c.classList.remove('passe')); }, 350);
+}, 7000);
 async function chargerAvisVitrine(){
   if(!base || S.avisVitrineCharge) return;
   S.avisVitrineCharge = true;
   try{
     const { data } = await base.rpc('avis_vitrine');
-    if(Array.isArray(data) && data.length){ S.avisVitrine = data; if(['engagement'].includes(S.ecran)) rendre(); }
+    if(Array.isArray(data) && data.length){
+      S.avisVitrine = data;
+      if(['engagement'].includes(S.ecran)) rendre();
+      else if(S.ecran === 'aujourdhui') rendre();
+    }
   }catch(e){ S.avisVitrineCharge = false; }
 }
 /* --- 1 sur 3 : l'engagement --- */
@@ -2434,6 +2467,7 @@ function ecranAujourdhui(){
     </div>
 
     ${nationaleEnHaut() ? '' : carteEpreuve() + blocDerniereNationale()}
+    ${blocAvisAccueil()}
     ${blocPlus()}
   </div>`;
 }

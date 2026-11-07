@@ -2758,7 +2758,7 @@ async function vueAvis(){
   const peut = A.equipe;
   $('#vue').innerHTML = `
     <h2 class="titre">Avis des candidats</h2>
-    <p class="sous">Après une trentaine de minutes d'utilisation, l'application propose au candidat de donner son avis sur le site ou sur les recommandations. Les avis arrivent ici : vous pouvez les aimer, y répondre et mettre les meilleurs en vitrine (les 3 plus récents s'affichent sur l'écran d'accueil, sans nom). La réponse arrive chez le candidat sous le titre « Réponse de l'administration · Mon Concours ».</p>
+    <p class="sous">Après une trentaine de minutes d'utilisation, l'application propose au candidat de donner son avis sur le site ou sur les recommandations. Les avis arrivent ici : vous pouvez les aimer, y répondre et mettre les meilleurs en vitrine (le prénom et le nom du candidat s'affichent, abrégés s'ils sont longs ; les avis tournent automatiquement sur l'écran d'accueil et sur l'accueil des candidats). La réponse arrive chez le candidat sous le titre « Réponse de l'administration · Mon Concours ».</p>
     <div class="bloc"><div class="libelle">${nouveaux} nouveau${nouveaux > 1 ? 'x' : ''} · ${sansReponse} sans réponse · ${liste.length} au total</div>
       ${!liste.length ? '<div class="carte"><div class="vide">Aucun avis pour le moment.</div></div>' :
       liste.map(a => `<div class="carte avis-carte" data-avis="${a.id}" style="margin-bottom:10px;${a.statut === 'nouveau' || !a.reponse ? '' : 'opacity:.85'}">
@@ -2799,7 +2799,7 @@ async function vueAvis(){
     b.disabled = true;
     const { data: r, error: e2 } = await db.rpc('admin_avis_vitrine', { p_id: +b.dataset.avisVitrine, p_val: b.dataset.etat !== '1' });
     if(e2 || !r || !r.ok){ b.disabled = false; return erreur(e2 || { message: 'Échec' }, 'Mise en vitrine impossible'); }
-    signal(b.dataset.etat === '1' ? 'Retiré de la vitrine.' : 'Avis en vitrine : il apparaît sur l\'écran d\'accueil, sans nom.', 'bien'); vueAvis();
+    signal(b.dataset.etat === '1' ? 'Retiré de la vitrine.' : 'Avis en vitrine : il tourne sur l\'écran d\'accueil et sur l\'accueil des candidats, avec le nom du candidat.', 'bien'); vueAvis();
   });
   $$('[data-avis-repondre]').forEach(b => b.onclick = () => {
     const f = document.querySelector('[data-forme="' + b.dataset.avisRepondre + '"]'); f.hidden = !f.hidden; if(!f.hidden) f.querySelector('textarea').focus();

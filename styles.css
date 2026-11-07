@@ -2029,3 +2029,5 @@ body.sans-anim .stat-comm .sc-new.jamais{animation:none}
 .xs-offre{margin-top:14px}
 .xs-offre h3{font-size:15px;margin-bottom:4px}
 .xs-offre .sous{margin:0;font-size:13px}
+
+.avis-vitrine{transition:opacity .35s}.avis-vitrine.passe{opacity:0}.avis-accueil .avis-vitrine{margin-top:8px}@media (prefers-reduced-motion:reduce){.avis-vitrine{transition:none}}
