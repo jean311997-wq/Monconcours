@@ -9090,7 +9090,7 @@ function blocSeanceX(){
    appareil qui ne sait pas du tout recevoir de notifications.
    Pour l'arrêter : NOTIFS_OBLIGATOIRES = false.
    ===================================================================== */
-const NOTIFS_OBLIGATOIRES = true;
+const NOTIFS_OBLIGATOIRES = false;
 function murNotifsEtat(){
   if(!S.util.connecte) return 'ok';
   if(!pushPossible()) return 'impossible';
@@ -9134,8 +9134,8 @@ function murNotifsHtml(etat){
   </div>`;
 }
 function verifierMurNotifs(){
-  if(!NOTIFS_OBLIGATOIRES) return;
   let m = document.getElementById('mur-notifs');
+  if(!NOTIFS_OBLIGATOIRES){ if(m) m.remove(); return; }
   const etat = murNotifsEtat();
   const enInstall = !estInstallee() && new URLSearchParams(location.search).has('installer') && S.modal === 'rappel';
   /* autour d'une composition nationale (30 min avant → 5 min après la fin) : jamais de blocage, rien ne doit gêner l'entrée en salle */
