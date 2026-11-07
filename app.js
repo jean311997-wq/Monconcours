@@ -1448,6 +1448,10 @@ function ouvrirNotif(n){
   if(genre === 'installer') return installerAppli();
   if(genre === 'offre'){ chargerOffre(false).then(() => aller('abonnement')); return; }
   if(n.type === 'paiement' && !S.gratuit) return aller('abonnement');
+  if(genre === 'accueil' || genre === 'aujourdhui') return aller('aujourdhui');
+  if(n.type === 'resultat') return aller('gagnants');
+  if(n.type === 'rappel' || n.type === 'motivation') return aller('aujourdhui');
+  if(!genre) return aller('aujourdhui');
 }
 
 /* chaque jour, une notification : série, minutes, niveau et ce qui reste à faire */
@@ -1530,14 +1534,37 @@ function inviterNotifsPremiereOuverture(essai){
   pister('INSTALL_FIRST_OPEN_NOTIFS_SHOWN');
 }
 
+function majPanneauNotifs(){
+  if(S.modal === 'notifications' && !document.getElementById('voile').hidden){
+    const v = document.getElementById('voile'), p = v.querySelector('.panneau'), haut = p ? (p.querySelector('div[style*="overflow-y"]') || {}).scrollTop || 0 : 0;
+    ouvrirNotifications(true);
+    const l = v.querySelector('div[style*="overflow-y"]'); if(l) l.scrollTop = haut;
+  }
+}
 async function marquerNotifsLues(id){
+  const avant = S.notifications;
+  S.notifications = (avant || []).map(n => (!id || n.id === id) ? {...n, lue:true} : n);
+  memoEcrire('notifications', S.notifications, true);
+  majPanneauNotifs();
   if(!base) return;
   try{
-    await base.rpc('marquer_notifications_lues', { p_id: id || null });
-    if(id) S.notifications = S.notifications.map(n => n.id === id ? {...n, lue:true} : n);
-    else S.notifications = S.notifications.map(n => ({...n, lue:true}));
-    rendre();
-  }catch(e){}
+    const r = await base.rpc('marquer_notifications_lues', { p_id: id || null });
+    if(r && r.error) throw r.error;
+  }catch(e){ /* l'état local reste lu ; le prochain rafraîchissement remettra le serveur d'accord */ }
+}
+async function supprimerNotifs(){
+  const avant = S.notifications;
+  S.notifications = []; memoEcrire('notifications', [], true);
+  majPanneauNotifs();
+  if(!base) return;
+  try{
+    const r = await base.rpc('supprimer_notifications');
+    if(r && r.error) throw r.error;
+  }catch(e){
+    S.notifications = avant; memoEcrire('notifications', avant, true);
+    majPanneauNotifs();
+    toast('Suppression non enregistrée : vérifiez votre connexion.');
+  }
 }
 
 async function chargerAbonnement(){
@@ -3271,7 +3298,7 @@ function relatif(iso){
   return new Date(iso).toLocaleDateString('fr-FR', { day:'numeric', month:'short' });
 }
 
-function ouvrirNotifications(){
+function ouvrirNotifications(sansAuto){
   S.modal = 'notifications';
   document.getElementById('voile').hidden = false;
   const liste = S.notifications;
@@ -3302,7 +3329,7 @@ function ouvrirNotifications(){
     </div>`}
     <button class="cta creux" style="margin-top:14px" data-fermer-partage="1">Fermer</button>
   </div>`;
-  if(liste.some(n=>!n.lue)) setTimeout(() => marquerNotifsLues(null), 1200);
+  if(sansAuto !== true && liste.some(n=>!n.lue)) setTimeout(() => { if(S.modal === 'notifications') marquerNotifsLues(null); }, 2500);
 }
 
 function ouvrirPartage(quoi){
@@ -8450,9 +8477,7 @@ document.addEventListener('click', ev=>{
   if(d.notifs){ ouvrirNotifications(); return; }
   if(d.notifsTout){ marquerNotifsLues(null); return; }
   if(d.notifsVider !== undefined){
-    S.notifications = []; memoEcrire('notifications', [], true); rendre();
-    if(base) base.rpc('supprimer_notifications').then(() => {}, () => toast('Suppression non enregistrée : vérifiez votre connexion.'));
-    return;
+    supprimerNotifs(); return;
   }
   if(d.notifLire){ ouvrirNotif((S.notifications || []).find(n => String(n.id) === String(d.notifLire))); return; }
   if(d.partage){ ouvrirPartage(d.partage); return; }
