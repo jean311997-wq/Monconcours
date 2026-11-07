@@ -8936,13 +8936,11 @@ function murNotifsHtml(etat){
   const iphone = /iPhone|iPad|iPod/i.test(navigator.userAgent);
   let titre = 'Activez les notifications', texte = 'Pour continuer, autorisez les notifications. Vous serez prévenu de chaque composition nationale, de vos résultats et de votre classement, même quand l\'application est fermée.', bouton = 'Activer les notifications', plus = '';
   if(etat === 'refuse'){
-    texte = 'Les notifications sont bloquées sur cet appareil. Touchez le cadenas à côté de l\'adresse du site, puis Notifications, puis Autoriser. Revenez ensuite ici.';
-    bouton = 'J\'ai autorisé';
+    /* même texte, même bouton : l'aide n'apparaît qu'après un essai sans effet */
   } else if(etat === 'impossible'){
     texte = iphone
       ? 'Sur iPhone, ajoutez d\'abord Mon Concours à l\'écran d\'accueil : bouton Partager, puis « Sur l\'écran d\'accueil ». Ouvrez ensuite l\'application depuis son icône et autorisez les notifications.'
       : 'Ce navigateur ne peut pas recevoir de notifications. Ouvrez Mon Concours dans Chrome, ou installez l\'application depuis le menu du navigateur.';
-    bouton = 'J\'ai compris, je vérifie';
     plus = '<button class="lien" style="display:block;margin:12px auto 0" data-mur="passer">Continuer sans notifications</button>';
   }
   return `<div class="fe-carte">
@@ -8950,7 +8948,8 @@ function murNotifsHtml(etat){
     <div class="fe-marque">Mon Concours · Obligatoire</div>
     <h2 class="fe-titre">${titre}</h2>
     <p class="fe-texte fe-long">${E(texte)}</p>
-    <button class="cta" data-mur="activer">${bouton}</button>${plus}
+    <button class="cta" data-mur="activer">${bouton}</button>
+    <p class="fe-texte" id="mur-aide" hidden style="margin-top:12px;font-size:13px">Si rien ne s'affiche : touchez le cadenas à côté de l'adresse du site, puis Notifications, puis Autoriser. Revenez ensuite et touchez de nouveau le bouton.</p>${plus}
   </div>`;
 }
 function verifierMurNotifs(){
@@ -8972,11 +8971,11 @@ function verifierMurNotifs(){
       if(b.dataset.mur === 'passer'){ S.murPasse = true; pister('MUR_NOTIFS_PASSE', {}); m.remove(); return; }
       b.disabled = true;
       try{
-        if(Notification && Notification.permission === 'denied'){ b.disabled = false; return majMur(); }
         await activerRappel(18, 0);
         if(Notification.permission === 'granted' && S.rappel && S.rappel.actif) pister('MUR_NOTIFS_ACTIVE', {});
+        else { const h = document.getElementById('mur-aide'); if(h) h.hidden = false; pister('MUR_NOTIFS_ECHEC', { permission: (window.Notification && Notification.permission) || 'aucune' }); }
       }catch(err){}
-      b.disabled = false; majMur();
+      b.disabled = false; verifierMurNotifs();
     });
     document.body.appendChild(m);
     pister('MUR_NOTIFS_VU', { etat });
