@@ -572,7 +572,7 @@ function nav(){
   n.style.gridTemplateColumns = 'repeat(' + OG.length + ',1fr)';
   n.innerHTML = OG.map(o=>{
     const on = (o.id===S.ecran || (o.id==='grille'&&S.ecran==='copie')
-      || (o.id==='aujourdhui'&&['actualite','pourtoi','qdj','gagnants','correctionnat','question','notion','recherche','defi','top','proposer'].includes(S.ecran))
+      || (o.id==='aujourdhui'&&['actualite','pourtoi','qdj','gagnants','correctionnat','discussion','question','notion','recherche','defi','top','proposer'].includes(S.ecran))
       || (o.id==='compte'&&(S.ecran==='parcours'||S.ecran==='communaute'))
       || (o.id==='revisions'&&(S.ecran==='qcm'||S.ecran==='cours'))) ? 'on':'';
     const p = (o.id==='cahier' && ouvertes()) ? `<i class="pastille num">${ouvertes()}</i>`:'';
@@ -581,7 +581,7 @@ function nav(){
   }).join('');
   r.innerHTML = OG.map(o=>{
     const on = (o.id===S.ecran || (o.id==='grille'&&S.ecran==='copie')
-      || (o.id==='aujourdhui'&&['actualite','pourtoi','qdj','gagnants','correctionnat','question','notion','recherche','defi','top','proposer'].includes(S.ecran))
+      || (o.id==='aujourdhui'&&['actualite','pourtoi','qdj','gagnants','correctionnat','discussion','question','notion','recherche','defi','top','proposer'].includes(S.ecran))
       || (o.id==='compte'&&(S.ecran==='parcours'||S.ecran==='communaute'))
       || (o.id==='revisions'&&(S.ecran==='qcm'||S.ecran==='cours'))) ? 'on':'';
     const p = (o.id==='cahier' && ouvertes()) ? `<span class="pastille num">${ouvertes()}</span>`:'';
@@ -6032,6 +6032,7 @@ async function chargerClassement(id){
     const neuf = { ...(data || { ok:false }), id, charge:true };
     if(pareil(neuf, S.classementEp)) return;
     S.classementEp = neuf;
+    if(neuf.ok && neuf.termine) chargerDiscussion(id, true);
   }catch(e){ if(!(S.classementEp && S.classementEp.ok)) S.classementEp = { id, charge:true, ok:false, erreur:true }; }
   if(S.ecran === 'gagnants') rendre();
 }
@@ -6095,6 +6096,146 @@ function ecranCorrectionNat(){
     ${qs}</div>`;
 }
 const STATUTS = { admis:'Admis', attente:'Liste d\'attente', echoue:'Non admis' };
+
+/* ---------- la discussion ouverte d'une composition nationale ---------- */
+const LIB_DISC = { indispo:'La discussion est réservée aux candidats inscrits à cette composition.' };
+async function chargerDiscussion(id, apercu){
+  if(!base || !S.util.connecte) return;
+  try{
+    const { data } = await base.rpc('discussion_charger', { p_epreuve: id });
+    const neuf = { ...(data || { ok:false }), id, charge:true };
+    const avant = S.disc;
+    S.disc = neuf;
+    if(avant && avant.id === id && pareil({ ...avant, ecrivent:0 }, { ...neuf, ecrivent:0 }) && JSON.stringify(avant.ecrivent) === JSON.stringify(neuf.ecrivent)) return;
+    if(apercu){ if(S.ecran === 'gagnants') rendre(); }
+    else majDiscussionDom();
+  }catch(e){}
+}
+async function chargerStatsGroupe(id){
+  if(!base || !S.util.connecte) return;
+  if(S.statsGroupe && S.statsGroupe.id === id && S.statsGroupe.ok) return;
+  try{
+    const { data } = await base.rpc('stats_groupe_epreuve', { p_epreuve: id });
+    S.statsGroupe = { ...(data || { ok:false }), id };
+    if(S.ecran === 'discussion') majDiscussionDom();
+  }catch(e){}
+}
+function blocDiscussionApercu(id){
+  const d = S.disc && S.disc.id === id ? S.disc : null;
+  if(d && !d.ok) return '';   // pas inscrit : on ne propose rien
+  const msgs = d && d.messages ? d.messages.slice(-2) : [];
+  const ecr = d && d.ecrivent ? d.ecrivent.length : 0;
+  return `<div class="disc-carte">
+    <div class="libelle" style="margin:0 0 6px">Discussion ouverte de la composition</div>
+    <p class="disc-titre">${d && d.total ? d.total + ' message' + (d.total > 1 ? 's' : '') : 'Soyez le premier à écrire'}${ecr ? ` · <span class="disc-live"><i></i>${ecr} écri${ecr > 1 ? 'vent' : 't'}</span>` : ''}</p>
+    ${msgs.length ? msgs.map(m => `<div class="disc-ligne"><span class="d-av">${E(initialesPseudo(m.nom))}</span><div><b>${E(m.nom)}</b><span>${E(m.texte)}</span></div></div>`).join('') : '<p class="sous" style="margin:6px 0 0">Comparez vos réponses, posez vos questions aux autres candidats.</p>'}
+    <button class="cta" style="margin-top:12px" data-discussion="${E(id)}">Rejoindre la discussion</button>
+  </div>`;
+}
+function ouvrirDiscussion(id){
+  S.discId = id;
+  if(!(S.disc && S.disc.id === id)) S.disc = null;
+  aller('discussion');
+  chargerDiscussion(id, false); chargerStatsGroupe(id);
+  pister('DISCUSSION_OUVERTE');
+}
+function lignesDiscussion(){
+  const d = S.disc;
+  if(!d || !d.charge) return '<div class="squelette"></div><div class="squelette"></div>';
+  if(!d.ok) return `<p class="sous">${E(d.message || LIB_DISC.indispo)}</p>`;
+  if(!d.messages.length) return '<p class="sous" style="text-align:center;margin:18px 0">Aucun message pour l\'instant. Écrivez le premier.</p>';
+  return d.messages.map(m => `<div class="msg-d${m.moi ? ' moi' : ''}">
+      <span class="d-av${m.equipe ? ' eq' : ''}">${E(initialesPseudo(m.nom))}</span>
+      <div class="d-co"><div class="d-bulle"><b>${E(m.nom)}${m.equipe ? ' · équipe' : ''}</b>${E(m.texte)}</div>
+        <div class="d-pied"><button class="d-coeur${m.aime ? ' on' : ''}" data-disc-aimer="${E(m.id)}" aria-pressed="${!!m.aime}">${m.aime ? '❤️' : '🤍'}${m.coeurs ? ' ' + m.coeurs : ''}</button>
+        <span>${E(heureH(m.cree_le))}</span>${m.moi || d.equipe ? `<button class="d-suppr" data-disc-suppr="${E(m.id)}">Supprimer</button>` : ''}</div></div>
+    </div>`).join('');
+}
+function texteEcrivent(){
+  const e = (S.disc && S.disc.ecrivent) || [];
+  if(!e.length) return '';
+  const pre = n => (n || '').split(' ').slice(0, 2).join(' ');
+  return `<span class="disc-live"><i></i>${e.length === 1 ? E(pre(e[0])) + ' écrit…' : e.length === 2 ? E(pre(e[0])) + ' et ' + E(pre(e[1])) + ' écrivent…' : E(pre(e[0])) + ' et ' + (e.length - 1) + ' autres écrivent…'}</span>`;
+}
+function blocStatsGroupe(){
+  const t = S.statsGroupe;
+  if(!t || !t.ok || t.vide) return '';
+  const barre = (lib, v, coul) => `<div class="stat-g"><div class="t"><span>${lib}</span><b class="num" style="color:${coul}">${v} %</b></div><div class="b"><i style="width:${v}%;background:${coul}"></i></div></div>`;
+  return `<div class="libelle" style="margin-top:18px">Le groupe en chiffres</div>
+    <div class="mini-g"><div><b class="num">${String(t.moyenne).replace('.', ',')}</b>moyenne /${t.sur}</div><div><b class="num">${t.minutes} min</b>temps moyen</div><div><b class="num">${t.participants}</b>candidats</div></div>
+    ${barre('Réponses justes', t.justes, 'var(--vert-texte)')}${barre('Erreurs', t.erreurs, 'var(--rouge-texte)')}${barre('Sans réponse', t.sans_reponse, 'var(--ambre-texte)')}`;
+}
+function majDiscussionDom(){
+  if(S.ecran !== 'discussion') return;
+  const fil = document.getElementById('disc-fil'); if(!fil) return;
+  const bas = (window.innerHeight + window.scrollY) >= document.documentElement.scrollHeight - 160;
+  fil.innerHTML = lignesDiscussion();
+  const e = document.getElementById('disc-ecrit'); if(e) e.innerHTML = texteEcrivent();
+  const n = document.getElementById('disc-total'); if(n) n.textContent = (S.disc && S.disc.total ? S.disc.total : 0) + ' message' + (S.disc && S.disc.total > 1 ? 's' : '');
+  const g = document.getElementById('disc-stats'); if(g) g.innerHTML = blocStatsGroupe();
+  if(bas) window.scrollTo({ top: document.documentElement.scrollHeight, behavior:'smooth' });
+}
+function ecranDiscussion(){
+  const id = S.discId, c = S.classementEp;
+  const tete = `<button class="retourhaut" data-gagnants="${E(id || '')}">Retour aux résultats</button>`;
+  if(!id){ vue().innerHTML = `<div class="pad">${tete}<p class="sous" style="margin-top:16px">Ouvrez la discussion depuis les résultats de la composition.</p></div>`; return; }
+  const podium = c && c.id === id && c.classement ? c.classement.filter(l => l.rang <= 3).slice(0, 3) : [];
+  const fel = podium.length ? `<div class="felicitations" style="margin-top:12px"><div class="eyebrow" style="color:var(--or)">Félicitations aux admis</div>
+    <p>Bravo à ${podium.map(l => '<b>' + E(l.nom) + '</b> (' + l.score + '/' + l.sur + ')').join(', ')}.${c.admis ? ' ' + c.admis + ' candidat' + (c.admis > 1 ? 's sont admis' : ' est admis') + '.' : ''}</p></div>` : '';
+  vue().innerHTML = `<div class="pad disc-page">
+    ${tete}
+    <div class="eyebrow" style="margin-top:8px">Composition nationale (simulation)</div>
+    <h1 class="titre">Discussion · ${E(c && c.id === id ? (c.concours || c.titre || '') : '')}</h1>
+    ${fel}
+    <div id="disc-stats">${blocStatsGroupe()}</div>
+    <div class="libelle" style="margin-top:18px">Discussion<span class="num" id="disc-total">${S.disc && S.disc.total ? S.disc.total + ' message' + (S.disc.total > 1 ? 's' : '') : ''}</span></div>
+    <div id="disc-fil" class="disc-fil">${lignesDiscussion()}</div>
+    <div id="disc-ecrit" class="disc-ecrit">${texteEcrivent()}</div>
+    <form class="disc-saisie" id="disc-form" autocomplete="off">
+      <input id="disc-champ" type="text" maxlength="500" placeholder="Écrire un message…" value="${E(S.discBrouillon || '')}" enterkeyhint="send">
+      <button type="submit" class="disc-envoi" aria-label="Envoyer">➤</button>
+    </form>
+  </div>`;
+  const champ = document.getElementById('disc-champ'), form = document.getElementById('disc-form');
+  let dernierSignal = 0;
+  champ.addEventListener('input', () => {
+    S.discBrouillon = champ.value;
+    const t = Date.now();
+    if(champ.value.trim() && t - dernierSignal > 5000 && base){ dernierSignal = t; base.rpc('discussion_ecrit', { p_epreuve: id }).then(() => {}, () => {}); }
+  });
+  form.addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const texte = champ.value.trim(); if(!texte || !base) return;
+    const bouton = form.querySelector('button'); bouton.disabled = true;
+    try{
+      const { data } = await base.rpc('discussion_envoyer', { p_epreuve: id, p_texte: texte });
+      if(data && data.ok){ champ.value = ''; S.discBrouillon = ''; pister('DISCUSSION_MESSAGE'); await chargerDiscussion(id, false); window.scrollTo({ top: document.documentElement.scrollHeight, behavior:'smooth' }); }
+      else toast((data && data.message) || 'Message non envoyé.');
+    }catch(e){ toast('Message non envoyé : vérifiez votre connexion.'); }
+    bouton.disabled = false;
+  });
+}
+document.addEventListener('click', async ev => {
+  const b = ev.target.closest('[data-discussion],[data-disc-aimer],[data-disc-suppr]'); if(!b) return;
+  if(b.dataset.discussion){ ev.preventDefault(); return ouvrirDiscussion(b.dataset.discussion); }
+  if(b.dataset.discAimer && S.disc && S.disc.messages){
+    const m = S.disc.messages.find(x => x.id === b.dataset.discAimer); if(!m) return;
+    m.aime = !m.aime; m.coeurs = Math.max(0, (m.coeurs || 0) + (m.aime ? 1 : -1)); majDiscussionDom();
+    try{
+      const { data } = await base.rpc('discussion_aimer', { p_message: m.id });
+      if(data && data.ok){ m.aime = data.aime; m.coeurs = data.coeurs; majDiscussionDom(); }
+    }catch(e){}
+    return;
+  }
+  if(b.dataset.discSuppr && S.disc && S.disc.messages){
+    if(!confirm('Supprimer ce message ?')) return;
+    const id = b.dataset.discSuppr;
+    S.disc.messages = S.disc.messages.filter(x => x.id !== id); S.disc.total = Math.max(0, (S.disc.total || 1) - 1); majDiscussionDom();
+    try{ await base.rpc('discussion_supprimer', { p_message: id }); }catch(e){ toast('Suppression non enregistrée.'); }
+  }
+});
+setInterval(() => { if(S.ecran === 'discussion' && S.discId && !document.hidden && S.modal !== 'x') chargerDiscussion(S.discId, false); }, 10000);
+
 function ecranGagnants(){
   const c = S.classementEp;
   const tete = `<button class="retourhaut" data-go="aujourdhui">Retour</button>`;
@@ -6120,6 +6261,7 @@ function ecranGagnants(){
     const manque = dernierAdmis && m.statut !== 'admis' ? dernierAdmis.score - m.score : 0;
     statut = `<div class="statut-nat sn-${m.statut}">
       <div class="sn-tampon">${STATUTS[m.statut]}</div>
+      <button class="mini-partage" data-carte-resultat="nationale" aria-label="Partager mon résultat">${ico('partage',14)}<span>Partager</span></button>
       <p class="sn-titre">${m.statut === 'admis' ? (m.rang <= 3 ? 'Félicitations, vous êtes sur le podium !' : 'Félicitations, vous êtes admis !')
         : m.statut === 'attente' ? 'Vous êtes sur la liste d\'attente.' : 'Vous n\'êtes pas admis cette fois.'}</p>
       <p>Votre rang : <b class="num">${r(m.rang)}</b> sur ${c.participants} · note <b class="num">${m.score}/${m.sur}</b></p>
@@ -6146,18 +6288,12 @@ function ecranGagnants(){
     <div class="eyebrow">Composition nationale <small class="sim">(simulation)</small> · ${E(jourFr(c.debut_le))}</div>
     <h1 class="titre">Résultats · ${E(c.concours || c.titre)}</h1>
     <p class="sous" style="margin-top:6px"><span class="num">${c.participants}</span> candidat${c.participants>1?'s':''} · ${c.places} postes à pourvoir · moyenne <span class="num">${c.moyenne ?? '—'}/${c.sur}</span></p>
-    <div class="trio" style="margin-top:12px">
+    ${statut}
+    <div class="trio" style="margin-top:14px">
       <div><b class="num">${c.admis}</b><span>admis</span></div>
       <div><b class="num">${c.attente}</b><span>liste d'attente</span></div>
       <div><b class="num">${c.echoues}</b><span>non admis</span></div>
     </div>
-    ${statut}
-    <button class="cta creux" style="margin-top:10px" data-corr-nat="${E(c.id)}">${ico('lire',16)} Voir le corrigé de l'épreuve</button>
-    ${m && maCompo ? `<button class="cta creux" style="margin-top:9px" data-correction-nat="${E(maCompo)}">${ico('lire',16)} Voir ma correction</button>` : ''}
-    ${!m && S.epreuve && S.epreuve.id !== c.id && S.epreuve.etat === 'a_venir' && !S.epreuve.inscrit ? `<div class="carte" style="margin-top:12px;text-align:left"><p class="sous" style="margin:0 0 10px">Prochaine composition nationale : ${E(dateLongue(S.epreuve.debut_le))} à ${heureH(S.epreuve.debut_le)}. Venez composer et voir votre nom dans ce classement.</p>
-      <button class="cta" data-inscrire-nat="${E(S.epreuve.id)}">M'inscrire à la composition</button></div>` : ''}
-    ${m && peutProposer(4) ? `<div class="carte" style="margin-top:12px;text-align:left"><p class="sous" style="margin:0 0 10px">${m.rang ? 'Vous êtes ' + r(Number(m.rang)) + ' sur ' + E(c.participants) + '. ' : ''}Pour monter à la prochaine nationale, entraînez-vous sans limite :</p>
-      ${offreDeuxPrix()}</div>` : ''}
     ${podium.length ? `<div class="felicitations">
       <div class="eyebrow" style="color:var(--or)">Félicitations</div>
       <p>Bravo à <b>${E(podium[0].nom)}</b>, major de la composition avec <b class="num">${podium[0].score}/${podium[0].sur}</b>${c.recompense ? `. ${E(c.recompense)} lui revient` : ''}.${podium.length > 1 ? ' Bravo aussi à ' + podium.slice(1).map(l => '<b>' + E(l.nom) + '</b> (' + l.rang + 'e)').join(' et ') + '.' : ''}</p>
@@ -6174,9 +6310,15 @@ function ecranGagnants(){
       </div>`).join('')}
     </div>` : '<div class="carte" style="margin-top:14px"><p class="sous">Aucune copie remise pour cette composition.</p></div>'}
 
-    <button class="cta" style="margin-top:14px" data-resultats-pdf="1">${ico('telecharger',16)} Télécharger les résultats en PDF</button>
-    ${m ? `<button class="cta wa-btn" style="margin-top:9px" data-carte-resultat="nationale">${ico('partage',16)} Partager ma carte de résultat<small>Une image avec votre note, votre rang et le QR code du site</small></button>
-    <button class="cta creux" style="margin-top:9px" data-partage-rang="1">${logoReseau('whatsapp')} Envoyer mon résultat sur WhatsApp</button>` : ''}
+    <div class="actions-res">
+      <button class="cta" ${m && maCompo ? `data-correction-nat="${E(maCompo)}"` : `data-corr-nat="${E(c.id)}"`}>${ico('lire',16)} Voir la correction</button>
+      <button class="cta creux" data-resultats-pdf="1">${ico('telecharger',16)} Résultats en PDF</button>
+    </div>
+    ${S.util.connecte ? blocDiscussionApercu(c.id) : ''}
+    ${!m && S.epreuve && S.epreuve.id !== c.id && S.epreuve.etat === 'a_venir' && !S.epreuve.inscrit ? `<div class="carte" style="margin-top:12px;text-align:left"><p class="sous" style="margin:0 0 10px">Prochaine composition nationale : ${E(dateLongue(S.epreuve.debut_le))} à ${heureH(S.epreuve.debut_le)}. Venez composer et voir votre nom dans ce classement.</p>
+      <button class="cta" data-inscrire-nat="${E(S.epreuve.id)}">M'inscrire à la composition</button></div>` : ''}
+    ${m && peutProposer(4) ? `<div class="carte" style="margin-top:12px;text-align:left"><p class="sous" style="margin:0 0 10px">${m.rang ? 'Vous êtes ' + r(Number(m.rang)) + ' sur ' + E(c.participants) + '. ' : ''}Pour monter à la prochaine nationale, entraînez-vous sans limite :</p>
+      ${offreDeuxPrix()}</div>` : ''}
 
     ${admis.length ? `<div class="bloc"><div class="libelle">Liste des admis<span class="num">${admis.length}</span></div><div class="carte">${admis.map(ligne).join('')}</div></div>` : ''}
     ${attente.length ? `<div class="bloc"><div class="libelle">Liste d'attente<span class="num">${attente.length}</span></div><div class="carte">${attente.map(ligne).join('')}</div></div>` : ''}
@@ -8059,7 +8201,7 @@ function apptete(){
     compte:S.gratuit ? '' : S.abo.actif?nomFormule(S.abo.formule).toLowerCase():'abonnement gratuit',
     revisions:S.niveau.toLowerCase(), qcm:S.matiere||'', abonnement:'', paiement:'sécurisé',
     inscription:'', connexion:'', resultat:'étape 3 sur 3', actualite:'ce matin',
-    pourtoi:'pour toi', qdj:'question du jour', gagnants:'classement', notion:'notion du jour', defi:'défi', top:'top 10', parcours:'mon parcours'}[S.ecran] || '';
+    pourtoi:'pour toi', qdj:'question du jour', gagnants:'classement', discussion:'discussion', notion:'notion du jour', defi:'défi', top:'top 10', parcours:'mon parcours'}[S.ecran] || '';
   const nonLues = S.notifications.filter(n => !n.lue).length;
   t.innerHTML = `${logoSvg(24)}<span class="mot">MON <i>CONCOURS</i></span>
     <span class="droite">${droite}</span>
@@ -8081,7 +8223,7 @@ function annoncer(){
     qcm:'Question', grille:'Composition', copie:'Copie corrigée', cahier:'Mon cahier', compte:'Mon compte',
     inscription:'Création de compte', connexion:'Connexion', abonnement:'Abonnements', paiement:'Paiement',
     test:'Test de niveau', resultat:'Résultat', pourtoi:'Fil pour toi', qdj:'Question du jour',
-    question:'Question partagée', gagnants:'Résultats de la composition nationale', notion:'Notion du jour', recherche:'Recherche de questions',
+    question:'Question partagée', gagnants:'Résultats de la composition nationale', discussion:'Discussion de la composition', notion:'Notion du jour', recherche:'Recherche de questions',
     defi:'Défi entre amis', top:'Top 10 de la semaine', proposer:'Proposer une question', parcours:'Mon parcours'}[S.ecran] || '';
   const a = document.getElementById('annonce');
   if(a && n) a.textContent = 'Écran : ' + n;
@@ -8229,7 +8371,7 @@ function rendre(){
     revisions:ecranRevisions, cours:ecranCours, lecture:ecranLecture, qcm:ecranQcm,
     grille:ecranGrille, copie:ecranCopie,
     cahier:ecranCahier, lecteur:ecranLecteur, compte:ecranCompte,
-    pourtoi:ecranPourToi, qdj:ecranQdj, question:ecranQuestionPartagee, gagnants:ecranGagnants, correctionnat:ecranCorrectionNat,
+    pourtoi:ecranPourToi, qdj:ecranQdj, question:ecranQuestionPartagee, gagnants:ecranGagnants, correctionnat:ecranCorrectionNat, discussion:ecranDiscussion,
     notion:ecranNotion, recherche:ecranRecherche, defi:ecranDefi, top:ecranTop, proposer:ecranProposer, parcours:ecranParcours, xreprise:ecranRepriseX, xbravo:ecranBravoX, communaute:ecranCommunaute, horsligne:ecranHorsLigne, suppression:ecranSuppression}[S.ecran] || ecranAujourdhui);
 
   /* FILET — une erreur dans un seul écran ne doit plus jamais laisser
