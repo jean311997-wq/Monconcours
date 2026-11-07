@@ -2033,3 +2033,16 @@ body.sans-anim .stat-comm .sc-new.jamais{animation:none}
 .avis-vitrine{transition:opacity .35s}.avis-vitrine.passe{opacity:0}.avis-accueil .avis-vitrine{margin-top:8px}@media (prefers-reduced-motion:reduce){.avis-vitrine{transition:none}}
 
 .mur-notifs{z-index:450!important;background:rgba(10,20,15,.96)!important}.mur-notifs .fe-carte{max-width:340px}
+
+/* Composition nationale : la carte bat comme un cœur (deux temps, puis repos), liseré or et vert */
+@keyframes cn-coeur{0%,100%{transform:scale(1)}14%{transform:scale(1.018)}28%{transform:scale(1)}42%{transform:scale(1.011)}70%{transform:scale(1)}}
+@keyframes cn-halo{0%,100%{box-shadow:0 0 0 0 rgba(227,168,43,0),0 10px 28px -16px rgba(20,80,59,.45)}14%{box-shadow:0 0 0 5px rgba(227,168,43,.22),0 14px 34px -14px rgba(20,80,59,.55)}28%{box-shadow:0 0 0 0 rgba(227,168,43,0),0 10px 28px -16px rgba(20,80,59,.45)}42%{box-shadow:0 0 0 3px rgba(227,168,43,.14),0 12px 30px -15px rgba(20,80,59,.5)}70%{box-shadow:0 0 0 0 rgba(227,168,43,0),0 10px 28px -16px rgba(20,80,59,.45)}}
+@keyframes cn-sec{0%,100%{transform:scale(1)}14%{transform:scale(1.07)}28%{transform:scale(1)}}
+.nat-jour .carte.nationale{position:relative;overflow:hidden;border:1.5px solid var(--or);animation:cn-coeur 1.7s ease-in-out infinite,cn-halo 1.7s ease-in-out infinite;transform-origin:center}
+.nat-jour .carte.nationale::before{content:"";position:absolute;left:0;right:0;top:0;height:4px;background:linear-gradient(90deg,#14503B,#E3A82B 55%,#14503B)}
+.nat-jour .carte.nationale .cn-tete span:first-child{color:var(--laterite-txt,var(--or));font-weight:700}
+.nat-jour .carte.nationale .rebours span{background:linear-gradient(180deg,#14503B,#0D3A2A);border:1px solid #E3A82B55}
+.nat-jour .carte.nationale .rebours b{color:#F3C75A}
+.nat-jour .carte.nationale .rebours small{color:#BFD8CB}
+.nat-jour .carte.nationale .rebours span:last-child{animation:cn-sec 1.7s ease-in-out infinite}
+@media(prefers-reduced-motion:reduce){.nat-jour .carte.nationale,.nat-jour .carte.nationale .rebours span:last-child{animation:none}}
