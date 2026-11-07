@@ -8963,17 +8963,27 @@ function murNotifsHtml(etat){
   if(etat === 'refuse'){
     /* même texte, même bouton : l'aide n'apparaît qu'après un essai sans effet */
   } else if(etat === 'impossible'){
-    texte = iphone
-      ? 'Sur iPhone, ajoutez d\'abord Mon Concours à l\'écran d\'accueil : bouton Partager, puis « Sur l\'écran d\'accueil ». Ouvrez ensuite l\'application depuis son icône et autorisez les notifications.'
-      : 'Ce navigateur ne peut pas recevoir de notifications. Ouvrez Mon Concours dans Chrome, ou installez l\'application depuis le menu du navigateur.';
-    plus = '<button class="lien" style="display:block;margin:12px auto 0" data-mur="passer">Continuer sans notifications</button>';
+    const installee = estInstallee();
+    if(installee){
+      titre = 'Notifications indisponibles';
+      texte = 'Ce téléphone ne peut pas recevoir les notifications. Vous pouvez continuer, vous verrez vos résultats et vos rappels dans l\'application.';
+      bouton = ''; plus = '<button class="cta" data-mur="passer">Continuer</button>';
+    } else {
+      titre = 'Installez l\'application';
+      texte = iphone
+        ? 'Sur iPhone, les notifications ne marchent que depuis l\'application installée. Installez Mon Concours sur l\'écran d\'accueil, puis ouvrez-le depuis son icône.'
+        : 'Ce navigateur ne peut pas envoyer de notifications. Installez l\'application Mon Concours : elles marcheront ensuite.';
+      bouton = iphone ? 'Voir comment installer' : 'Installer l\'application';
+      plus = '<button class="lien" style="display:block;margin:12px auto 0" data-mur="passer">Plus tard</button>';
+    }
   }
   return `<div class="fe-carte">
     <div class="fe-badge" aria-hidden="true">🔔</div>
     <div class="fe-marque">Mon Concours · Obligatoire</div>
     <h2 class="fe-titre">${titre}</h2>
     <p class="fe-texte fe-long">${E(texte)}</p>
-    <button class="cta" data-mur="activer">${bouton}</button>
+    ${bouton ? `<button class="cta" data-mur="${etat === 'impossible' ? 'installer' : 'activer'}">${bouton}</button>` : ''}
+    <p class="fe-texte" id="mur-install" hidden style="margin-top:12px;font-size:13px"></p>
     <p class="fe-texte" id="mur-aide" hidden style="margin-top:12px;font-size:13px">Si rien ne s'affiche : touchez le cadenas à côté de l'adresse du site, puis Notifications, puis Autoriser. Revenez ensuite et touchez de nouveau le bouton.</p>${plus}
   </div>`;
 }
@@ -8981,7 +8991,8 @@ function verifierMurNotifs(){
   if(!NOTIFS_OBLIGATOIRES) return;
   let m = document.getElementById('mur-notifs');
   const etat = murNotifsEtat();
-  const enCours = enComposition() || (S.ecran === 'grille' && !S.corrige && Object.keys(S.reponses || {}).length > 0);
+  const enInstall = !estInstallee() && new URLSearchParams(location.search).has('installer') && S.modal === 'rappel';
+  const enCours = enInstall || enComposition() || (S.ecran === 'grille' && !S.corrige && Object.keys(S.reponses || {}).length > 0);
   const bloque = etat === 'possible' || etat === 'refuse' || (etat === 'impossible' && !S.murPasse);
   if(!bloque || enCours){
     if(m){ if(bloque && enCours) m.style.display = 'none'; else m.remove(); }
@@ -8994,6 +9005,18 @@ function verifierMurNotifs(){
     m.addEventListener('click', async e => {
       const b = e.target.closest('[data-mur]'); if(!b) return;
       if(b.dataset.mur === 'passer'){ S.murPasse = true; pister('MUR_NOTIFS_PASSE', {}); m.remove(); return; }
+      if(b.dataset.mur === 'installer'){
+        pister('MUR_NOTIFS_INSTALL', { systeme: /iPhone|iPad|iPod/i.test(navigator.userAgent) ? 'ios' : 'autre' });
+        const aide = txt => { const h = document.getElementById('mur-install'); if(h){ h.textContent = txt; h.hidden = false; } };
+        const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+        if(S.installer){ S.installer.prompt(); S.installer.userChoice.then(() => { S.installer = null; }); return; }
+        if(ios) return aide('Ouvrez ce site dans Safari. Touchez le bouton Partager (le carré avec une flèche), puis « Sur l\'écran d\'accueil ». Ouvrez ensuite Mon Concours depuis son icône.');
+        const manuel = 'Touchez les trois points ⋮ en haut à droite, puis « Installer l\'application » ou « Ajouter à l\'écran d\'accueil ». Dans WhatsApp ou Facebook, choisissez d\'abord « Ouvrir dans le navigateur ».';
+        if(/Android/i.test(navigator.userAgent) && new URLSearchParams(location.search).get('via') !== 'chrome'){
+          ouvrirDansChrome(); setTimeout(() => { if(!document.hidden) aide(manuel); }, 2200); return;
+        }
+        return aide(manuel);
+      }
       b.disabled = true;
       try{
         await activerRappel(18, 0);
