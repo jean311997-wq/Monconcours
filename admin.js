@@ -2758,7 +2758,7 @@ async function vueAvis(){
   const peut = A.equipe;
   $('#vue').innerHTML = `
     <h2 class="titre">Avis des candidats</h2>
-    <p class="sous">Après une trentaine de minutes d'utilisation, l'application propose au candidat de donner son avis sur le site ou sur les recommandations. Les avis arrivent ici : vous pouvez les aimer et répondre. La réponse arrive chez le candidat sous le titre « Réponse de l'administration · Mon Concours ».</p>
+    <p class="sous">Après une trentaine de minutes d'utilisation, l'application propose au candidat de donner son avis sur le site ou sur les recommandations. Les avis arrivent ici : vous pouvez les aimer, y répondre et mettre les meilleurs en vitrine (les 3 plus récents s'affichent sur l'écran d'accueil, sans nom). La réponse arrive chez le candidat sous le titre « Réponse de l'administration · Mon Concours ».</p>
     <div class="bloc"><div class="libelle">${nouveaux} nouveau${nouveaux > 1 ? 'x' : ''} · ${sansReponse} sans réponse · ${liste.length} au total</div>
       ${!liste.length ? '<div class="carte"><div class="vide">Aucun avis pour le moment.</div></div>' :
       liste.map(a => `<div class="carte avis-carte" data-avis="${a.id}" style="margin-bottom:10px;${a.statut === 'nouveau' || !a.reponse ? '' : 'opacity:.85'}">
@@ -2769,6 +2769,7 @@ async function vueAvis(){
           ${a.reponse ? `<div class="reponse-admin"><small>Votre réponse · ${E(dateHeure(a.reponse_le))}</small><p style="margin:4px 0 0;white-space:pre-wrap">${E(a.reponse)}</p></div>` : ''}
           ${peut ? `<div class="avis-actions" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
             <button class="mini" data-avis-aime="${a.id}" data-etat="${a.aime ? 1 : 0}">${a.aime ? '♥ Aimé · retirer' : '♡ J\'aime'}</button>
+            ${(a.message || '').length >= 8 && a.message.length <= 200 ? `<button class="mini" data-avis-vitrine="${a.id}" data-etat="${a.vitrine ? 1 : 0}">${a.vitrine ? '★ En vitrine · retirer' : '☆ Mettre en vitrine'}</button>` : ''}
             <button class="mini" data-avis-repondre="${a.id}">${a.reponse ? 'Répondre à nouveau' : 'Répondre'}</button>
             ${a.statut === 'nouveau' ? `<button class="lien" data-avis-lu="${a.id}">marquer comme lu</button>` : ''}
           </div>
@@ -2793,6 +2794,12 @@ async function vueAvis(){
     const { data: r, error: e2 } = await db.rpc('admin_aimer_avis', { p_id: +b.dataset.avisAime, p_aime: b.dataset.etat !== '1' });
     if(e2 || !r || !r.ok){ b.disabled = false; return erreur(e2 || { message: (r && r.message) || 'Échec' }, 'J\'aime impossible'); }
     signal(b.dataset.etat === '1' ? 'J\'aime retiré.' : 'Avis aimé : le candidat en est informé.', 'bien'); vueAvis(); majPastilles();
+  });
+  $$('[data-avis-vitrine]').forEach(b => b.onclick = async () => {
+    b.disabled = true;
+    const { data: r, error: e2 } = await db.rpc('admin_avis_vitrine', { p_id: +b.dataset.avisVitrine, p_val: b.dataset.etat !== '1' });
+    if(e2 || !r || !r.ok){ b.disabled = false; return erreur(e2 || { message: 'Échec' }, 'Mise en vitrine impossible'); }
+    signal(b.dataset.etat === '1' ? 'Retiré de la vitrine.' : 'Avis en vitrine : il apparaît sur l\'écran d\'accueil, sans nom.', 'bien'); vueAvis();
   });
   $$('[data-avis-repondre]').forEach(b => b.onclick = () => {
     const f = document.querySelector('[data-forme="' + b.dataset.avisRepondre + '"]'); f.hidden = !f.hidden; if(!f.hidden) f.querySelector('textarea').focus();

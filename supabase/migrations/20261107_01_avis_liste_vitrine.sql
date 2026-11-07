@@ -1,0 +1,1 @@
+-- avis_liste renvoie aussi la colonne vitrine (bouton « Mettre en vitrine » dans l'admin)
