@@ -9103,7 +9103,11 @@ function murNotifsHtml(etat){
   const iphone = /iPhone|iPad|iPod/i.test(navigator.userAgent);
   let titre = 'Activez les notifications', texte = 'Pour continuer, autorisez les notifications. Vous serez prévenu de chaque composition nationale, de vos résultats et de votre classement, même quand l\'application est fermée.', bouton = 'Activer les notifications', plus = '';
   if(etat === 'refuse'){
-    /* même texte, même bouton : l'aide n'apparaît qu'après un essai sans effet */
+    /* le navigateur ne laisse plus redemander : on guide, pas à pas, vers les réglages du site */
+    titre = 'Autorisez les notifications';
+    texte = 'Elles sont bloquées sur ce téléphone.\n1) Touchez le cadenas à côté de l\'adresse du site.\n2) Touchez « Notifications » ou « Autorisations ».\n3) Choisissez « Autoriser ».\nRevenez ensuite ici.';
+    bouton = 'C\'est fait, continuer';
+    plus = (S.murEssais || 0) >= 3 ? '<button class="lien" style="display:block;margin:12px auto 0" data-mur="passer">Plus tard</button>' : '';
   } else if(etat === 'impossible'){
     const installee = estInstallee();
     if(installee){
@@ -9123,7 +9127,7 @@ function murNotifsHtml(etat){
     <div class="fe-badge" aria-hidden="true">🔔</div>
     <div class="fe-marque">Mon Concours · Obligatoire</div>
     <h2 class="fe-titre">${titre}</h2>
-    <p class="fe-texte fe-long">${E(texte)}</p>
+    <p class="fe-texte fe-long" style="white-space:pre-line">${E(texte)}</p>
     ${bouton ? `<button class="cta" data-mur="${etat === 'impossible' ? 'installer' : 'activer'}">${bouton}</button>` : ''}
     <p class="fe-texte" id="mur-install" hidden style="margin-top:12px;font-size:13px"></p>
     <p class="fe-texte" id="mur-aide" hidden style="margin-top:12px;font-size:13px">Si rien ne s'affiche : touchez le cadenas à côté de l'adresse du site, puis Notifications, puis Autoriser. Revenez ensuite et touchez de nouveau le bouton.</p>${plus}
@@ -9135,7 +9139,7 @@ function verifierMurNotifs(){
   const etat = murNotifsEtat();
   const enInstall = !estInstallee() && new URLSearchParams(location.search).has('installer') && S.modal === 'rappel';
   const enCours = enInstall || enComposition() || (S.ecran === 'grille' && !S.corrige && Object.keys(S.reponses || {}).length > 0);
-  const bloque = etat === 'possible' || etat === 'refuse' || (etat === 'impossible' && !S.murPasse);
+  const bloque = etat === 'possible' || (etat === 'refuse' && !S.murPasse) || (etat === 'impossible' && !S.murPasse);
   if(!bloque || enCours){
     if(m){ if(bloque && enCours) m.style.display = 'none'; else m.remove(); }
     return;
@@ -9163,7 +9167,12 @@ function verifierMurNotifs(){
       try{
         await activerRappel(18, 0);
         if(Notification.permission === 'granted' && S.rappel && S.rappel.actif) pister('MUR_NOTIFS_ACTIVE', {});
-        else { const h = document.getElementById('mur-aide'); if(h) h.hidden = false; pister('MUR_NOTIFS_ECHEC', { permission: (window.Notification && Notification.permission) || 'aucune' }); }
+        else {
+          const h = document.getElementById('mur-aide'); if(h){ if(Notification.permission === 'denied') h.textContent = 'Toujours bloqué. Suivez les 3 étapes ci-dessus, puis revenez ici.'; h.hidden = false; }
+          S.murEssais = (S.murEssais || 0) + 1;
+          pister('MUR_NOTIFS_ECHEC', { permission: (window.Notification && Notification.permission) || 'aucune', essai: S.murEssais });
+          if(S.murEssais === 3){ const mm = document.getElementById('mur-notifs'); if(mm) mm.dataset.etat = ''; }
+        }
       }catch(err){}
       b.disabled = false; verifierMurNotifs();
     });
