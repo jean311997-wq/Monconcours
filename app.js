@@ -1324,7 +1324,7 @@ function fenetreAnnonce(n){
   f.setAttribute('role', 'dialog'); f.setAttribute('aria-modal', 'true');
   f.setAttribute('aria-label', n.titre || 'Message de Mon Concours');
   const [genre] = String(n.lien || '').split(':');
-  const suite = { abonnement:'Voir mon abonnement', compte:'Ouvrir mon compte', parcours:'Ouvrir mon parcours', offre:'Voir l\'offre', communaute:'Entrer dans la communauté' }[genre];
+  const suite = { abonnement:'Voir mon abonnement', compte:'Ouvrir mon compte', parcours:'Ouvrir mon parcours', offre:'Voir l\'offre', communaute:'Entrer dans la communauté', epreuve:'Oui, je participe' }[genre];
   const guide = String(n.lien || '') === 'annonce:guide-compo';
   if(guide){
     f.classList.add('guide-compo');
@@ -1348,7 +1348,7 @@ function fenetreAnnonce(n){
     <div class="fe-marque">Mon Concours · ${reponse ? 'Réponse de l\'administration' : 'Message de l\'équipe'}</div>
     <h2 class="fe-titre">${E(reponse ? 'Votre avis a été lu' : (n.titre || 'Information'))}</h2>
     <p class="fe-texte fe-long">${E(n.message || '').replace(/\n/g, '<br>')}</p>
-    ${suite ? `<button class="cta" data-fe="suite">${suite}</button><button class="lien" style="display:block;margin:10px auto 0" data-fe="fermer">Fermer</button>`
+    ${suite ? `<button class="cta" data-fe="suite">${suite}</button><button class="lien" style="display:block;margin:10px auto 0" data-fe="fermer">${genre === 'epreuve' ? 'Plus tard' : 'Fermer'}</button>`
             : `<button class="cta" data-fe="fermer">J'ai compris</button>`}
   </div>`;
   const fermer = aller_ => {
@@ -1433,7 +1433,7 @@ function ouvrirNotif(n){
   if(genre === 'communaute') return ouvrirCommunaute(id);
   if(genre === 'nouveau-code') return verifierChangementCode(true);
   if(genre === 'avis' || genre === 'annonce'){
-    if(NOTIFS_FENETRE.includes(n.type) || n.type === 'reponse_admin' || n.type === 'annonce') return fenetreAnnonce(Object.assign({}, n, { type: n.type === 'reponse_admin' ? 'reponse_admin_plein' : (n.type === 'annonce' ? 'annonce_plein' : n.type), lue:true, lien:'' }));
+    if(NOTIFS_FENETRE.includes(n.type) || n.type === 'reponse_admin' || n.type === 'annonce') return fenetreAnnonce(Object.assign({}, n, { type: n.type === 'reponse_admin' ? 'reponse_admin_plein' : (n.type === 'annonce' ? 'annonce_plein' : n.type), lue:true, lien:(String(n.lien || '').startsWith('epreuve:') ? n.lien : '') }));
   }
   if(genre === 'compte') return aller('compte');
   if(genre === 'abonnement'){ chargerPromo().then(() => aller('abonnement')); return; }
