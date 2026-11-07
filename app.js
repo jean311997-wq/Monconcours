@@ -9138,7 +9138,10 @@ function verifierMurNotifs(){
   let m = document.getElementById('mur-notifs');
   const etat = murNotifsEtat();
   const enInstall = !estInstallee() && new URLSearchParams(location.search).has('installer') && S.modal === 'rappel';
-  const enCours = enInstall || enComposition() || (S.ecran === 'grille' && !S.corrige && Object.keys(S.reponses || {}).length > 0);
+  /* autour d'une composition nationale (30 min avant → 5 min après la fin) : jamais de blocage, rien ne doit gêner l'entrée en salle */
+  const ep = S.epreuve, tNow = Date.now();
+  const autourCompo = !!(ep && ep.debut_le && tNow >= new Date(ep.debut_le).getTime() - 30 * 60000 && tNow <= new Date(ep.fin_le || ep.debut_le).getTime() + 5 * 60000);
+  const enCours = autourCompo || enInstall || enComposition() || (S.ecran === 'grille' && !S.corrige && Object.keys(S.reponses || {}).length > 0);
   const bloque = etat === 'possible' || (etat === 'refuse' && !S.murPasse) || (etat === 'impossible' && !S.murPasse);
   if(!bloque || enCours){
     if(m){ if(bloque && enCours) m.style.display = 'none'; else m.remove(); }
