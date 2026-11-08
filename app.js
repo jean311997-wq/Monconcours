@@ -5267,9 +5267,13 @@ function ecranCompte(){
   const faites = sem.filter(Boolean).length;
   vue().innerHTML = `
   <div class="pad">
-    ${estInstallee() ? '' : `<div class="appli-flottant-zone">${S.appliInstallee
-      ? '<span class="appli-ok">Installation terminée. Ouvrez Mon Concours depuis votre écran d\'accueil.</span>'
-      : `<button type="button" class="appli-flottant" data-appli-dl="1">${S.appliLa ? 'Ouvrir l\'application' : '↓ Télécharger l\'application'}</button>`}</div>`}
+    ${(() => {
+      const gauche = estInstallee() ? '' : (S.appliInstallee
+        ? '<span class="appli-ok">Installation terminée. Ouvrez Mon Concours depuis votre écran d\'accueil.</span>'
+        : `<button type="button" class="appli-flottant bat" data-appli-dl="1">${S.appliLa ? 'Ouvrir l\'application' : '↓ Télécharger l\'application'}</button>`);
+      const droite = (S.gratuit || estAbonnePaye()) ? '' : `<button type="button" class="appli-flottant appli-abo bat" data-go="abonnement">Faire mon abonnement</button>`;
+      return (gauche || droite) ? `<div class="appli-flottant-zone">${gauche}${droite}</div>` : '';
+    })()}
     <div class="profil">
       <div class="av">${initiales}</div>
       <h1>${E(S.util.nom || 'Candidat')}${(S.journee && S.journee.pseudo && S.journee.pseudo.trim().toLowerCase() !== (S.util.nom || '').trim().toLowerCase()) ? ` <span class="pseudo-sep">/ ${E(S.journee.pseudo)}</span>` : ''}</h1>
