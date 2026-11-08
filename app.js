@@ -6223,7 +6223,7 @@ function blocDiscussionApercu(id){
     ${msgs.length ? `<div class="disc-fil-ap">${msgs.map(m => `<div class="disc-ligne"><span class="d-av">${E(initialesPseudo(m.nom))}</span><div><b>${E(m.nom)}</b><span>${E(m.texte)}</span></div></div>`).join('')}</div>` : '<p class="sous" style="margin:10px 0 0">Comparez vos réponses, posez vos questions aux autres candidats.</p>'}
     ${ligneEcrit}
     ${reste ? `<button type="button" class="disc-reste" data-discussion="${E(id)}">Voir les ${reste} autre${reste > 1 ? 's' : ''} message${reste > 1 ? 's' : ''}</button>` : ''}
-    <button type="button" class="disc-faux" data-discussion="${E(id)}"><span>Écrire un message…</span><i>➤</i></button>
+    <button type="button" class="disc-faux" data-discussion="${E(id)}"><span>${d && d.peut_ecrire === false ? 'Inscrivez-vous à la prochaine pour écrire' : 'Écrire un message…'}</span><i>${d && d.peut_ecrire === false ? '→' : '➤'}</i></button>
   </div>`;
 }
 function ouvrirDiscussion(id){
@@ -6275,6 +6275,7 @@ function ecranDiscussion(){
   const id = S.discId, c = S.classementEp;
   const tete = `<button class="retourhaut" data-gagnants="${E(id || '')}">Retour aux résultats</button>`;
   if(!id){ vue().innerHTML = `<div class="pad">${tete}<p class="sous" style="margin-top:16px">Ouvrez la discussion depuis les résultats de la composition.</p></div>`; return; }
+  const lectureSeule = !!(S.disc && S.disc.id === id && S.disc.ok && S.disc.peut_ecrire === false);
   const podium = c && c.id === id && c.classement ? c.classement.filter(l => l.rang <= 3).slice(0, 3) : [];
   const fel = podium.length ? `<div class="felicitations" style="margin-top:12px"><div class="eyebrow" style="color:var(--or)">Félicitations aux admis</div>
     <p>Bravo à ${podium.map(l => '<b>' + E(l.nom) + '</b> (' + l.score + '/' + l.sur + ')').join(', ')}.${c.admis ? ' ' + c.admis + ' candidat' + (c.admis > 1 ? 's sont admis' : ' est admis') + '.' : ''}</p></div>` : '';
@@ -6287,12 +6288,15 @@ function ecranDiscussion(){
     <div class="libelle" style="margin-top:18px">Discussion<span class="num" id="disc-total">${S.disc && S.disc.total ? S.disc.total + ' message' + (S.disc.total > 1 ? 's' : '') : ''}</span></div>
     <div id="disc-fil" class="disc-fil">${lignesDiscussion()}</div>
     <div id="disc-ecrit" class="disc-ecrit">${texteEcrivent()}</div>
-    <form class="disc-saisie" id="disc-form" autocomplete="off">
+    ${lectureSeule ? `<div class="disc-invite"><b>Pour écrire, il faut être inscrit à la composition.</b>
+      <span>Vous pouvez lire toute la discussion. Pour participer à la prochaine, inscrivez-vous.</span>
+      ${S.epreuve && S.epreuve.etat === 'a_venir' ? `<button class="cta" data-inscrire-nat="${E(S.epreuve.id)}">M'inscrire à la prochaine composition</button>` : ''}</div>` : `<form class="disc-saisie" id="disc-form" autocomplete="off">
       <input id="disc-champ" type="text" maxlength="500" placeholder="Écrire un message…" value="${E(S.discBrouillon || '')}" enterkeyhint="send">
       <button type="submit" class="disc-envoi" aria-label="Envoyer">➤</button>
-    </form>
+    </form>`}
   </div>`;
   const champ = document.getElementById('disc-champ'), form = document.getElementById('disc-form');
+  if(!champ || !form) return;
   let dernierSignal = 0;
   champ.addEventListener('input', () => {
     S.discBrouillon = champ.value;

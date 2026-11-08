@@ -2143,3 +2143,6 @@ body.sans-anim .stat-comm .sc-new.jamais{animation:none}
 .disc-faux span{flex:1}
 .disc-faux i{font-style:normal;flex:none;display:grid;place-items:center;width:38px;height:38px;border-radius:50%;background:#0B6B4A;color:#fff;font-size:14px;animation:coeurBat 1.8s ease-in-out infinite}
 @media(prefers-reduced-motion:reduce){.disc-pill i,.disc-tape .pts i,.disc-faux i,.disc-fil-ap .disc-ligne{animation:none}}
+
+.disc-invite{position:sticky;bottom:8px;z-index:5;display:grid;gap:8px;margin-top:10px;padding:14px;background:var(--ardoise);border:1.5px solid var(--or);border-radius:16px;box-shadow:0 6px 20px -10px rgba(0,0,0,.3)}
+.disc-invite span{font-size:13.5px;color:var(--craie2);line-height:1.4}
