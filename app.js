@@ -6136,7 +6136,7 @@ function blocDerniereNationale(){
   if(S.epreuve && S.epreuve.id === d.id && S.epreuve.etat === 'terminee') return '';
   return `<button class="derniere-nat" data-gagnants="${E(d.id)}">
     <span class="dn-ic">${ico('trophee',22)}</span>
-    <span class="dn-txt"><small>Dernière composition nationale</small><b>Voir les résultats et le classement</b><span>${E(d.concours || 'Composition nationale')} · ${E(jourFr(d.debut_le))}</span></span>
+    <span class="dn-txt"><small>Dernière composition nationale</small><b>Voir les résultats et le classement</b><span>${E(d.concours || 'Composition nationale')} · ${E(jourFr(d.debut_le))}</span>${d.participants >= 5 ? `<span class="dn-nb">${ico('groupe', 14)} ${nombreFr(d.participants)} candidats ont composé</span>` : ''}</span>
     <span class="dn-fl">→</span></button>`;
 }
 async function chargerCorrectionNat(id){

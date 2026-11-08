@@ -2146,3 +2146,5 @@ body.sans-anim .stat-comm .sc-new.jamais{animation:none}
 
 .disc-invite{position:sticky;bottom:8px;z-index:5;display:grid;gap:8px;margin-top:10px;padding:14px;background:var(--ardoise);border:1.5px solid var(--or);border-radius:16px;box-shadow:0 6px 20px -10px rgba(0,0,0,.3)}
 .disc-invite span{font-size:13.5px;color:var(--craie2);line-height:1.4}
+
+.derniere-nat .dn-txt>.dn-nb{display:inline-flex;align-items:center;gap:6px;align-self:flex-start;margin-top:6px;padding:3px 9px;border-radius:99px;background:rgba(255,255,255,.18);font-size:12px;font-weight:700;color:#fff}
