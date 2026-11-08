@@ -1498,7 +1498,7 @@ function fenetreInstallerPas(type){
   const fermer = '<button class="lien" style="display:block;margin:12px auto 0" data-rappel-fermer="1">Fermer</button>';
   const T = {
     chrome: ['Ouvrez dans Chrome', 'L\'installation ne se fait pas depuis cette fenêtre. Touchez Continuer : le site s\'ouvre dans Chrome, et l\'installation s\'y fait.', '<button class="cta" data-ouvrir-chrome="1">Continuer</button>'],
-    manuel: ['Mon Concours est peut-être déjà installé', 'Cherchez l\'icône Mon Concours sur l\'écran d\'accueil de votre téléphone et touchez-la pour ouvrir l\'application.', ''],
+    manuel: ['Ouvrir Mon Concours', 'Touchez l\'icône Mon Concours sur l\'écran d\'accueil de votre téléphone.', ''],
     iphone: ['Installer sur iPhone', 'Ouvrez ce site dans Safari. Touchez le bouton Partager (le carré avec une flèche), puis « Sur l\'écran d\'accueil ».', '']
   }[type] || [];
   v.innerHTML = `<div class="panneau pop-nat" role="dialog" aria-modal="true" aria-labelledby="pr-titre">
@@ -5244,7 +5244,7 @@ function ecranCompte(){
   <div class="pad">
     ${estInstallee() ? '' : `<div class="appli-flottant-zone">${S.appliInstallee
       ? '<span class="appli-ok">Installation terminée. Ouvrez Mon Concours depuis votre écran d\'accueil.</span>'
-      : '<button type="button" class="appli-flottant" data-appli-dl="1">↓ Télécharger l\'application</button>'}</div>`}
+      : `<button type="button" class="appli-flottant" data-appli-dl="1">${S.appliLa ? 'Ouvrir l\'application' : '↓ Télécharger l\'application'}</button>`}</div>`}
     <div class="profil">
       <div class="av">${initiales}</div>
       <h1>${E(S.util.nom || 'Candidat')}${(S.journee && S.journee.pseudo && S.journee.pseudo.trim().toLowerCase() !== (S.util.nom || '').trim().toLowerCase()) ? ` <span class="pseudo-sep">/ ${E(S.journee.pseudo)}</span>` : ''}</h1>
@@ -8299,7 +8299,7 @@ function fermerBandeauAppli(){
 function majBandeauAppli(){
   let b = document.getElementById('bandeau-appli');
   const visible = S.ecran === 'aujourdhui' && !estInstallee() && !enComposition() && !S.modal &&
-    (S.appliInstallee || (S.installer && !bandeauAppliRecemmentFerme()));
+    (S.appliInstallee || (S.installer && !S.appliLa && !bandeauAppliRecemmentFerme()));
   if(!visible){ if(b) b.remove(); return; }
   if(!b){
     b = document.createElement('div');
@@ -8317,8 +8317,23 @@ function majBandeauAppli(){
     : `<button type="button" class="bandeau-appli-go">↓ Télécharger l'application</button><button type="button" class="bandeau-appli-x" data-appli-x="1" aria-label="Fermer">×</button>`;
 }
 document.addEventListener('click', ev => { if(ev.target.closest('[data-appli-dl]')) telechargerAppli(); });
+/* L'application est-elle déjà sur ce téléphone ? Alors le bouton dit « Ouvrir », jamais « Télécharger ». */
+try{
+  if(navigator.getInstalledRelatedApps) navigator.getInstalledRelatedApps().then(l => {
+    S.appliLa = !!(l && l.length);
+    try{ majBandeauAppli(); if(S.ecran === 'compte') rendre(); }catch(e){}
+  }).catch(() => {});
+}catch(e){}
+function ouvrirAppli(){
+  try{ pister('APPLI_OUVRIR_CLIC'); }catch(e){}
+  if(/Android/i.test(navigator.userAgent)){
+    location.href = 'intent://' + location.host + '/#Intent;scheme=https;action=android.intent.action.VIEW;end';
+    setTimeout(() => { if(!document.hidden) fenetreInstallerPas('manuel'); }, 1800);
+  } else fenetreInstallerPas('manuel');
+}
 async function telechargerAppli(){
   try{ pister('APPLI_BANDEAU_CLIC'); }catch(e){}
+  if(S.appliLa) return ouvrirAppli();
   if(!S.installer) return installerAppli();          // pas de téléchargement direct : on guide la personne
   const invite = S.installer;
   invite.prompt();
