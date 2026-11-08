@@ -1858,8 +1858,10 @@ async function creerCompte(nom, tel, pin){
     const r = await base.auth.signInWithPassword({
       email: adresseTechnique(tel), password: motDePasse(tel, pin) });
     if(r.error) return { erreur: enFrancais(r.error) };
+    S.deconnexionVoulue = false;
     return { session: r.data.session };
   }
+  S.deconnexionVoulue = false;
   return { session: data.session };
 }
 
@@ -1870,6 +1872,7 @@ async function ouvrirSession(tel, pin){
   if(error){
     return { erreur: enFrancais(error) };
   }
+  S.deconnexionVoulue = false;
   return { session: data.session };
 }
 
@@ -1924,7 +1927,27 @@ function brancherBase(){
   if(base) return;
   try{
     if(typeof supabase === 'undefined' || !supabase.createClient) return;
-    base = supabase.createClient(BASE_URL, BASE_CLE, { auth: { persistSession: true } });
+    /* Une panne du service de connexion (erreur 5xx, réseau coupé) ne doit jamais
+       effacer la session gardée sur le téléphone : elle reste valide côté serveur
+       et reprend dès que le service revient. Seules une déconnexion voulue et une
+       session réellement refusée par le serveur l'effacent. */
+    const surAuth = url => String(url).includes('/auth/v1/');
+    const fetchSurveille = async (url, opts) => {
+      try{
+        const r = await fetch(url, opts);
+        if(surAuth(url) && r.status >= 500) S.authPanneJusqua = Date.now() + 120000;
+        return r;
+      }catch(e){ if(surAuth(url)) S.authPanneJusqua = Date.now() + 120000; throw e; }
+    };
+    const stockage = {
+      getItem: k => { try{ return localStorage.getItem(k); }catch(e){ return null; } },
+      setItem: (k, v) => { try{ localStorage.setItem(k, v); }catch(e){} },
+      removeItem: k => {
+        if(!S.deconnexionVoulue && Date.now() < (S.authPanneJusqua || 0)) return;
+        try{ localStorage.removeItem(k); }catch(e){}
+      }
+    };
+    base = supabase.createClient(BASE_URL, BASE_CLE, { auth: { persistSession: true, storage: stockage }, global: { fetch: fetchSurveille } });
   }catch(e){ base = null; return; }
 
   /* on étale les appels pour ne pas saturer une connexion lente */
@@ -5446,6 +5469,7 @@ async function supprimerCompte(){
     if(error) throw error;
     if(!data || !data.ok){ S.supprEnCours = false; S.supprErreur = (data && data.message) || 'Suppression impossible.'; return rendre(); }
     pister('ACCOUNT_DELETED');
+    S.deconnexionVoulue = true;
     try{ await base.auth.signOut({ scope:'local' }); }catch(e){}
     try{ localStorage.removeItem(CLE_PACK); }catch(e){}
     S.supprEnCours = false;
@@ -8715,6 +8739,7 @@ document.addEventListener('click', ev=>{
   if(d.basculeTheme){ return basculerTheme(); }
   if(d.modal){ S.modal = d.modal; S.erreur=''; return surcouche(); }
   if(d.deconnecter){
+    S.deconnexionVoulue = true;
     if(base) base.auth.signOut();
     S.util = {nom:'', tel:'', pin:'', connecte:false};
     S.form = {nom:'', tel:'', pin:''};
