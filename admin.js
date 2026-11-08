@@ -472,30 +472,43 @@ async function vueMusique(){
 
 /* ---------- paiements abandonnés : relance WhatsApp en un clic ---------- */
 function messageRelance(c){
-  const f = c.formule === 'annuelle' ? 'l\'abonnement Année (4 000 F)' : c.formule === 'mensuelle' ? 'l\'abonnement Mois (1 000 F)' : 'ton abonnement';
   const prenom = (c.nom || '').trim().split(/\s+/)[0];
-  return 'Bonjour ' + prenom + ', c\'est Mon Concours. Tu avais choisi ' + f + (c.concours ? ' pour préparer le concours ' + c.concours : '') + ' mais le paiement ne s\'est pas terminé. Un souci avec Orange Money ou Wave ? Dis-moi, je t\'aide à le finir en 2 minutes.';
+  return 'Bonjour ' + prenom + ', c\'est l\'équipe Mon Concours. Tu as commencé ton abonnement' + (c.concours ? ' pour préparer le concours ' + c.concours : '') + ', et le paiement ne s\'est pas terminé. Si quelque chose a bloqué (Orange Money, Wave ou autre), dis-moi simplement où : je te guide pas à pas. Chaque paiement est vérifié par une personne de l\'équipe, et ton accès s\'ouvre dès la confirmation.';
 }
 async function chargerAbandonnes(){
   const zone = $('#pai-aband'); if(!zone) return;
   if(!(A.admin || A.investisseur)){ zone.remove(); return; }
   const { data, error } = await db.rpc('admin_paiements_abandonnes');
   if(error || !data || !data.ok){ zone.innerHTML = '<h3 style="margin:0 0 6px">Paiements abandonnés</h3><p style="margin:0">' + E((data && data.message) || (error && error.message) || 'Indisponible.') + '</p>'; return; }
-  const liste = data.liste || [];
-  const reste = liste.filter(c => !c.envoye_le).length;
+  const toutes = data.liste || [];
+  const deja = toutes.filter(c => c.envoye_le).length;
+  const liste = A.voirRelances ? toutes : toutes.filter(c => !c.envoye_le);
+  const reste = toutes.length - deja;
   zone.innerHTML = '<h3 style="margin:0 0 6px">Paiements abandonnés · ' + reste + ' à relancer</h3>' +
-    '<p style="margin:0 0 10px;color:var(--craie2);font-size:13px">Ils ont choisi un abonnement sans payer. Touchez « WhatsApp » : le message est déjà écrit, il reste à l\'envoyer. La liste se met à jour toute seule ; ceux qui paient disparaissent.</p>' +
+    '<p style="margin:0 0 10px;color:var(--craie2);font-size:13px">Ils ont commencé un abonnement sans le terminer. Touchez « Envoyer » : WhatsApp s\'ouvre avec le message déjà écrit, il reste à l\'envoyer. La ligne disparaît dès que vous touchez. Ceux qui paient sortent de la liste.</p>' +
+    (deja ? '<p style="margin:0 0 8px"><a href="#" id="aband-voir" style="font-size:13px">' + (A.voirRelances ? 'Masquer' : 'Voir') + ' les ' + deja + ' déjà relancé' + (deja > 1 ? 's' : '') + '</a></p>' : '') +
     (liste.length ? liste.map(c => {
       const tel = String(c.telephone || '').replace(/\D/g, '');
       const lien = 'https://wa.me/' + (tel.length === 8 ? '226' + tel : tel) + '?text=' + encodeURIComponent(messageRelance(c));
       const vu = c.derniere ? new Date(c.derniere).toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit' }) : '—';
       return '<div class="ligne-aband" style="display:flex;gap:8px;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid var(--trait,#2a2a2a)' + (c.envoye_le ? ';opacity:.55' : '') + '">' +
         '<div style="min-width:0"><b>' + E(c.nom || 'Candidat') + '</b><br><span style="font-size:12px;color:var(--craie2)">' + E(c.telephone) + ' · ' + E(c.formule || '—') + ' · vu le ' + vu + (c.envoye_le ? ' · relancé' : '') + '</span></div>' +
-        '<a class="mini" data-relance="' + E(c.user_id) + '" style="display:inline-block;text-decoration:none;background:var(--laterite,#13805A);color:#fff;padding:7px 13px;border-radius:9px;font-size:13px;font-weight:600;white-space:nowrap" href="' + E(lien) + '" target="_blank" rel="noopener">' + (c.envoye_le ? 'Renvoyer' : 'WhatsApp') + '</a></div>';
+        '<a class="mini" data-relance="' + E(c.user_id) + '" style="display:inline-block;text-decoration:none;background:var(--laterite,#13805A);color:#fff;padding:7px 13px;border-radius:9px;font-size:13px;font-weight:600;white-space:nowrap" href="' + E(lien) + '" target="_blank" rel="noopener">' + (c.envoye_le ? 'Renvoyer' : 'Envoyer') + '</a></div>';
     }).join('') : '<p style="margin:0">Personne à relancer pour le moment.</p>');
+  const voir = zone.querySelector('#aband-voir');
+  if(voir) voir.addEventListener('click', e => { e.preventDefault(); A.voirRelances = !A.voirRelances; chargerAbandonnes(); });
   zone.querySelectorAll('[data-relance]').forEach(a => a.addEventListener('click', () => {
     db.rpc('admin_marquer_relance', { p_user: a.dataset.relance });
-    const l = a.closest('.ligne-aband'); if(l){ l.style.opacity = '.55'; a.textContent = 'Renvoyer'; }
+    const l = a.closest('.ligne-aband');
+    if(l && !A.voirRelances){
+      /* WhatsApp s'ouvre (le lien suit son cours), la ligne disparaît et le compteur baisse */
+      setTimeout(() => {
+        l.remove();
+        const t = zone.querySelector('h3');
+        const m = t && t.textContent.match(/· (\d+) à relancer/);
+        if(t && m) t.textContent = 'Paiements abandonnés · ' + Math.max(0, +m[1] - 1) + ' à relancer';
+      }, 250);
+    } else if(l){ l.style.opacity = '.55'; a.textContent = 'Renvoyer'; }
   }));
 }
 
