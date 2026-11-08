@@ -246,8 +246,12 @@ async function ouvrirFiche(id){
       </div>
       <div class="carte">
         <b>Changer son mot de passe</b>
-        <p class="sous" style="margin:6px 0 10px;font-size:12.5px">Il reçoit une notification. En la touchant, il écrit son nouveau code (4 chiffres) deux fois. Vous ne voyez jamais le code.</p>
-        <button class="cta creux petit" id="fm-code">${r.code_demande ? 'Renvoyer la demande' : 'Lui demander un nouveau code'}</button>
+        ${telPlein ? `<p class="sous" style="margin:6px 0 10px;font-size:12.5px">Écrivez le nouveau mot de passe (4 chiffres), ou laissez vide pour en générer un. Il est changé tout de suite, puis vous le lui envoyez.</p>
+        <div class="rangee" style="align-items:center">
+          <input id="fm-nouveau" inputmode="numeric" maxlength="4" placeholder="4 chiffres" style="max-width:130px">
+          <button class="cta creux petit" id="fm-code">Changer</button>
+        </div>
+        <div id="fm-code-res" style="margin-top:10px"></div>` : `<p class="sous" style="margin:6px 0 0;font-size:12.5px">Ce compte n'a pas de numéro enregistré.</p>`}
       </div>
       ${telPlein ? `<div class="carte">
         <b>Activer un abonnement</b>
@@ -271,10 +275,22 @@ async function ouvrirFiche(id){
       if(er || !data || !data.ok) return etat((data && data.message) || (er && er.message) || 'Échec.');
       etat('Message envoyé.'); f.querySelector('#fm-titre').value = ''; f.querySelector('#fm-msg').value = '';
     };
-    f.querySelector('#fm-code').onclick = async () => {
-      if(!confirm('Demander à ' + (p.nom || 'ce candidat') + ' de choisir un nouveau mot de passe ?')) return;
-      const { data, error: er } = await X().db.rpc('admin_demander_changement_code', { p_user: p.id });
-      etat(er || !data || !data.ok ? ((data && data.message) || (er && er.message) || 'Échec.') : 'Demande envoyée : il la verra à sa prochaine ouverture (et par notification s\'il a activé les rappels).');
+    const bc = f.querySelector('#fm-code');
+    if(bc) bc.onclick = async () => {
+      let code = f.querySelector('#fm-nouveau').value.replace(/\D/g, '');
+      if(code && code.length !== 4) return etat('Le mot de passe doit avoir 4 chiffres.');
+      if(!code){ const t = new Uint32Array(1); crypto.getRandomValues(t); code = String(1000 + (t[0] % 9000)); }
+      const tel = telPlein.slice(-8);
+      if(!confirm('Changer le mot de passe de ' + (p.nom || 'ce candidat') + ' (+226 ' + tel + ') ?')) return;
+      bc.disabled = true;
+      const { data, error: er } = await X().db.rpc('admin_changer_code', { p_telephone: tel, p_nouveau: code });
+      bc.disabled = false;
+      if(er || !data || !data.ok) return etat((data && data.message) || (er && er.message) || 'Échec.');
+      etat('Mot de passe changé.');
+      f.querySelector('#fm-nouveau').value = '';
+      const msg = 'Bonjour, c\'est l\'équipe Mon Concours. Ton mot de passe est maintenant : ' + code + '. Connecte-toi avec ton numéro et ce mot de passe.';
+      f.querySelector('#fm-code-res').innerHTML = '<p style="margin:0 0 8px">Nouveau mot de passe : <b>' + e(code) + '</b></p>' +
+        '<a class="cta petit" style="display:inline-block;text-decoration:none" target="_blank" rel="noopener" href="https://wa.me/226' + tel + '?text=' + encodeURIComponent(msg) + '">Envoyer sur WhatsApp</a>';
     };
     const bp = f.querySelector('#fm-pass');
     if(bp) bp.onclick = async () => {
