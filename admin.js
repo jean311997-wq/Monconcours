@@ -2240,6 +2240,19 @@ async function vueCandidats(pageC){
     </div>
 
     <div class="bloc">
+      <div class="libelle">Changer le mot de passe d'un candidat<span>et l'envoyer sur WhatsApp</span></div>
+      <div class="carte">
+        <p class="sous" style="font-size:12.5px;margin-top:0">Entrez le numéro qu'il vous a donné. Laissez le mot de passe vide pour en générer un. Le numéro est aussi débloqué s'il avait épuisé ses essais.</p>
+        <div class="deux">
+          <div><label for="k-tel">Numéro (8 chiffres)</label><input id="k-tel" inputmode="numeric" maxlength="8" placeholder="70000000"></div>
+          <div><label for="k-code">Nouveau mot de passe (4 chiffres)</label><input id="k-code" inputmode="numeric" maxlength="4" placeholder="Vide = automatique"></div>
+        </div>
+        <button class="cta petit" id="k-changer">Changer le mot de passe</button>
+        <div id="k-resultat" style="margin-top:12px"></div>
+      </div>
+    </div>
+
+    <div class="bloc">
       <div class="libelle">Les candidats<span class="num">${gens ? gens.length : 0}</span></div>
       <div class="carte">
         ${(!gens || !gens.length) ? insuffisant("Aucun compte pour l'instant.") : `
@@ -2252,30 +2265,23 @@ async function vueCandidats(pageC){
       </div>
     </div>
 
-    <div class="bloc">
-      <div class="libelle">Changer le code d'un candidat<span>après vérification sur WhatsApp</span></div>
-      <div class="carte">
-        <p class="sous" style="font-size:12.5px;margin-top:0">À faire seulement quand le candidat vous a écrit depuis son propre numéro et que vous êtes sûr de son identité. Le numéro est aussi débloqué s'il avait épuisé ses essais.</p>
-        <div class="deux">
-          <div><label for="k-tel">Numéro (8 chiffres)</label><input id="k-tel" inputmode="numeric" maxlength="8" placeholder="70000000"></div>
-          <div><label for="k-code">Nouveau code (4 chiffres)</label><input id="k-code" inputmode="numeric" maxlength="4" placeholder="1234"></div>
-        </div>
-        <button class="cta petit" id="k-changer">Changer le code</button>
-      </div>
-    </div>
-
     <div class="bloc" id="zone-chrono"></div>`;
 
   document.getElementById('k-changer').onclick = async () => {
     const tel = document.getElementById('k-tel').value.replace(/\D/g,'');
-    const code = document.getElementById('k-code').value.replace(/\D/g,'');
-    if(tel.length !== 8 || code.length !== 4) return signal('Numéro à 8 chiffres et code à 4 chiffres.', 'mal');
-    if(!confirm('Changer le code du +226 ' + tel + ' ?')) return;
+    let code = document.getElementById('k-code').value.replace(/\D/g,'');
+    if(!code){ const t = new Uint32Array(1); crypto.getRandomValues(t); code = String(1000 + (t[0] % 9000)); }
+    if(tel.length !== 8 || code.length !== 4) return signal('Numéro à 8 chiffres et mot de passe à 4 chiffres.', 'mal');
+    if(!confirm('Changer le mot de passe du +226 ' + tel + ' ?')) return;
     const { data, error } = await db.rpc('admin_changer_code', { p_telephone: tel, p_nouveau: code });
     if(error) return erreur(error, 'Changement impossible');
     if(!data || !data.ok) return signal((data && data.message) || 'Changement impossible.', 'mal');
-    signal('Code changé. Communiquez-le au candidat sur WhatsApp.', 'bien');
+    signal('Mot de passe changé.', 'bien');
     document.getElementById('k-code').value = '';
+    const msg = 'Bonjour, c\'est l\'équipe Mon Concours. Ton mot de passe est maintenant : ' + code + '. Connecte-toi avec ton numéro et ce mot de passe.';
+    const zone = document.getElementById('k-resultat');
+    if(zone) zone.innerHTML = '<p style="margin:0 0 8px">+226 ' + E(tel) + ' · nouveau mot de passe : <b>' + E(code) + '</b></p>' +
+      '<a class="cta petit" style="display:inline-block;text-decoration:none" href="' + E(lienWa(tel, msg)) + '" target="_blank" rel="noopener">Envoyer sur WhatsApp</a>';
   };
 
   document.querySelectorAll('[data-page-vers]').forEach(b => b.onclick = () => vueCandidats(parseInt(b.dataset.pageVers, 10)));

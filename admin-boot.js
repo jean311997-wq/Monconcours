@@ -5,7 +5,7 @@
 (function(){
   function demarrerAdmin(){
     /* les compléments d'abord (ils s'enregistrent), puis admin.js */
-    var liste = ['admin-plus.js?v=5', 'admin-plus2.js?v=10', 'admin.js?v=39'], i = 0;
+    var liste = ['admin-plus.js?v=5', 'admin-plus2.js?v=10', 'admin.js?v=40'], i = 0;
     (function suite(){
       if(i >= liste.length) return;
       var s = document.createElement('script');
