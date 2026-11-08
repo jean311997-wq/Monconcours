@@ -373,9 +373,9 @@ async function vuePriorites(){
   z.innerHTML = (urgents.length ? '<div class="libelle">À faire maintenant<span>' + urgents.length + '</span></div>' + urgents.map(carteLpriorite).join('') : '') +
     (importants.length ? '<div class="libelle" style="margin-top:14px">Ensuite<span>' + importants.length + '</span></div>' + importants.map(carteLpriorite).join('') : '');
   z.querySelectorAll('[data-prio-vue]').forEach(b => b.onclick = () => allerA(b.dataset.prioVue));
-  z.querySelectorAll('[data-relance]').forEach(a => a.addEventListener('click', () => {
-    db.rpc('admin_marquer_relance', { p_user: a.dataset.relance });
-    const l = a.closest('.ligne-prio'); if(l){ l.style.opacity = '.45'; a.textContent = 'Envoyé'; }
+  z.querySelectorAll('[data-relance]').forEach(a => a.addEventListener('click', ev => {
+    ev.preventDefault();
+    relancerUnique(a, () => { const l = a.closest('.ligne-prio'); if(l){ l.style.opacity = '.45'; a.textContent = 'Envoyé'; } });
   }));
   majPastillePrio(r.urgents);
 }
@@ -470,6 +470,24 @@ async function vueMusique(){
   });
 }
 
+/* Relance WhatsApp : la personne est réservée à celui qui clique en premier. Si un autre administrateur l'a déjà
+   relancée dans les 24 dernières heures, rien ne s'ouvre et on le dit. */
+async function relancerUnique(a, apres){
+  const lien = a.getAttribute('href');
+  const w = window.open('', '_blank');           /* ouvert tout de suite pour ne pas être bloqué par le navigateur */
+  let r = null;
+  try{ const x = await db.rpc('admin_reserver_relance', { p_user: a.dataset.relance }); r = x && x.data; }catch(e){}
+  if(r && r.ok && r.deja){
+    if(w) w.close();
+    const h = r.le ? new Date(r.le).toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' }) : '';
+    signal('Déjà relancé par ' + (r.par || 'un autre administrateur') + (h ? ' à ' + h : '') + '. Rien n\'a été envoyé.', 'mal');
+    const l = a.closest('.ligne-aband, .ligne-prio'); if(l) l.remove();
+    return;
+  }
+  if(!r || !r.ok) signal('La relance n\'a pas pu être enregistrée : vérifiez avant de renvoyer.', 'mal');
+  if(w) w.location.href = lien; else window.open(lien, '_blank');
+  apres();
+}
 /* ---------- paiements abandonnés : relance WhatsApp en un clic ---------- */
 function messageRelance(c){
   const prenom = (c.nom || '').trim().split(/\s+/)[0];
@@ -497,19 +515,22 @@ async function chargerAbandonnes(){
     }).join('') : '<p style="margin:0">Personne à relancer pour le moment.</p>');
   const voir = zone.querySelector('#aband-voir');
   if(voir) voir.addEventListener('click', e => { e.preventDefault(); A.voirRelances = !A.voirRelances; chargerAbandonnes(); });
-  zone.querySelectorAll('[data-relance]').forEach(a => a.addEventListener('click', () => {
-    db.rpc('admin_marquer_relance', { p_user: a.dataset.relance });
-    const l = a.closest('.ligne-aband');
-    if(l && !A.voirRelances){
-      /* WhatsApp s'ouvre (le lien suit son cours), la ligne disparaît et le compteur baisse */
-      setTimeout(() => {
+  zone.querySelectorAll('[data-relance]').forEach(a => a.addEventListener('click', ev => {
+    ev.preventDefault();
+    relancerUnique(a, () => {
+      const l = a.closest('.ligne-aband');
+      if(l && !A.voirRelances){
+        /* WhatsApp s'ouvre, la ligne disparaît et le compteur baisse */
         l.remove();
         const t = zone.querySelector('h3');
         const m = t && t.textContent.match(/· (\d+) à relancer/);
         if(t && m) t.textContent = 'Paiements abandonnés · ' + Math.max(0, +m[1] - 1) + ' à relancer';
-      }, 250);
-    } else if(l){ l.style.opacity = '.55'; a.textContent = 'Renvoyer'; }
+      } else if(l){ l.style.opacity = '.55'; a.textContent = 'Renvoyer'; }
+    });
   }));
+  /* la liste se rafraîchit seule : ce que l'autre administrateur vient de relancer disparaît ici aussi */
+  clearTimeout(A.tAband);
+  A.tAband = setTimeout(() => { if(document.getElementById('pai-aband')) chargerAbandonnes(); }, 45000);
 }
 
 /* ---------- paiements ---------- */
