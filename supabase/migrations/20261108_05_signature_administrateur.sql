@@ -8,7 +8,7 @@ alter table public.communaute_signatures add constraint communaute_signatures_co
   check (couleur is null or couleur ~ '^#[0-9A-Fa-f]{6}$');
 
 update public.communaute_signatures
-   set nom = 'Administrateur Mon Concours', couleur = '#5AA2FF'
+   set nom = 'Administrateur Mon Concours', couleur = '#E9B44C'
  where nom = 'Administrateur 2';
 
 create or replace function securite.comm_json(p_id uuid, v_user uuid)
