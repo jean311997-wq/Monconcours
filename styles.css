@@ -678,11 +678,17 @@ body{background:var(--encre);padding:0;overflow:hidden}
 @media(max-width:360px){.apptete{padding:8px;gap:4px}.apptete .mot{font-size:13px;margin-left:2px}}
 @media(max-width:340px){.apptete .mot{font-size:12px}.bouton-tete{min-width:36px;padding:6px 7px}}
 /* bandeau « Télécharger l'application » : juste sous l'en-tête, toujours visible (ne défile pas) */
-.bandeau-appli{flex:none;display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;padding:7px 14px;background:var(--laterite);color:#fff;font-size:13px;text-align:center}
-.bandeau-appli span{line-height:1.35}
+.app{position:relative}
+.bandeau-appli{position:absolute;top:var(--tete-h,64px);left:50%;transform:translateX(-50%);z-index:35;display:flex;align-items:center;justify-content:center;gap:6px;width:max-content;max-width:calc(100% - 24px);padding:5px 6px 5px 6px;border-radius:999px;background:var(--laterite);color:#fff;font-size:13px;box-shadow:0 8px 22px rgba(0,0,0,.3);animation:monte .35s cubic-bezier(.2,.8,.3,1) both}
+.bandeau-appli span{line-height:1.35;padding:0 6px 0 10px}
 .bandeau-appli b{font-weight:700}
-.bandeau-appli-go{border:0;border-radius:8px;padding:8px 16px;min-height:36px;background:#fff;color:#0f2a1c;font-weight:700;font-size:13px;cursor:pointer}
+.bandeau-appli-go{border:0;border-radius:999px;padding:8px 16px;min-height:36px;background:#fff;color:#0f2a1c;font-weight:700;font-size:13px;cursor:pointer}
 .bandeau-appli-go:active{transform:scale(.98)}
+.progres-lien{display:block;width:100%;text-align:left;font:inherit;color:inherit;cursor:pointer;border-left:5px solid var(--erreur)}
+.progres-lien .pl-t{display:block;font-size:16px}
+.progres-lien .pl-t b{font-size:22px;color:var(--erreur);margin:0 2px}
+.progres-lien .pl-s{display:block;margin-top:4px;font-size:13px;font-weight:600;color:var(--laterite)}
+.progres-lien:active{transform:scale(.99)}
 .bandeau-appli-x{border:0;background:transparent;color:#fff;font-size:22px;line-height:1;padding:4px 8px;cursor:pointer;opacity:.85}
 .appli-flottant-zone{position:sticky;top:8px;z-index:30;display:flex;justify-content:flex-start;margin:0 0 10px}
 .appli-flottant{border:0;border-radius:999px;padding:9px 16px;min-height:38px;background:var(--laterite);color:#fff;font-weight:700;font-size:13px;box-shadow:0 6px 18px rgba(0,0,0,.28);cursor:pointer}
@@ -956,18 +962,26 @@ body.en-transition *{transition:background-color .4s ease, color .4s ease, borde
 /* ---------- LECTURE D'UN COURS ----------
    Le candidat doit pouvoir lire longtemps sans fatigue :
    ligne aérée, titres qui découpent, formules détachées. */
-.lecon{font-size:16px;line-height:1.8}
+.lecon{font-size:16.5px;line-height:1.85}
 .lecon p{margin:0 0 14px}
 .lecon p:last-child{margin-bottom:0}
-.lecon h3{font-family:var(--d);font-size:12px;font-weight:800;letter-spacing:.09em;
-  color:var(--craie2);margin:26px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--trait)}
-.lecon h3:first-child{margin-top:0}
-.lecon h3.cible{color:var(--or);border-bottom-color:var(--or-bord)}
-.lecon ol{margin:0 0 14px 22px}
-.lecon ol li{margin:0 0 7px;padding-left:4px}
-.lecon .formule{font-family:var(--m);font-size:15px;font-weight:600;
-  background:var(--ardoise2);border:1px solid var(--trait);border-radius:10px;
-  padding:10px 14px;margin:0 0 14px}
+.lecon .bloc{margin:0 0 18px;padding:16px 16px 6px;border-radius:16px;border:1px solid var(--trait);border-left:5px solid var(--laterite);background:rgba(19,128,90,.06)}
+.lecon .bloc:last-child{margin-bottom:0}
+.lecon h3{display:flex;align-items:center;gap:8px;font-family:var(--d);font-size:13px;font-weight:800;letter-spacing:.08em;
+  color:var(--laterite);margin:0 0 12px;padding:0;border:0}
+.lecon .bloc-cible{border-left-color:var(--or);background:rgba(227,168,43,.09)}
+.lecon .bloc-cible h3{color:var(--or)}
+.lecon .bloc-exemple{border-left-color:#3F7CC4;background:rgba(63,124,196,.08)}
+.lecon .bloc-exemple h3{color:#4C86CC}
+.lecon .bloc-piege{border-left-color:var(--erreur);background:rgba(194,57,46,.07)}
+.lecon .bloc-piege h3{color:var(--erreur)}
+.lecon .bloc-retenir{border-left-color:var(--laterite);background:rgba(19,128,90,.10)}
+.lecon ol{list-style:none;counter-reset:n;margin:0 0 14px;padding:0}
+.lecon ol li{counter-increment:n;position:relative;padding:0 0 0 40px;margin:0 0 12px;min-height:28px}
+.lecon ol li::before{content:counter(n);position:absolute;left:0;top:1px;width:28px;height:28px;border-radius:50%;
+  background:var(--laterite);color:#fff;font:700 13px/28px var(--m);text-align:center}
+.lecon .formule{font-family:var(--m);font-size:16px;font-weight:600;text-align:center;
+  background:var(--ardoise2);border:1px dashed var(--or);border-radius:12px;padding:12px 14px;margin:0 0 14px}
 @media(min-width:700px){ .lecon{font-size:17px;line-height:1.85} }
 
 /* ---------- MESSAGE COURT EN BAS D'ÉCRAN ---------- */

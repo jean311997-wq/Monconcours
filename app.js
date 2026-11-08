@@ -2454,12 +2454,12 @@ function blocProgres(){
     if(d.refermees_semaine > 0) sem.push(pl(d.refermees_semaine, 'erreur refermée', 'erreurs refermées'));
     if(d.gain_points_semaine > 0) sem.push('+' + d.gain_points_semaine + ' point' + (d.gain_points_semaine > 1 ? 's' : ''));
   }
-  const mois = d.refermees_mois > 0;
-  if(!sem.length && !mois) return '';
-  return `<div class="carte progres" role="status" style="margin:0 0 12px">
-    ${sem.length ? `<p style="margin:0 0 ${mois ? 6 : 0}px"><b>Cette semaine :</b> ${E(sem.join(', '))}</p>` : ''}
-    ${mois ? `<p style="margin:0"><b class="num" style="font-size:22px">${d.refermees_mois}</b> ${d.refermees_mois > 1 ? 'erreurs refermées' : 'erreur refermée'} ce mois</p>` : ''}
-  </div>`;
+  const err = typeof d.erreurs_mois === 'number' && d.erreurs_mois > 0;
+  if(!sem.length && !err) return '';
+  return `${sem.length ? `<div class="carte progres" role="status" style="margin:0 0 12px"><p style="margin:0"><b>Cette semaine :</b> ${E(sem.join(', '))}</p></div>` : ''}
+    ${err ? `<button type="button" class="carte progres progres-lien" data-go="cahier" style="margin:0 0 12px">
+      <span class="pl-t">Vous avez commis <b class="num">${d.erreurs_mois}</b> ${d.erreurs_mois > 1 ? 'erreurs' : 'erreur'} récemment</span>
+      <span class="pl-s">Voir mon cahier d'erreurs ›</span></button>` : ''}`;
 }
 function ecranAujourdhui(){
   const f = S.taches.filter(Boolean).length;
@@ -3286,17 +3286,22 @@ function ecranCours(){
 function miseEnPage(texte){
   const estTitre = l => l.length < 70 && /[A-ZÀ-ÞŒ]/.test(l) && l === l.toUpperCase();
   const html = [];
-  let liste = [];
+  let liste = [], ouvert = false;
   const viderListe = () => {
     if(liste.length){ html.push('<ol>' + liste.join('') + '</ol>'); liste = []; }
   };
+  const fermerBloc = () => { viderListe(); if(ouvert){ html.push('</div>'); ouvert = false; } };
   (texte || '').split('\n').forEach(brut => {
     const l = brut.trim().replace(/</g,'&lt;');
     if(!l){ viderListe(); return; }
     if(estTitre(l)){
-      viderListe();
-      const cible = /CONCOURS|BEPC|BAC/.test(l) ? ' class="cible"' : '';
-      html.push('<h3' + cible + '>' + l + '</h3>');
+      fermerBloc();
+      const type = /CONCOURS|BEPC|BAC/.test(l) ? 'cible'
+        : /EXEMPLE|APPLICATION|EXERCICE/.test(l) ? 'exemple'
+        : /PIÈGE|PIEGE|ERREUR|ATTENTION|CONFUSION/.test(l) ? 'piege'
+        : /RETENIR|ESSENTIEL|RÉSUMÉ|RESUME|MÉTHODE|METHODE|ASTUCE|RÈGLE|REGLE|DÉFINITION|DEFINITION/.test(l) ? 'retenir' : '';
+      html.push('<div class="bloc' + (type ? ' bloc-' + type : '') + '"><h3>' + l + '</h3>');
+      ouvert = true;
       return;
     }
     const num = l.match(/^(\d+)\.\s+(.*)$/);
@@ -3305,7 +3310,7 @@ function miseEnPage(texte){
     if(l.length <= 46 && / = /.test(l)){ html.push('<div class="formule">' + l + '</div>'); return; }
     html.push('<p>' + l + '</p>');
   });
-  viderListe();
+  fermerBloc();
   return html.join('');
 }
 
@@ -7086,15 +7091,45 @@ function blocNiveauDetail(){
 
 /* ---------- citations (attributions vérifiées) ---------- */
 const CITATIONS = [
-  ['Oser inventer l\'avenir.', 'Thomas Sankara'],
-  ['N\'an lara, an sara : si nous nous couchons, nous sommes morts.', 'Joseph Ki-Zerbo'],
-  ['Le savoir est une lumière qui est en l\'homme.', 'Amadou Hampâté Bâ'],
-  ['L\'éducation est l\'arme la plus puissante pour changer le monde.', 'Nelson Mandela'],
-  ['Cela semble toujours impossible, jusqu\'à ce qu\'on le fasse.', 'Nelson Mandela']
+  ["Oser inventer l'avenir.", "Thomas Sankara"],
+  ["N'an lara, an sara : si nous nous couchons, nous sommes morts.", "Joseph Ki-Zerbo"],
+  ["On ne développe pas, on se développe.", "Joseph Ki-Zerbo"],
+  ["Le savoir est une lumière qui est en l'homme.", "Amadou Hampâté Bâ"],
+  ["En Afrique, quand un vieillard meurt, c'est une bibliothèque qui brûle.", "Amadou Hampâté Bâ"],
+  ["Armez-vous de science jusqu'aux dents.", "Cheikh Anta Diop"],
+  ["L'éducation est l'arme la plus puissante pour changer le monde.", "Nelson Mandela"],
+  ["Cela semble toujours impossible, jusqu'à ce qu'on le fasse.", "Nelson Mandela"],
+  ["Une bonne tête et un bon cœur sont toujours une combinaison formidable.", "Nelson Mandela"],
+  ["Un enfant, un enseignant, un livre et un stylo peuvent changer le monde.", "Malala Yousafzai"],
+  ["L'éducation est le passeport pour l'avenir : demain appartient à ceux qui s'y préparent aujourd'hui.", "Malcolm X"],
+  ["Tout seul, on va plus vite ; ensemble, on va plus loin.", "Proverbe africain"],
+  ["Celui qui ne sait pas où il va doit regarder d'où il vient.", "Proverbe africain"],
+  ["Goutte à goutte, l'eau remplit la jarre.", "Proverbe africain"],
+  ["Le chemin le plus long commence par un premier pas.", "Proverbe africain"],
+  ["C'est en forgeant qu'on devient forgeron.", "Proverbe français"],
+  ["Un voyage de mille lieues commence toujours par un premier pas.", "Lao Tseu"],
+  ["Le hasard ne favorise que les esprits préparés.", "Louis Pasteur"],
+  ["Dans la vie, rien n'est à craindre, tout est à comprendre.", "Marie Curie"],
+  ["L'imagination est plus importante que le savoir.", "Albert Einstein"],
+  ["Le génie, c'est 1 % d'inspiration et 99 % de transpiration.", "Thomas Edison"],
+  ["Ceux qui vivent, ce sont ceux qui luttent.", "Victor Hugo"],
+  ["Ce n'est pas parce que les choses sont difficiles que nous n'osons pas ; c'est parce que nous n'osons pas qu'elles sont difficiles.", "Sénèque"],
+  ["Mieux vaut une tête bien faite qu'une tête bien pleine.", "Montaigne"],
+  ["Science sans conscience n'est que ruine de l'âme.", "Rabelais"],
+  ["Hâtez-vous lentement, et sans perdre courage, vingt fois sur le métier remettez votre ouvrage.", "Boileau"],
+  ["Patience et longueur de temps font plus que force ni que rage.", "La Fontaine"]
 ];
 const jourAnnee = () => Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0)) / 86400000);
+/* Une citation différente à chaque ouverture : on ne retombe jamais sur celle de la fois d'avant. */
+const indexCitation = (() => {
+  let i = Math.floor(Math.random() * CITATIONS.length), d = -1;
+  try{ d = +localStorage.getItem('mc_citation_vue'); }catch(e){}
+  if(CITATIONS.length > 1 && i === d) i = (i + 1 + Math.floor(Math.random() * (CITATIONS.length - 1))) % CITATIONS.length;
+  try{ localStorage.setItem('mc_citation_vue', String(i)); }catch(e){}
+  return i;
+})();
 function blocCitation(){
-  const [t, a] = CITATIONS[jourAnnee() % CITATIONS.length];
+  const [t, a] = CITATIONS[indexCitation];
   return `<figure class="citation"><blockquote>« ${E(t)} »</blockquote><figcaption>${E(a)}</figcaption></figure>`;
 }
 
@@ -8312,6 +8347,9 @@ function majBandeauAppli(){
     document.getElementById('apptete').insertAdjacentElement('afterend', b);
     setTimeout(() => { if(!S.appliInstallee) fermerBandeauAppli(); }, 20000);
   }
+  { const t = document.getElementById('apptete');
+    b.style.setProperty('--tete-h', ((t && t.offsetHeight) || 56) + 8 + 'px');
+  }
   b.innerHTML = S.appliInstallee
     ? `<span>Installation terminée. <b>Ouvrez Mon Concours</b> depuis votre écran d'accueil.</span><button type="button" class="bandeau-appli-go" data-appli-ok="1">Compris</button>`
     : `<button type="button" class="bandeau-appli-go">↓ Télécharger l'application</button><button type="button" class="bandeau-appli-x" data-appli-x="1" aria-label="Fermer">×</button>`;
@@ -8454,8 +8492,12 @@ function retirerFacade(){
   facadeRetiree = true;
   const f = document.getElementById('facade');
   if(!f) return;
-  f.classList.add('parti');
-  setTimeout(() => f.remove(), 320);
+  const partir = () => { f.classList.add('parti'); setTimeout(() => f.remove(), 320); };
+  /* L'écran ne se montre qu'une fois les polices arrivées (au plus 1,5 s) : plus de texte qui change de taille sous les yeux. */
+  const polices = (document.fonts && document.fonts.load)
+    ? Promise.all(['800 20px "Bricolage Grotesque"', '400 16px "IBM Plex Sans"', '600 16px "IBM Plex Sans"'].map(x => document.fonts.load(x).catch(() => 0)))
+    : Promise.resolve();
+  Promise.race([polices, new Promise(r => setTimeout(r, 1500))]).then(() => setTimeout(partir, 120));
 }
 
 function rendre(){
