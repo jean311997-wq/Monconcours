@@ -1430,7 +1430,7 @@ function ouvrirNotif(n){
   if(genre === 'epreuve' && id){
     if(S.epreuve && S.epreuve.id === id && salleOuverte(S.epreuve) && S.util.connecte) return entrerEnSalle(id, 'notification');
     if(S.epreuve && S.epreuve.id === id && S.epreuve.etat !== 'terminee') return aller('aujourdhui');
-    chargerClassement(id); return aller('gagnants');
+    compterVueResultats(id); chargerClassement(id); return aller('gagnants');
   }
   if(genre === 'defi' && id) return ouvrirDefi(id);
   if(genre === 'communaute') return ouvrirCommunaute(id);
@@ -6102,6 +6102,16 @@ function partagerQuestion(id, texteQ){
 }
 
 /* ---------- les résultats d'une composition nationale ---------- */
+/* chaque candidat qui ouvre les résultats est compté une fois (le chiffre s'affiche sur la carte de l'accueil) */
+const _vuesComptees = new Set();
+function compterVueResultats(id){
+  if(!base || !S.util.connecte || !id || _vuesComptees.has(id)) return;
+  _vuesComptees.add(id);
+  base.rpc('compter_vue_resultats', { p_epreuve: id }).then(() => {
+    const d = S.derniereNat;
+    if(d && d.id === id) d.vues = (d.vues || 0) + 1;
+  }, () => { _vuesComptees.delete(id); });
+}
 async function chargerClassement(id){
   /* déjà là (préchargé ou vu) : on l'affiche et on le met à jour en silence */
   if(!(S.classementEp && S.classementEp.id === id && S.classementEp.charge && S.classementEp.ok)) S.classementEp = { id, charge:false };
@@ -6136,7 +6146,7 @@ function blocDerniereNationale(){
   if(S.epreuve && S.epreuve.id === d.id && S.epreuve.etat === 'terminee') return '';
   return `<button class="derniere-nat" data-gagnants="${E(d.id)}">
     <span class="dn-ic">${ico('trophee',22)}</span>
-    <span class="dn-txt"><small>Dernière composition nationale</small><b>Voir les résultats et le classement</b><span>${E(d.concours || 'Composition nationale')} · ${E(jourFr(d.debut_le))}</span>${d.participants >= 5 ? `<span class="dn-nb">${ico('groupe', 14)} ${nombreFr(d.participants)} candidats ont composé</span>` : ''}</span>
+    <span class="dn-txt"><small>Dernière composition nationale</small><b>Voir les résultats et le classement</b><span>${E(d.concours || 'Composition nationale')} · ${E(jourFr(d.debut_le))}</span>${d.vues >= 3 ? `<span class="dn-nb">${ico('groupe', 14)} ${nombreFr(d.vues)} candidats ont déjà vu les résultats</span>` : ''}</span>
     <span class="dn-fl">→</span></button>`;
 }
 async function chargerCorrectionNat(id){
@@ -6942,8 +6952,8 @@ document.addEventListener('click', ev => {
   if(d.finEssaiNon !== undefined){ document.getElementById('voile').hidden = true; S.modal = null; return; }
   if(d.finEssaiOui !== undefined){ document.getElementById('voile').hidden = true; S.modal = null; pister('TRIAL_END_POPUP_CLICKED'); return aller('abonnement'); }
   if(d.classFermer){ pister('RANKING_POPUP_CLOSED'); return fermerClassement(d.classFermer); }
-  if(d.classVoir){ fermerClassement(d.classVoir); chargerClassement(d.classVoir); return aller('gagnants'); }
-  if(d.gagnants){ chargerClassement(d.gagnants); return aller('gagnants'); }
+  if(d.classVoir){ fermerClassement(d.classVoir); compterVueResultats(d.classVoir); chargerClassement(d.classVoir); return aller('gagnants'); }
+  if(d.gagnants){ compterVueResultats(d.gagnants); chargerClassement(d.gagnants); return aller('gagnants'); }
   if(d.aboMatiere){ return exigerAbonnement('Vous avez fait les 15 questions gratuites en ' + d.aboMatiere + '. L\'abonnement ouvre toute la matière.', 'matiere'); }
   if(d.corrNat){ chargerCorrectionNat(d.corrNat); return aller('correctionnat'); }
   if(d.pourtoi){ return lancerFil(d.pourtoi); }
