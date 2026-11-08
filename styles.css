@@ -677,6 +677,13 @@ body{background:var(--encre);padding:0;overflow:hidden}
 /* très petits écrans (320 px) : l'en-tête d'un visiteur (4 boutons) doit tenir sans déborder */
 @media(max-width:360px){.apptete{padding:8px;gap:4px}.apptete .mot{font-size:13px;margin-left:2px}}
 @media(max-width:340px){.apptete .mot{font-size:12px}.bouton-tete{min-width:36px;padding:6px 7px}}
+/* bandeau « Télécharger l'application » : juste sous l'en-tête, toujours visible (ne défile pas) */
+.bandeau-appli{flex:none;display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;padding:7px 14px;background:var(--laterite);color:#fff;font-size:13px;text-align:center}
+.bandeau-appli span{line-height:1.35}
+.bandeau-appli b{font-weight:700}
+.bandeau-appli-go{border:0;border-radius:8px;padding:8px 16px;min-height:36px;background:#fff;color:#0f2a1c;font-weight:700;font-size:13px;cursor:pointer}
+.bandeau-appli-go:active{transform:scale(.98)}
+
 /* bouton flottant WhatsApp : en bas à droite, au-dessus de la barre du bas ; pulsation 4 fois, puis fixe */
 .fab-canal{position:fixed;right:14px;bottom:calc(var(--nav-h,0px) + env(safe-area-inset-bottom,0px) + 14px);z-index:40;display:flex;align-items:center;gap:8px;
   width:52px;height:52px;padding:0;justify-content:center;border-radius:50%;background:#25D366;color:#06371c;font-weight:700;font-size:13px;box-shadow:0 6px 18px rgba(0,0,0,.35);animation:pulseFab 1.6s ease-in-out 4}

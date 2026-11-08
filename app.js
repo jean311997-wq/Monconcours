@@ -8282,6 +8282,39 @@ function basculerTheme(){
 /* --- surcouche d'inscription différée --- */
 const COULEURS = ['Rouge','Bleu','Vert','Jaune','Orange','Noir','Blanc','Marron','Violet'];
 
+/* ---------- bandeau « Télécharger l'application » : toujours visible, sous l'en-tête ---------- */
+function majBandeauAppli(){
+  let b = document.getElementById('bandeau-appli');
+  const aCacher = estInstallee() || SANS_TETE.includes(S.ecran) || enComposition() ||
+    (S.modal && !['inscription','connexion','oubli'].includes(S.modal));
+  if(aCacher){ if(b) b.remove(); return; }
+  if(!b){
+    b = document.createElement('div');
+    b.id = 'bandeau-appli'; b.className = 'bandeau-appli';
+    b.onclick = ev => {
+      const t = ev.target.closest('button'); if(!t) return;
+      if(t.dataset.appliOk){ S.appliInstallee = false; majBandeauAppli(); return; }
+      telechargerAppli();
+    };
+    document.getElementById('apptete').insertAdjacentElement('afterend', b);
+  }
+  b.innerHTML = S.appliInstallee
+    ? `<span>Application installée. Ouvrez <b>Mon Concours</b> depuis votre écran d'accueil.</span><button type="button" class="bandeau-appli-go" data-appli-ok="1">Compris</button>`
+    : `<button type="button" class="bandeau-appli-go">↓ Télécharger l'application</button>`;
+}
+async function telechargerAppli(){
+  try{ pister('APPLI_BANDEAU_CLIC'); }catch(e){}
+  if(!S.installer) return installerAppli();          // pas de téléchargement direct : on guide la personne
+  const invite = S.installer;
+  invite.prompt();
+  try{
+    const choix = await invite.userChoice;
+    if(choix && choix.outcome === 'accepted') S.appliInstallee = true;
+  }catch(e){}
+  S.installer = null;
+  majBandeauAppli();
+}
+
 function surcouche(){
   const v = document.getElementById('voile');
   /* les autres panneaux (partage, notifications, signalement, sortie
@@ -8431,7 +8464,7 @@ function rendre(){
         <button class="cta creux" style="margin-top:9px" onclick="location.reload()">Recharger</button>
       </div>`;
   }
-  try{ nav(); apptete(); annoncer(); surcouche(); appliquerConcentration(); }catch(e){ console.error(e); }
+  try{ nav(); apptete(); majBandeauAppli(); annoncer(); surcouche(); appliquerConcentration(); }catch(e){ console.error(e); }
   try{ animerApresRendu(); }catch(e){}
 }
 
