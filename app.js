@@ -2258,6 +2258,21 @@ async function synchroniserChrono(){
   }catch(e){}
 }
 
+/* Une composition annulée (ou supprimée) ne laisse rien sur le téléphone :
+   plus de copie gardée, plus de bouton « Renvoyer ma copie ». */
+async function nettoyerCopieAbandonnee(){
+  try{
+    const id = S.compositionId;
+    if(!id || !base || !S.util.connecte || enComposition()) return;
+    const { data, error } = await base.rpc('composition_abandonnee', { p_composition: id });
+    if(error || data !== true) return;
+    S.compositionId = null; S.reponses = {}; S.remiseEtat = null; S.remiseMessage = '';
+    effacerEpreuve();
+    if(['copie','grille'].includes(S.ecran)) S.ecran = 'aujourdhui';
+    rendre();
+  }catch(e){}
+}
+
 /* Le téléphone envoie ses réponses ; le serveur corrige, note et renvoie le
    corrigé. La copie locale n'est effacée qu'une fois la remise acceptée. */
 async function cloturerComposition(){
@@ -2294,6 +2309,7 @@ async function cloturerComposition(){
       /* déjà remise (par exemple depuis un autre appareil) : on relit la copie */
       S.remiseEtat = 'erreur';
       S.remiseMessage = (data && data.message) || 'Remise refusée.';
+      nettoyerCopieAbandonnee();
     }
   }catch(e){
     S.remiseEtat = 'erreur';
@@ -5522,6 +5538,7 @@ async function chargerEpreuve(){
     const change = !pareil(data || null, S.epreuve);
     S.epreuve = data || null;
     memoEcrire('epreuve', S.epreuve, true);
+    nettoyerCopieAbandonnee();
     if(S.lienSalle && S.epreuve && S.epreuve.id === S.lienSalle){
       const idSalle = S.lienSalle; S.lienSalle = null;
       if(salleOuverte(S.epreuve) && S.util.connecte && !enComposition()) return entrerEnSalle(idSalle, 'lien');
