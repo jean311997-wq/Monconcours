@@ -2467,13 +2467,13 @@ function ecranAujourdhui(){
   vue().innerHTML = `
   <div class="pad">
     ${salutAccueil()}
+    ${nationaleEnHaut() ? `<section class="nat-jour" aria-label="Composition nationale du jour">${carteEpreuve()}${blocDerniereNationale()}</section>` : ''}
     ${blocSeanceX()}
     ${blocInscriptionVisiteur()}
     ${blocPromo()}
     ${blocFinEssai()}
     ${blocBandeauRappel()}
     ${blocProgres()}
-    ${nationaleEnHaut() ? `<section class="nat-jour" aria-label="Composition nationale du jour">${carteEpreuve()}${blocDerniereNationale()}</section>` : ''}
     <div class="tete-jour">
       <span class="eyebrow">${dateDuJour()}</span>
     </div>
@@ -6155,7 +6155,7 @@ async function chargerDiscussion(id, apercu){
     const neuf = { ...(data || { ok:false }), id, charge:true };
     const avant = S.disc;
     S.disc = neuf;
-    if(avant && avant.id === id && pareil({ ...avant, ecrivent:0 }, { ...neuf, ecrivent:0 }) && JSON.stringify(avant.ecrivent) === JSON.stringify(neuf.ecrivent)) return;
+    if(avant && avant.id === id && pareil({ ...avant, ecrivent:0, voient:0 }, { ...neuf, ecrivent:0, voient:0 }) && JSON.stringify(avant.ecrivent) === JSON.stringify(neuf.ecrivent) && avant.voient === neuf.voient) return;
     if(apercu){ if(S.ecran === 'gagnants') rendre(); }
     else majDiscussionDom();
   }catch(e){}
@@ -6201,10 +6201,11 @@ function lignesDiscussion(){
     </div>`).join('');
 }
 function texteEcrivent(){
-  const e = (S.disc && S.disc.ecrivent) || [];
-  if(!e.length) return '';
+  const e = (S.disc && S.disc.ecrivent) || [], v = (S.disc && S.disc.voient) || 0;
+  const voient = v > 0 ? `<span class="disc-voient">${v} personne${v > 1 ? 's consultent' : ' consulte'} cette discussion</span>` : '';
+  if(!e.length) return voient;
   const pre = n => (n || '').split(' ').slice(0, 2).join(' ');
-  return `<span class="disc-live"><i></i>${e.length === 1 ? E(pre(e[0])) + ' écrit…' : e.length === 2 ? E(pre(e[0])) + ' et ' + E(pre(e[1])) + ' écrivent…' : E(pre(e[0])) + ' et ' + (e.length - 1) + ' autres écrivent…'}</span>`;
+  return voient + `<span class="disc-live"><i></i>${e.length === 1 ? E(pre(e[0])) + ' écrit…' : e.length === 2 ? E(pre(e[0])) + ' et ' + E(pre(e[1])) + ' écrivent…' : E(pre(e[0])) + ' et ' + (e.length - 1) + ' autres écrivent…'}</span>`;
 }
 function blocStatsGroupe(){
   const t = S.statsGroupe;
@@ -6217,12 +6218,13 @@ function blocStatsGroupe(){
 function majDiscussionDom(){
   if(S.ecran !== 'discussion') return;
   const fil = document.getElementById('disc-fil'); if(!fil) return;
-  const bas = (window.innerHeight + window.scrollY) >= document.documentElement.scrollHeight - 160;
+  const zone = vue();
+  const bas = (zone.scrollTop + zone.clientHeight) >= zone.scrollHeight - 160;
   fil.innerHTML = lignesDiscussion();
   const e = document.getElementById('disc-ecrit'); if(e) e.innerHTML = texteEcrivent();
   const n = document.getElementById('disc-total'); if(n) n.textContent = (S.disc && S.disc.total ? S.disc.total : 0) + ' message' + (S.disc && S.disc.total > 1 ? 's' : '');
   const g = document.getElementById('disc-stats'); if(g) g.innerHTML = blocStatsGroupe();
-  if(bas) window.scrollTo({ top: document.documentElement.scrollHeight, behavior:'smooth' });
+  if(bas) zone.scrollTo({ top: zone.scrollHeight, behavior:'smooth' });
 }
 function ecranDiscussion(){
   const id = S.discId, c = S.classementEp;
@@ -6258,7 +6260,7 @@ function ecranDiscussion(){
     const bouton = form.querySelector('button'); bouton.disabled = true;
     try{
       const { data } = await base.rpc('discussion_envoyer', { p_epreuve: id, p_texte: texte });
-      if(data && data.ok){ champ.value = ''; S.discBrouillon = ''; pister('DISCUSSION_MESSAGE'); await chargerDiscussion(id, false); window.scrollTo({ top: document.documentElement.scrollHeight, behavior:'smooth' }); }
+      if(data && data.ok){ champ.value = ''; S.discBrouillon = ''; pister('DISCUSSION_MESSAGE'); await chargerDiscussion(id, false); vue().scrollTo({ top: vue().scrollHeight, behavior:'smooth' }); }
       else toast((data && data.message) || 'Message non envoyé.');
     }catch(e){ toast('Message non envoyé : vérifiez votre connexion.'); }
     bouton.disabled = false;

@@ -2101,8 +2101,9 @@ body.sans-anim .stat-comm .sc-new.jamais{animation:none}
 .msg-d.moi .d-pied{justify-content:flex-end}
 .msg-d .d-coeur{background:none;border:0;padding:2px 4px;font-size:13px;color:var(--craie2)}
 .msg-d .d-suppr{background:none;border:0;padding:2px 4px;font-size:11.5px;color:var(--rouge-texte);text-decoration:underline}
-.disc-ecrit{min-height:22px;margin-top:10px}
-.disc-saisie{position:sticky;bottom:calc(84px + env(safe-area-inset-bottom));display:flex;gap:8px;margin-top:10px;padding:8px;background:var(--ardoise);border:1px solid var(--trait);border-radius:26px;box-shadow:var(--ombre,0 6px 20px -10px rgba(0,0,0,.3))}
+.disc-ecrit{min-height:44px;margin-top:10px}
+.disc-voient{display:block;font-size:12.5px;color:var(--craie2);margin-bottom:4px}
+.disc-saisie{position:sticky;bottom:8px;z-index:5;display:flex;gap:8px;margin-top:6px;padding:8px;background:var(--ardoise);border:1px solid var(--trait);border-radius:26px;box-shadow:var(--ombre,0 6px 20px -10px rgba(0,0,0,.3))}
 .disc-saisie input{flex:1;min-width:0;border:0;background:transparent;font:inherit;font-size:15px;padding:8px 10px;color:var(--craie);outline:none}
 .disc-envoi{width:40px;height:40px;border-radius:50%;border:0;background:var(--laterite,#0B6B4A);color:#fff;font-size:16px;flex:none}
 .disc-page{padding-bottom:30px}
