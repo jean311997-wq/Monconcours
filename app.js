@@ -6204,13 +6204,26 @@ async function chargerStatsGroupe(id){
 function blocDiscussionApercu(id){
   const d = S.disc && S.disc.id === id ? S.disc : null;
   if(d && !d.ok) return '';   // pas inscrit : on ne propose rien
-  const msgs = d && d.messages ? d.messages.slice(-2) : [];
-  const ecr = d && d.ecrivent ? d.ecrivent.length : 0;
-  return `<div class="disc-carte">
-    <div class="libelle" style="margin:0 0 6px">Discussion ouverte de la composition</div>
-    <p class="disc-titre">${d && d.total ? d.total + ' message' + (d.total > 1 ? 's' : '') : 'Soyez le premier à écrire'}${ecr ? ` · <span class="disc-live"><i></i>${ecr} écri${ecr > 1 ? 'vent' : 't'}</span>` : ''}</p>
-    ${msgs.length ? msgs.map(m => `<div class="disc-ligne"><span class="d-av">${E(initialesPseudo(m.nom))}</span><div><b>${E(m.nom)}</b><span>${E(m.texte)}</span></div></div>`).join('') : '<p class="sous" style="margin:6px 0 0">Comparez vos réponses, posez vos questions aux autres candidats.</p>'}
-    <button class="cta" style="margin-top:12px" data-discussion="${E(id)}">Rejoindre la discussion</button>
+  const tous = d && d.messages ? d.messages : [];
+  const msgs = tous.slice(-3);
+  const total = d && d.total ? d.total : tous.length;
+  const reste = Math.max(0, total - msgs.length);
+  const ecrit = d && d.ecrivent ? d.ecrivent : [];
+  const voient = d && d.voient ? d.voient : 0;
+  const pre = n => (n || '').split(' ').slice(0, 2).join(' ');
+  const enDirect = ecrit.length || voient;
+  const ligneEcrit = ecrit.length
+    ? `<div class="disc-tape"><span class="pts"><i></i><i></i><i></i></span>${E(ecrit.length === 1 ? pre(ecrit[0]) + ' écrit…' : ecrit.length === 2 ? pre(ecrit[0]) + ' et ' + pre(ecrit[1]) + ' écrivent…' : pre(ecrit[0]) + ' et ' + (ecrit.length - 1) + ' autres écrivent…')}</div>` : '';
+  return `<div class="disc-carte disc-vivante">
+    <div class="disc-tete">
+      <span class="disc-bulle">${ico('bulle', 20)}</span>
+      <div class="disc-tt"><b>La discussion est ouverte</b><span>${total ? total + ' message' + (total > 1 ? 's' : '') : 'Soyez le premier à écrire'}${voient ? ' · ' + voient + ' en ligne' : ''}</span></div>
+      <span class="disc-pill"><i></i>En direct</span>
+    </div>
+    ${msgs.length ? `<div class="disc-fil-ap">${msgs.map(m => `<div class="disc-ligne"><span class="d-av">${E(initialesPseudo(m.nom))}</span><div><b>${E(m.nom)}</b><span>${E(m.texte)}</span></div></div>`).join('')}</div>` : '<p class="sous" style="margin:10px 0 0">Comparez vos réponses, posez vos questions aux autres candidats.</p>'}
+    ${ligneEcrit}
+    ${reste ? `<button type="button" class="disc-reste" data-discussion="${E(id)}">Voir les ${reste} autre${reste > 1 ? 's' : ''} message${reste > 1 ? 's' : ''}</button>` : ''}
+    <button type="button" class="disc-faux" data-discussion="${E(id)}"><span>Écrire un message…</span><i>➤</i></button>
   </div>`;
 }
 function ouvrirDiscussion(id){

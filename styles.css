@@ -2119,3 +2119,27 @@ body.sans-anim .stat-comm .sc-new.jamais{animation:none}
 .nat-jour.res-vedette .derniere-nat{margin-top:0;margin-bottom:12px;animation:coeurBat 1.8s ease-in-out infinite}
 .nat-jour.res-vedette .carte.nationale,.nat-jour.res-vedette .carte.nationale .rebours span:last-child{animation:none}
 @media(prefers-reduced-motion:reduce){.nat-jour.res-vedette .derniere-nat{animation:none}}
+
+/* aperçu de la discussion : on doit sentir que ça vit */
+.disc-vivante{position:relative;overflow:hidden;box-shadow:0 10px 24px -16px rgba(11,107,74,.55)}
+.disc-vivante::before{content:"";position:absolute;left:0;right:0;top:0;height:4px;background:linear-gradient(90deg,#14503B,#E3A82B 55%,#14503B)}
+.disc-tete{display:flex;align-items:center;gap:11px;padding-top:4px}
+.disc-bulle{flex:none;display:grid;place-items:center;width:40px;height:40px;border-radius:13px;background:var(--vert-fond);border:1px solid var(--vert-bord);color:var(--vert-texte)}
+.disc-tt{display:flex;flex-direction:column;min-width:0}
+.disc-tt b{font-family:var(--d);font-weight:800;font-size:16px;line-height:1.2}
+.disc-tt span{font-size:12.5px;color:var(--craie2)}
+.disc-pill{margin-left:auto;flex:none;display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:99px;background:#0E5A41;color:#fff;font-size:11.5px;font-weight:700}
+.disc-pill i{width:7px;height:7px;border-radius:50%;background:#7CF0B5;animation:battement 1.2s ease-in-out infinite}
+.disc-fil-ap .disc-ligne{animation:discEntre .5s ease both}
+.disc-fil-ap .disc-ligne:nth-child(2){animation-delay:.12s}.disc-fil-ap .disc-ligne:nth-child(3){animation-delay:.24s}
+@keyframes discEntre{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.disc-tape{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12.5px;color:var(--vert-texte);font-weight:600}
+.disc-tape .pts{display:inline-flex;gap:3px;padding:7px 9px;border-radius:12px;background:var(--ardoise2)}
+.disc-tape .pts i{width:5px;height:5px;border-radius:50%;background:var(--vert-texte);animation:discPt 1.1s ease-in-out infinite}
+.disc-tape .pts i:nth-child(2){animation-delay:.18s}.disc-tape .pts i:nth-child(3){animation-delay:.36s}
+@keyframes discPt{0%,60%,100%{opacity:.3;transform:translateY(0)}30%{opacity:1;transform:translateY(-3px)}}
+.disc-reste{display:block;width:100%;margin-top:10px;padding:8px;border:0;background:none;color:var(--vert-texte);font:inherit;font-size:13px;font-weight:700;text-align:left;cursor:pointer}
+.disc-faux{display:flex;align-items:center;width:100%;margin-top:10px;padding:6px 6px 6px 16px;border:1.5px solid var(--vert-bord);border-radius:26px;background:var(--ardoise);color:var(--craie2);font:inherit;font-size:14.5px;text-align:left;cursor:pointer}
+.disc-faux span{flex:1}
+.disc-faux i{font-style:normal;flex:none;display:grid;place-items:center;width:38px;height:38px;border-radius:50%;background:#0B6B4A;color:#fff;font-size:14px;animation:coeurBat 1.8s ease-in-out infinite}
+@media(prefers-reduced-motion:reduce){.disc-pill i,.disc-tape .pts i,.disc-faux i,.disc-fil-ap .disc-ligne{animation:none}}
