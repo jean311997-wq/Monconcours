@@ -23,6 +23,9 @@ const CONTACT = {
   /* Numéros qui reçoivent les paiements. À CONFIRMER avant l'ouverture du payant :
      un seul endroit à changer. */
   paiement: { orange:'77959848', moov:'73767397', wave:'77959848' },
+  /* Paiement direct (Orange, Moov, Wave) : mis de côté, pas supprimé.
+     Passer à true pour tout réafficher. Tant que c'est false, on ne paie qu'avec un conseiller. */
+  paiementDirect: false,
   site:     'https://monconcoursbf.com',
   playStore: ''              /* le lien Play Store de Mon Concours, dès qu'il est publié */
 };
@@ -2828,7 +2831,7 @@ function avantagesListe(){
     <li>Compositions chronométrées, sans limite, avec ton classement</li>
     <li>Cours et questions sans connexion</li>
   </ul>
-  <p class="sous" style="margin:14px 0 0;text-align:center;font-size:12.5px">Orange Money, Moov Money ou Wave.<br>Validation souvent en quelques minutes.</p>`;
+  <p class="sous" style="margin:14px 0 0;text-align:center;font-size:12.5px">${CONTACT.paiementDirect ? 'Orange Money, Moov Money ou Wave.<br>Validation souvent en quelques minutes.' : 'Un conseiller vous guide sur WhatsApp.<br>Activation souvent en quelques minutes.'}</p>`;
 }
 function offreC(point, cleConseiller, alternatives, sansEntete){
   return (sansEntete ? '' : enteteBilan()) + blocConseiller(cleConseiller, point) +
@@ -2872,7 +2875,7 @@ function blocConseiller(cle, point){
   return `<div class="conseiller">
     <a class="cta vert" href="https://wa.me/226${numeroConseiller()}?text=${encodeURIComponent(messageConseiller(cle))}" target="_blank" rel="noopener" data-conseiller-wa="${E(point || 'abonnement')}" data-conseiller-formule="${E(cle || '')}">
       ${ico('partage',16)} Payer avec l'aide d'un conseiller<small>Sur WhatsApp : on vous guide, c'est rapide</small></a>
-    <div class="ou-sep"><span>ou payer vous-même</span></div>
+    ${CONTACT.paiementDirect ? `<div class="ou-sep"><span>ou payer vous-même</span></div>` : ""}
   </div>`;
 }
 document.addEventListener('click', async ev => {
@@ -3048,6 +3051,23 @@ function ecranPaiement(){
       <button class="cta" style="margin-top:18px" data-paiefin="1">J'ai payé<small>Je vais envoyer ma capture</small></button>
       <a class="cta creux" style="margin-top:10px;display:block;text-decoration:none" href="https://wa.me/226${numeroConseiller()}?text=${encodeURIComponent(messageConseiller(f.cle))}" target="_blank" rel="noopener" data-conseiller-wa="paiement-etape1" data-conseiller-formule="${E(f.cle)}">${logoReseau('whatsapp')} Un souci pour envoyer l'argent ?<small>Un conseiller vous guide sur WhatsApp</small></a>
       <button class="lien" data-paieannul="1">Annuler</button>
+      ${blocAlternatives(f.cle)}
+    </div>`;
+    return;
+  }
+
+  /* Étape 0, paiement direct mis de côté : un seul chemin, le conseiller. */
+  if(!CONTACT.paiementDirect){
+    vue().innerHTML = `
+    <div class="pad">
+      <button class="retourhaut" data-go="abonnement">Retour</button>
+      <h1 class="titre">Paiement</h1>
+      <p class="sous" style="margin:8px 0 18px">${f.n} · ${f.prix} pour ${f.per}. Sans renouvellement automatique.</p>
+      <div class="carte" style="margin:0 0 16px">
+        <div class="mat"><div class="nom">${f.n}<em>${f.per}</em></div><div class="val num" style="white-space:nowrap">${f.prix}</div></div>
+      </div>
+      ${blocConseiller(f.cle, 'paiement')}
+      <p class="sous" style="margin:12px 0 0;text-align:center;font-size:12.5px">Un conseiller vous répond sur WhatsApp, vous explique comment payer et active votre abonnement.</p>
       ${blocAlternatives(f.cle)}
     </div>`;
     return;
