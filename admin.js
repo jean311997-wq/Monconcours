@@ -601,6 +601,7 @@ async function vuePaiements(){
   const liste = data || [];
   if(!liste.length){ zone.innerHTML = '<p class="vide">Aucune demande de paiement pour le moment.</p>'; return; }
 
+  const offert = p => !(p.montant > 0) && /^Offert/.test(p.nom_compte || '');
   const statutLabel = { en_attente:'<span class="etat">En attente</span>',
     confirme:'<span class="etat ok">Confirmé</span>', refuse:'<span class="etat danger">Refusé</span>' };
 
@@ -611,9 +612,9 @@ async function vuePaiements(){
         <td><b${p.user_id ? ` class="cliquable" data-fiche="${E(p.user_id)}"` : ''}>${E(p.nom || '—')}</b><br><span style="color:var(--craie2);font-size:12px">${E(p.nom_compte||'')}</span></td>
         <td>${p.user_id ? `<span class="cliquable" data-fiche="${E(p.user_id)}">${E(p.telephone || '—')}</span>` : E(p.telephone || '—')}</td>
         <td>${E(NOM_PASS[p.formule] || 'Abonnement')}<br><span style="color:var(--craie2);font-size:12px">${E(NOM_OPERATEUR[p.operateur] || p.operateur || '')}</span></td>
-        <td>${nombre(p.montant)} F</td>
+        <td>${offert(p) ? '<span class="etat">Offert</span>' : nombre(p.montant) + ' F'}</td>
         <td>${p.preuve_chemin ? `<button class="mini" data-pai-voir="${E(p.preuve_chemin)}">Voir</button>` : '—'}</td>
-        <td>${statutLabel[p.statut] || E(p.statut)}</td>
+        <td>${offert(p) ? '<span class="etat ok">Abonnement gratuit reçu</span>' : (statutLabel[p.statut] || E(p.statut))}</td>
         <td>${dateHeure(p.cree_le)}</td>
         <td>${p.statut === 'en_attente' ? `
           <button class="mini" data-pai-confirmer="${E(p.id)}">Confirmer</button>
@@ -2724,9 +2725,15 @@ async function vueCollectives(){
     const z = document.getElementById('ec-detail');
     if(!data || !data.ok){ z.innerHTML = '<div class="carte">Résultats indisponibles.</div>'; return; }
     const st = { admis:'Admis', attente:'Liste d\'attente', echoue:'Non admis' };
+    /* les gagnants de l'abonnement gratuit : repérés par leurs lignes « Offert » (montant 0), jamais comptées dans les sommes */
+    const cadeaux = new Set();
+    try{
+      const { data: pl } = await db.rpc('paiements_en_attente');
+      (pl || []).forEach(k => { if(!(k.montant > 0) && /^Offert/.test(k.nom_compte || '') && (k.nom_compte || '').includes((data.titre || '').slice(0, 60))) cadeaux.add(k.nom); });
+    }catch(e){}
     z.innerHTML = `<div class="carte" style="margin-top:12px"><b>${E(data.concours || data.titre)}</b> · ${data.participants} candidats · ${data.admis} admis · ${data.attente} en liste d'attente · moyenne ${data.moyenne ?? '—'}/${data.sur}
       <table style="margin-top:8px"><thead><tr><th>Rang</th><th>Nom</th><th>Note</th><th>Durée</th><th>Statut</th></tr></thead><tbody>
-      ${(data.classement || []).map(l => `<tr><td>${l.rang}</td><td>${E(l.nom || l.pseudo)}</td><td>${l.score}/${l.sur}</td><td>${Math.round((l.duree||0)/60)} min</td><td>${st[l.statut] || ''}</td></tr>`).join('')}
+      ${(data.classement || []).map(l => `<tr><td>${l.rang}</td><td>${E(l.nom || l.pseudo)}</td><td>${l.score}/${l.sur}</td><td>${Math.round((l.duree||0)/60)} min</td><td>${st[l.statut] || ''}${cadeaux.has(l.nom || l.pseudo) ? '<br><span class="etat ok">Abonnement gratuit reçu</span>' : ''}</td></tr>`).join('')}
       </tbody></table></div>`;
   });
 }
