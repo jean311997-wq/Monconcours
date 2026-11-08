@@ -2114,3 +2114,8 @@ body.sans-anim .stat-comm .sc-new.jamais{animation:none}
 .disc-saisie input{flex:1;min-width:0;border:0;background:transparent;font:inherit;font-size:15px;padding:8px 10px;color:var(--craie);outline:none}
 .disc-envoi{width:40px;height:40px;border-radius:50%;border:0;background:var(--laterite,#0B6B4A);color:#fff;font-size:16px;flex:none}
 .disc-page{padding-bottom:30px}
+
+/* l'heure qui suit une composition : résultats en tête et qui battent, composition suivante au calme */
+.nat-jour.res-vedette .derniere-nat{margin-top:0;margin-bottom:12px;animation:coeurBat 1.8s ease-in-out infinite}
+.nat-jour.res-vedette .carte.nationale,.nat-jour.res-vedette .carte.nationale .rebours span:last-child{animation:none}
+@media(prefers-reduced-motion:reduce){.nat-jour.res-vedette .derniere-nat{animation:none}}

@@ -2438,8 +2438,16 @@ const memeJourQue = iso => !!iso && new Date(iso).toISOString().slice(0, 10) ===
 /* Un visiteur sans compte voit toujours l'actualité en premier. Dès qu'il a un compte, la règle d'avant s'applique :
    la composition passe en haut le jour où elle a lieu (avant, pendant, après), et redescend le lendemain. */
 function nouveauVenu(){ return !S.util.connecte; }
+/* l'heure qui suit la fin d'une composition : les résultats passent devant et battent, la composition suivante se calme */
+function resultatsEnVedette(){
+  const d = S.derniereNat;
+  if(!d || !d.fin_le) return false;
+  const t = Date.now() - new Date(d.fin_le).getTime();
+  return t >= 0 && t < 3600000;
+}
 function nationaleEnHaut(){
   if(nouveauVenu()) return false;
+  if(resultatsEnVedette()) return true;
   const ep = S.epreuve;
   if(ep && (ep.etat === 'en_cours' || (ep.etat === 'a_venir' && memeJourQue(ep.debut_le)) || (ep.etat === 'terminee' && memeJourQue(ep.fin_le)))) return true;
   const d = S.derniereNat;
@@ -2470,7 +2478,7 @@ function ecranAujourdhui(){
   vue().innerHTML = `
   <div class="pad">
     ${salutAccueil()}
-    ${nationaleEnHaut() ? `<section class="nat-jour" aria-label="Composition nationale du jour">${carteEpreuve()}${blocDerniereNationale()}</section>` : ''}
+    ${nationaleEnHaut() ? `<section class="nat-jour${resultatsEnVedette() && blocDerniereNationale() ? ' res-vedette' : ''}" aria-label="Composition nationale du jour">${resultatsEnVedette() ? blocDerniereNationale() + carteEpreuve() : carteEpreuve() + blocDerniereNationale()}</section>` : ''}
     ${blocSeanceX()}
     ${blocInscriptionVisiteur()}
     ${blocPromo()}
