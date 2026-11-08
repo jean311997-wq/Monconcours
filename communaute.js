@@ -37,12 +37,17 @@ async function rpc(nom, args){
 const trouver = id => C.posts.find(p => p.id === id) || (C.focus && C.focus.post.id === id ? C.focus.post : null);
 
 /* ---------------------------------------------------------------- éléments */
-function avatar(nom, teinte, admin, petit){
-  if(admin) return `<span class="cm-av adm${petit ? ' p' : ''}" aria-hidden="true">${logoSvg(petit ? 24 : 32)}</span>`;
+/* couleur de signature d'un compte d'administration (#RRGGBB), sinon rien */
+const couleurSig = o => (o && o.admin && /^#[0-9A-Fa-f]{6}$/.test(o.couleur || '')) ? o.couleur : '';
+function avatar(nom, teinte, admin, petit, couleur){
+  if(admin){
+    const c = /^#[0-9A-Fa-f]{6}$/.test(couleur || '') ? couleur : '';
+    return `<span class="cm-av adm${petit ? ' p' : ''}"${c ? ` style="border:2px solid ${c};box-shadow:0 0 0 2px ${c}33"` : ''} aria-hidden="true">${logoSvg(petit ? 24 : 32)}</span>`;
+  }
   return `<span class="cm-av${petit ? ' p' : ''}" style="--t:${Number(teinte) || 150}" aria-hidden="true">${E(initiales(nom))}</span>`;
 }
 const medaille = r => `<span class="cm-med m${r >= 1 && r <= 3 ? r : 0} num">${Number(r) || ''}</span>`;
-const badgeAdmin = () => `<i class="cm-badge">${ico('coche', 11)} Officiel</i>`;
+const badgeAdmin = c => `<i class="cm-badge"${c ? ` style="color:${c};background:${c}1F;border-color:${c}66"` : ''}>${ico('coche', 11)} Officiel</i>`;
 const nomAffiche = o => o.admin ? (o.nom || 'Administration Mon Concours') : (o.nom || 'Candidat');
 function urlImage(chemin){
   try{ return base.storage.from('communaute').getPublicUrl(chemin).data.publicUrl; }catch(e){ return ''; }
@@ -92,8 +97,8 @@ function postHtml(p, focus){
   const url = p.image ? urlImage(p.image) : '';
   return `<article class="cm-post${p.admin ? ' adm' : ''}${p.epingle ? ' epingle' : ''}${p.cache ? ' cache' : ''}${focus ? ' focus' : ''}${p.type === 'motivation' ? ' mot' : ''}" id="cm-p-${E(p.id)}">
     <header class="cm-ent">
-      ${avatar(p.nom, p.teinte, p.admin)}
-      <div class="cm-qui"><span class="cm-nom"><b>${E(nomAffiche(p))}</b>${p.admin ? badgeAdmin() : ''}</span>
+      ${avatar(p.nom, p.teinte, p.admin, false, couleurSig(p))}
+      <div class="cm-qui"><span class="cm-nom"><b${couleurSig(p) ? ` style="color:${couleurSig(p)}"` : ''}>${E(nomAffiche(p))}</b>${p.admin ? badgeAdmin(couleurSig(p)) : ''}</span>
         <small>${p.epingle ? `<span class="cm-epingle">${ico('epingle', 11)} Épinglé</span>` : ''}${!p.admin && p.concours ? E(p.concours) + ' · ' : ''}${relatif(p.cree_le)}</small></div>
       ${p.moi || p.gerer ? `<button class="cm-suppr" data-cm-suppr="${E(p.id)}" aria-label="Supprimer cette publication">${ico('corbeille', 16)}</button>` : ''}
     </header>
@@ -135,9 +140,9 @@ function commsHtml(p){
 }
 function comHtml(p, c, prof){
   return `<div class="cm-com p${prof}" id="cm-c-${E(c.id)}">
-    ${avatar(c.nom, c.teinte, c.admin, true)}
+    ${avatar(c.nom, c.teinte, c.admin, true, couleurSig(c))}
     <div class="cm-com-c">
-      <div class="cm-com-b"><b>${E(nomAffiche(c))}</b>${c.admin ? badgeAdmin() : ''}${prof > 0 && c.parent_nom ? `<span class="cm-vers">› ${E(c.parent_nom)}</span>` : ''}<p>${texteHtml(c.texte)}</p></div>
+      <div class="cm-com-b"><b${couleurSig(c) ? ` style="color:${couleurSig(c)}"` : ''}>${E(nomAffiche(c))}</b>${c.admin ? badgeAdmin(couleurSig(c)) : ''}${prof > 0 && c.parent_nom ? `<span class="cm-vers">› ${E(c.parent_nom)}</span>` : ''}<p>${texteHtml(c.texte)}</p></div>
       <div class="cm-com-a"><span>${relatif(c.cree_le)}</span><button data-cm-rep="${E(p.id)}|${E(c.id)}">Répondre</button>${c.moi || c.gerer ? `<button data-cm-supprcom="${E(p.id)}|${E(c.id)}">Supprimer</button>` : ''}</div>
     </div>
   </div>`;

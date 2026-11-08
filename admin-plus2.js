@@ -565,7 +565,7 @@ V.communaute = async function(){
   const NOM_TYPE = { annonce:'Annonce', motivation:'Motivation', bilan:'Bilan', cours:'Cours', actualite:'Actualité', top:'Contributeurs', epreuve:'Épreuve', classement:'Classement', progres:'Progrès', resultat:'Résultat', texte:'Message', photo:'Photo' };
   const urlImg = c => { try { return db.storage.from('communaute').getPublicUrl(c).data.publicUrl; } catch(_){ return ''; } };
   const etat = { fin: false, avant: null, nb: 0, filtre: 'tout' };
-  const SIGNE = A.investisseur ? 'Administrateur 2' : 'Administration Mon Concours';
+  const SIGNE = A.investisseur ? 'Administrateur Mon Concours' : 'Administration Mon Concours';
   $('#vue').innerHTML = `
     <h2 class="titre">Communauté</h2>
     <p class="sous">Tout ce qui s'écrit dans la communauté des candidats. Vous pouvez épingler, masquer, supprimer, couper la parole à quelqu'un, publier, commenter, répondre et aimer au nom de « ${SIGNE} ».</p>
