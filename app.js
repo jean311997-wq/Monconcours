@@ -2633,6 +2633,7 @@ function ico(n, t){
     drapeau:'<path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/>',
     eclair:'<path d="M13 3L5 13.5h6L10 21l8-10.5h-6z"/>',
     etoile:'<path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.8z"/>',
+    vue:'<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
     groupe:'<circle cx="9" cy="8.5" r="3.2"/><path d="M3 19a6 6 0 0 1 12 0"/><circle cx="17" cy="9.5" r="2.5"/><path d="M15.5 14.2A5 5 0 0 1 21 19"/>',
     question:'<circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.8-2.4 2.2-2.4 3.9"/><circle cx="12" cy="17" r=".6" fill="currentColor"/>',
     horloge:'<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
@@ -6116,7 +6117,7 @@ function compterVueResultats(id){
   _vuesComptees.add(id);
   base.rpc('compter_vue_resultats', S.util.connecte ? { p_epreuve: id } : { p_epreuve: id, p_visiteur: idVisiteur() }).then(() => {
     const d = S.derniereNat;
-    if(d && d.id === id) d.vues = (d.vues || 0) + 1;
+    if(d && d.id === id){ d.vues = (d.vues || 0) + 1; if(S.ecran === 'aujourdhui') rendre(); }
   }, () => { _vuesComptees.delete(id); });
 }
 async function chargerClassement(id){
@@ -6153,8 +6154,8 @@ function blocDerniereNationale(){
   if(S.epreuve && S.epreuve.id === d.id && S.epreuve.etat === 'terminee') return '';
   return `<button class="derniere-nat" data-gagnants="${E(d.id)}">
     <span class="dn-ic">${ico('trophee',22)}</span>
-    <span class="dn-txt"><small>Dernière composition nationale</small><b>Voir les résultats et le classement</b><span>${E(d.concours || 'Composition nationale')} · ${E(jourFr(d.debut_le))}</span>${d.vues >= 3 ? `<span class="dn-nb">${ico('groupe', 14)} ${nombreFr(d.vues)} candidats ont déjà vu les résultats</span>` : ''}</span>
-    <span class="dn-fl">→</span></button>`;
+    <span class="dn-txt"><small>Dernière composition nationale</small><b>Voir les résultats et le classement</b><span>${E(d.concours || 'Composition nationale')} · ${E(jourFr(d.debut_le))}</span></span>
+    <span class="dn-fl">→</span>${d.vues >= 1 ? `<span class="dn-vues" aria-label="${d.vues} vue${d.vues > 1 ? 's' : ''}">${ico('vue', 15)}<b>${nombreFr(d.vues)}</b></span>` : ''}</button>`;
 }
 async function chargerCorrectionNat(id){
   if(!(S.corrNat && S.corrNat.id === id && S.corrNat.ok)) S.corrNat = { id, charge:false };
