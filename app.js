@@ -6104,10 +6104,17 @@ function partagerQuestion(id, texteQ){
 /* ---------- les résultats d'une composition nationale ---------- */
 /* chaque candidat qui ouvre les résultats est compté une fois (le chiffre s'affiche sur la carte de l'accueil) */
 const _vuesComptees = new Set();
+function idVisiteur(){
+  try{
+    let v = localStorage.getItem('mc_visiteur');
+    if(!v){ v = (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2)); localStorage.setItem('mc_visiteur', v); }
+    return v;
+  }catch(e){ return null; }
+}
 function compterVueResultats(id){
-  if(!base || !S.util.connecte || !id || _vuesComptees.has(id)) return;
+  if(!base || !id || _vuesComptees.has(id)) return;
   _vuesComptees.add(id);
-  base.rpc('compter_vue_resultats', { p_epreuve: id }).then(() => {
+  base.rpc('compter_vue_resultats', S.util.connecte ? { p_epreuve: id } : { p_epreuve: id, p_visiteur: idVisiteur() }).then(() => {
     const d = S.derniereNat;
     if(d && d.id === id) d.vues = (d.vues || 0) + 1;
   }, () => { _vuesComptees.delete(id); });
