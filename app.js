@@ -102,7 +102,7 @@ const S = {
   repriseCorrection:null, paiementEtat:null,
   cahier:[],
   grille:[],
-  ressources:null, ressourceOuverte:null, erreurCours:'', classement:null, stats:null, compoReprise:null, compositionId:null, reponses:{}, sujetVu:false, apercu:null, corrige:false, chrono:1800, timer:null, compoTab:'feuille',
+  ressources:null, ressourceOuverte:null, erreurCours:'', classement:null, stats:null, compoReprise:null, compositionId:null, reponses:{}, sujetVu:false, apercu:null, corrige:false, chrono:2400, timer:null, compoTab:'feuille',
   grilleNote:null
 };
 
@@ -926,7 +926,7 @@ function ecranResultat(){
       <ol class="actions-diag">
         <li><b>Reprendre tes fautes de ce test.</b> Elles sont déjà dans « Mes erreurs » et reviendront jusqu'à être acquises.</li>
         <li><b>${faibles.length ? 'Réviser ' + E(faibles[0]) : 'Garder ton avance'}.</b> ${faibles.length ? 'C\'est là que tu as perdu le plus de points : dix questions par jour suffisent pour commencer.' : 'Aucune matière faible sur ce test : passe directement aux questions du niveau de ton concours.'}</li>
-        <li><b>Faire ta première composition.</b> 50 questions en 30 minutes, sur la vraie feuille : tu verras ton niveau en conditions réelles.</li>
+        <li><b>Faire ta première composition.</b> 50 questions en 40 minutes, sur la vraie feuille : tu verras ton niveau en conditions réelles.</li>
       </ol>
     </div>
 
@@ -1337,7 +1337,7 @@ function fenetreAnnonce(n){
       <ol class="gc-etapes">
         <li><b>Je m'inscris.</b><span>C'est gratuit. Sans inscription, vous ne pouvez pas entrer.</span></li>
         <li><b>Je viens à l'heure.</b><span>La composition commence à 19 h, heure du Burkina. Tous les candidats composent en même temps, sur le même sujet.</span></li>
-        <li><b>J'entre dans la salle de composition.</b><span>À 19 h, le bouton « Entrer » apparaît. Le temps de la composition est de 30 minutes.</span></li>
+        <li><b>J'entre dans la salle de composition.</b><span>À 19 h, le bouton « Entrer » apparaît. Le temps de la composition est de 40 minutes.</span></li>
         <li><b>Je compose.</b><span>Je m'assois, je noircis ma feuille de réponses et je valide avant la fin du temps.</span></li>
         <li><b>Je regarde mon classement.</b><span>Il paraît juste après la composition, avec votre rang parmi tous les candidats.</span></li>
         <li><b>Je regarde mes erreurs et je m'améliore.</b><span>Chaque erreur est corrigée et expliquée, pour mieux réussir la prochaine fois.</span></li>
@@ -2228,7 +2228,7 @@ async function ouvrirComposition(){
       S.sujetRef = data.sujet || '';
       S.concours = data.concours || 'Concours direct';
       S.seuil = (typeof data.seuil === 'number') ? data.seuil : null;
-      S.dureeCompo = data.duree || 1800;
+      S.dureeCompo = data.duree || 2400;
       S.epreuveCompo = data.epreuve || null;
       S.grille.length = 0;
       (data.questions || []).forEach(q => S.grille.push({ id:q.id, q:q.enonce, o:q.options || [], i:null, m:q.matiere || null }));
@@ -2284,7 +2284,7 @@ async function cloturerComposition(){
   S.remiseEtat = 'envoi';
   try{
     const { data, error } = await base.rpc('remettre_composition', {
-      p_composition: S.compositionId, p_reponses: S.reponses, p_duree: (S.dureeCompo || 1800) - S.chrono
+      p_composition: S.compositionId, p_reponses: S.reponses, p_duree: (S.dureeCompo || 2400) - S.chrono
     });
     if(error) throw error;
     if(data && data.ok){
@@ -2528,7 +2528,7 @@ function ecranAujourdhui(){
           <div class="puce">${S.taches[1]?'✓':'2'}</div>
           <div><h3>Composer</h3>
             <p>Une épreuve chronométrée sur la feuille de réponses.</p>
-            <span class="dur">30 min</span>${S.taches[1] ? '<span class="etat-tache fait">✓ Déjà effectué</span>' : '<span class="etat-tache">Pas encore effectué</span>'}</div>
+            <span class="dur">40 min</span>${S.taches[1] ? '<span class="etat-tache fait">✓ Déjà effectué</span>' : '<span class="etat-tache">Pas encore effectué</span>'}</div>
           <span class="fl-tache" aria-hidden="true">→</span>
         </button>
         <button class="etape ${S.taches[2]?'fait':(S.taches[1]?'actif':'')}${tacheNeuve(2)}" data-cahierfreq="1">
@@ -3775,7 +3775,7 @@ function htmlFeuilleComposition(source){
   /* source : { grille:[{q, o, bonnes}], reponses:{}, note, duree, date, sujet, concours }
      Sans source, on imprime la composition qui vient d'être corrigée. */
   const S0 = source || { grille:S.grille, reponses:S.reponses, note:S.grilleNote,
-    duree:S.dureeUtilisee ?? ((S.dureeCompo || 1800) - S.chrono), date:new Date(),
+    duree:S.dureeUtilisee ?? ((S.dureeCompo || 2400) - S.chrono), date:new Date(),
     sujet:S.sujetRef, concours:S.concours, seuil:S.seuil };
   if(!S0.grille.length || !S0.grille.some(g => g.bonnes)){ toast("La copie n'est pas encore corrigée."); return; }
   const total = S0.grille.length, note = S0.note ?? 0;
@@ -4477,7 +4477,7 @@ function ecranGrille(){
           <button class="gr-outil" data-plein-ecran="1" aria-label="Plein écran">${ico('examen',14)}<span>${document.fullscreenElement ? 'Quitter le plein écran' : 'Plein écran'}</span></button>
         </div></div>
       <div style="text-align:right">
-        <div class="gr-chrono ${couleurChrono(S.chrono, S.dureeCompo || 1800)}" id="chrono">${mmss(S.chrono)}</div>
+        <div class="gr-chrono ${couleurChrono(S.chrono, S.dureeCompo || 2400)}" id="chrono">${mmss(S.chrono)}</div>
         <div class="eyebrow" style="color:#B5AC96">temps restant</div></div>
     </div>
     <div class="sonnerie" id="sonnerie" role="status" aria-live="polite"></div>
@@ -4533,7 +4533,7 @@ function ecranGrille(){
     synchroniserChrono();
     if(S.sync) clearInterval(S.sync);
     S.sync = setInterval(synchroniserChrono, 60000);
-    const total = S.dureeCompo || 1800;
+    const total = S.dureeCompo || 2400;
     const mi = Math.floor(total / 2);
     /* sonnerie de départ : une seule fois par copie, au vrai début */
     if(S.compositionId && S.chrono >= total - 20 && S.departSonne !== S.compositionId){
@@ -4948,7 +4948,7 @@ function ecranCopie(){
   const pos = Math.min(100, total ? n/total*100 : 0);
   const { fausses, blancs } = bilanCopie(S.grille, S.reponses);
   const analyse = analyseCopie(S.grille, S.reponses);
-  const utilise = S.dureeUtilisee ?? ((S.dureeCompo || 1800) - S.chrono);
+  const utilise = S.dureeUtilisee ?? ((S.dureeCompo || 2400) - S.chrono);
   vue().innerHTML = `
   <div class="copie">
     <button class="retourhaut" data-go="aujourdhui">Retour</button>
@@ -4992,7 +4992,7 @@ function ecranCopie(){
       <div class="libelle">Ce que dit la copie</div>
       <div class="carte">
         <div class="mat"><div class="nom">Questions noircies<em>Sur ${total} · les blanches ne rapportent rien</em></div><div class="val num">${Object.keys(S.reponses).length}</div></div>
-        <div class="mat"><div class="nom">Temps utilisé<em>Sur ${Math.round((S.dureeCompo || 1800)/60)} minutes accordées</em></div><div class="val num">${mmss(Math.max(0, utilise))}</div></div>
+        <div class="mat"><div class="nom">Temps utilisé<em>Sur ${Math.round((S.dureeCompo || 2400)/60)} minutes accordées</em></div><div class="val num">${mmss(Math.max(0, utilise))}</div></div>
         <div class="mat"><div class="nom">Fautes ajoutées à « Mes erreurs »<em>Elles reviennent jusqu'à être acquises</em></div><div class="val num">${fausses.length}</div></div>
         ${blancs.length ? `<div class="mat"><div class="nom">Questions laissées blanches</div><div class="val num">${blancs.length}</div></div>` : ''}
         ${analyse ? `<div class="copie-retenir"><b>${E(analyse.titre)}</b><p>${E(analyse.texte)}</p></div>` : ''}
@@ -5972,7 +5972,7 @@ function conseilProchaineVisite(f){
   const j = S.journee || {};
   const taux = f.liste.length ? f.justes / f.liste.length : 0;
   if((f.fautes || []).length >= 3) return 'Reviens demain : tes fautes d\'aujourd\'hui reviendront en premier, c\'est le meilleur moment pour les fixer.';
-  if(taux >= 0.8 && !j.compos_semaine) return 'Tu es prêt pour une composition complète en conditions réelles : 50 questions, 30 minutes.';
+  if(taux >= 0.8 && !j.compos_semaine) return 'Tu es prêt pour une composition complète en conditions réelles : 50 questions, 40 minutes.';
   if(taux >= 0.8) return 'Très bonne série. Demain, essaie les questions les plus ratées par tous.';
   return 'Demain, dix minutes suffisent : le fil reprendra là où tu bloques.';
 }
@@ -7210,7 +7210,7 @@ function missionDuJour(){
     pm ? { t:`Série de 10 questions en ${pm.matiere}, ta matière la plus fragile`, a:`data-cible="${E(pm.matiere)}"` } : { t:'Série de 10 questions dans une matière de ton choix', a:'data-go="revisions"' },
     { t:'Mini-test express : 5 questions sans t\'arrêter', a:'data-pourtoi="5"' },
     { t:'Lire un chapitre de cours, puis faire ses QCM', a:'data-go="revisions"' },
-    { t:'Composer en conditions réelles : 50 questions, 30 minutes', a:'data-go="grille"' },
+    { t:'Composer en conditions réelles : 50 questions, 40 minutes', a:'data-go="grille"' },
     { t:'Défier un ami : 10 questions en 5 minutes', a:'data-defi-lancer="1"' }
   ];
   return m[jourAnnee() % m.length];
