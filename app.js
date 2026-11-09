@@ -1865,6 +1865,17 @@ async function verifierCodePartenaire(cp){
   }catch(e){}
   return '';
 }
+/* Une visite venue par un lien partenaire (?p=CODE) : comptée une fois par ouverture de l'application */
+function noterVisitePartenaire(){
+  if(!base) return;
+  try{
+    const c = (new URLSearchParams(location.search).get('p') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 14);
+    if(c.length < 3 || sessionStorage.getItem('mc_pv_' + c)) return;
+    const v = idVisiteur(); if(!v) return;
+    sessionStorage.setItem('mc_pv_' + c, '1');
+    base.rpc('noter_visite_partenaire', { p_code: c, p_visiteur: v }).then(() => {}, () => {});
+  }catch(e){}
+}
 const adresseTechnique = tel => tel + '@candidat.monconcours.bf';
 const motDePasse = (tel, pin) => tel + '#' + pin;
 
@@ -1903,7 +1914,7 @@ async function ouvrirSession(tel, pin){
 
 async function reprendreSession(){
   if(!base) return;
-  try{ await reprendreSession0(); }finally{ S.sessionPrete = true; chargerEpreuve(); setTimeout(() => rappelFinEssai(0), 5000); setTimeout(() => proposerRappel(0), 12000); }
+  try{ await reprendreSession0(); }finally{ noterVisitePartenaire(); S.sessionPrete = true; chargerEpreuve(); setTimeout(() => rappelFinEssai(0), 5000); setTimeout(() => proposerRappel(0), 12000); }
 }
 async function reprendreSession0(){
   let data = null, erreurSession = null;

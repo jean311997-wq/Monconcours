@@ -6,6 +6,7 @@
 const URL_BASE = 'https://uonhpsumbfuahipbdjnu.supabase.co';
 const CLE = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVvbmhwc3VtYmZ1YWhpcGJkam51Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYxMjg1MTQsImV4cCI6MjEwMTcwNDUxNH0.UR2CSJaK0AyyIRDzDBoALcU7OeE9SdQESHI9ASZMYIk';
 const SITE = 'https://www.monconcoursbf.com';
+const ADMIN_TEL = '77959848';            /* WhatsApp de l'administrateur */
 const zone = document.getElementById('zone');
 const E = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 const nb = v => Number(v || 0).toLocaleString('fr-FR').replace(/ | /g, ' ');
@@ -25,15 +26,15 @@ if(window.supabase && window.supabase.createClient){
 }
 
 function erreur(msg){
-  zone.innerHTML = `<div class="erreur"><b>${E(msg)}</b><p class="doux" style="margin:8px 0 0">Si le problème continue, écris à l'équipe Mon Concours sur WhatsApp.</p></div>`;
+  zone.innerHTML = `<div class="erreur"><b>${E(msg)}</b><p class="doux" style="margin:8px 0 0">Si le problème continue, écrivez à l'équipe Mon Concours sur WhatsApp.</p></div>`;
 }
 
 async function charger(){
-  if(!db) return erreur('Le service ne répond pas pour l\'instant. Réessaie dans un moment.');
-  if(!jeton) return erreur('Ce lien est incomplet. Utilise le lien complet que l\'équipe t\'a envoyé.');
+  if(!db) return erreur('Le service ne répond pas pour l\'instant. Réessayez dans un moment.');
+  if(!jeton) return erreur('Ce lien est incomplet. Utilisez le lien complet que l\'équipe vous a envoyé.');
   let r;
   try{ r = await db.rpc('partenaire_tableau', { p_jeton: jeton }); }catch(e){ r = { error: e }; }
-  if(r.error || !r.data) return erreur('Impossible de charger ton espace. Vérifie ta connexion puis réessaie.');
+  if(r.error || !r.data) return erreur('Impossible de charger votre espace. Vérifiez votre connexion puis réessayez.');
   if(!r.data.ok) return erreur(r.data.message || 'Lien non valide.');
   donnees = r.data;
   dessiner();
@@ -49,7 +50,7 @@ const ETATS = {
 
 function lienPartage(code){
   const lien = SITE + '/?p=' + code;
-  const texte = 'Prépare ton concours direct avec Mon Concours : fais le test de niveau gratuit et entraîne-toi chaque jour. Mon code partenaire : ' + code + '\n' + lien;
+  const texte = 'Préparez votre concours direct avec Mon Concours : faites le test de niveau gratuit et entraînez-vous chaque jour. Code partenaire : ' + code + '\n' + lien;
   return 'https://wa.me/?text=' + encodeURIComponent(texte);
 }
 
@@ -60,7 +61,7 @@ function carte(f){
     const form = f.formule === 'annuelle' ? 'Abonnement Année' : f.formule === 'mensuelle' ? 'Abonnement Mois' : 'Abonnement';
     const com = f.commission > 0
       ? (f.commission_etat === 'validee' ? `Commission ${F(f.commission)} · validée` : `Commission ${F(f.commission)} · sera validée le ${jour(f.valide_le)}`)
-      : 'Pas de commission sur cette formule';
+      : 'Aucune commission sur cette formule';
     detail = `<p class="ligne">${E(form)} · payé le ${E(jour(f.paye_le))}</p><p class="ligne"><b>${E(com)}</b></p>`;
   }
   const tel = f.telephone ? String(f.telephone).replace(/\D/g, '') : '';
@@ -73,58 +74,82 @@ function carte(f){
 function dessiner(){
   const d = donnees, r = d.resume, code = d.code;
   const lien = SITE + '/?p=' + code;
-  const prenom = d.nom || '';
   const liste = (d.filleuls || []).filter(f => filtre === 'tous' ? true : (ETATS[f.etat] || ETATS.inscrit).groupe === filtre);
   const compte = g => (d.filleuls || []).filter(f => g === 'tous' ? true : (ETATS[f.etat] || ETATS.inscrit).groupe === g).length;
+  const total = (r.commission_attente || 0) + (r.commission_validee || 0);
+  const exMois = 20, exAn = 5, exTotal = exMois * d.commission_mois + exAn * d.commission_an;
+  const taux = r.visiteurs > 0 ? Math.min(100, Math.round(100 * r.inscrits / r.visiteurs)) : null;
+  const msgAdmin = 'Bonjour, je suis ' + d.nom + ', partenaire Mon Concours (code ' + code + '). ';
   zone.innerHTML = `
-    <h1>Bonjour ${E(prenom)}</h1>
-    <p class="doux" style="margin:0">Voici ton espace partenaire. Tu gagnes ${F(d.commission_mois)} pour chaque abonnement Mois et ${F(d.commission_an)} pour chaque abonnement Année payé par une personne venue avec ton code.</p>
+    <h1>Bienvenue, ${E(d.nom)}</h1>
+    <p class="doux" style="margin:0">Partenaire Mon Concours. Cet espace suit en temps réel les personnes venues grâce à votre code et à votre lien, et vos commissions.</p>
 
     <div class="carte">
-      <div class="doux">Ton code</div>
+      <div class="doux">Votre code partenaire</div>
       <div class="code" id="le-code">${E(code)}</div>
-      <div class="doux" style="margin-bottom:4px">Ton lien personnel</div>
+      <div class="doux" style="margin-bottom:4px">Votre lien personnel</div>
       <p class="lien" id="le-lien">${E(lien)}</p>
       <div class="rang">
         <button id="cp-code">Copier le code</button>
         <button id="cp-lien" class="creux">Copier le lien</button>
-        <a class="bouton creux" href="${E(lienPartage(code))}" target="_blank" rel="noopener">Envoyer sur WhatsApp</a>
+        <a class="bouton creux" href="${E(lienPartage(code))}" target="_blank" rel="noopener">Partager sur WhatsApp</a>
       </div>
       <p class="petit" id="cp-etat" style="margin:8px 0 0"></p>
-      <p class="petit" style="margin:6px 0 0">La personne ouvre ton lien ou écrit ton code dans la case « Code partenaire » en créant son compte.</p>
+      <p class="petit" style="margin:6px 0 0">La personne ouvre votre lien, ou écrit votre code dans la case « Code partenaire » en créant son compte.</p>
     </div>
 
-    <div class="tuiles">
-      <div class="tuile"><b>${nb(r.inscrits)}</b><span>inscrits avec ton code</span></div>
+    <h2>Votre rémunération</h2>
+    <div class="carte">
+      <table class="bareme"><thead><tr><th>Abonnement payé</th><th class="n">Commission</th></tr></thead><tbody>
+        <tr><td>Abonnement Mois</td><td class="n"><b>${F(d.commission_mois)}</b></td></tr>
+        <tr><td>Abonnement Année</td><td class="n"><b>${F(d.commission_an)}</b></td></tr>
+      </tbody></table>
+      <p class="petit" style="margin:10px 0 0">La commission est calculée sur le premier abonnement payé par chaque personne venue avec votre code ou votre lien. Elle est validée ${nb(d.delai_jours)} jours après le paiement, puis versée avec votre prochain versement.</p>
+      <p class="exemple">Exemple : ${exMois} abonnés Mois et ${exAn} abonnés Année rapportent <b>${F(exTotal)}</b>.</p>
+    </div>
+
+    <h2>Vos résultats</h2>
+    <div class="tuiles cinq">
+      <div class="tuile"><b>${nb(r.visiteurs)}</b><span>visiteurs venus par votre lien</span></div>
+      <div class="tuile"><b>${nb(r.inscrits)}</b><span>inscrits avec votre code</span></div>
       <div class="tuile"><b>${nb(r.actifs3)}</b><span>actifs depuis 3 jours ou plus</span></div>
       <div class="tuile"><b>${nb(r.a_voulu_payer)}</b><span>ont voulu payer, sans y arriver</span></div>
-      <div class="tuile"><b>${nb(r.payes)}</b><span>ont payé</span></div>
+      <div class="tuile"><b>${nb(r.payes)}</b><span>ont payé un abonnement</span></div>
     </div>
+    ${taux !== null ? `<p class="petit" style="margin:0">Sur 100 visiteurs venus par votre lien, ${taux} se sont inscrits.</p>` : ''}
 
-    <h2>Tes commissions</h2>
+    <h2>Vos commissions</h2>
     <div class="argent">
-      <div class="tuile"><b>${F(r.commission_attente)}</b><span>en attente de validation (${nb(d.delai_jours)} jours)</span></div>
-      <div class="tuile"><b>${F(r.solde)}</b><span>validées, à te verser</span></div>
+      <div class="tuile"><b>${F(r.commission_attente)}</b><span>en cours de validation (${nb(d.delai_jours)} jours)</span></div>
+      <div class="tuile"><b>${F(r.solde)}</b><span>validées, à vous verser</span></div>
       <div class="tuile"><b>${F(r.verse)}</b><span>déjà versées</span></div>
     </div>
+    <p class="petit" style="margin:8px 0 0">Total généré depuis le début : <b>${F(total)}</b>.</p>
 
-    <h2>Tes inscrits</h2>
+    <h2>Vos inscrits</h2>
     <div class="filtres" id="filtres">
       ${[['tous', 'Tous'], ['payes', 'Ont payé'], ['voulu', 'Ont voulu payer'], ['inscrits', 'Inscrits seulement']].map(([k, t]) => `<button data-f="${k}" class="${filtre === k ? 'on' : ''}">${t} (${compte(k)})</button>`).join('')}
     </div>
     ${liste.length ? liste.map(carte).join('') : '<div class="vide">Personne dans cette liste pour l\'instant.</div>'}
-    <p class="petit">Tu vois les numéros des personnes qui n'ont pas encore payé, pour les encourager. Appelle avec respect, une fois, sans insister.</p>
+    <p class="petit">Les numéros des personnes qui n'ont pas encore payé sont visibles pour les accompagner. Appelez avec courtoisie, une seule fois, sans insister.</p>
 
-    <h2>Tes versements</h2>
+    <h2>Vos versements</h2>
     <div class="carte">${(d.versements || []).length ? `<table><thead><tr><th>Date</th><th>Note</th><th class="n">Montant</th></tr></thead><tbody>
       ${d.versements.map(v => `<tr><td>${E(jour(v.verse_le))}</td><td>${E(v.note || '')}</td><td class="n"><b>${F(v.montant)}</b></td></tr>`).join('')}</tbody></table>` : '<div class="vide" style="padding:0">Aucun versement pour le moment.</div>'}</div>
 
-    <h2>Comment ça marche</h2>
+    <h2>Écrire à l'administrateur</h2>
+    <div class="carte">
+      <p style="margin:0 0 10px">Une question, une difficulté ou un versement à vérifier : écrivez directement à l'administrateur de Mon Concours sur WhatsApp.</p>
+      <a class="bouton" href="https://wa.me/226${ADMIN_TEL}?text=${encodeURIComponent(msgAdmin)}" target="_blank" rel="noopener">Écrire sur WhatsApp</a>
+      <span class="petit" style="margin-left:8px">77 95 98 48</span>
+    </div>
+
+    <h2>Règles du partenariat</h2>
     <ul class="regles">
-      <li>Une commission naît quand une personne venue avec ton code paie un abonnement. Seul son premier paiement compte.</li>
-      <li>Elle est validée ${nb(d.delai_jours)} jours après le paiement, puis versée avec le prochain versement.</li>
-      <li>Un abonnement offert ne donne pas de commission.</li>
-      <li>Pas de spam, pas de promesse de réussite au concours, et ne te fais jamais passer pour l'équipe Mon Concours.</li>
+      <li>Seul le premier paiement réel de chaque personne donne droit à une commission. Un abonnement offert n'en donne pas.</li>
+      <li>Présentez Mon Concours avec honnêteté : aucune promesse de réussite au concours.</li>
+      <li>Pas de messages en masse non sollicités, et ne vous présentez jamais comme l'équipe Mon Concours.</li>
+      <li>L'administration peut fermer un accès en cas d'abus.</li>
     </ul>
     <div class="rang" style="margin-top:16px"><button id="actualiser" class="creux">Actualiser</button></div>
     <p class="petit">Mis à jour à ${E(heure(new Date()))} (heure de Ouagadougou).</p>`;
@@ -134,7 +159,7 @@ function dessiner(){
     try{ await navigator.clipboard.writeText(txt); z.textContent = msg; }
     catch(e){
       const t = document.createElement('textarea'); t.value = txt; document.body.appendChild(t); t.select();
-      try{ document.execCommand('copy'); z.textContent = msg; }catch(x){ z.textContent = 'Copie impossible : recopie à la main.'; }
+      try{ document.execCommand('copy'); z.textContent = msg; }catch(x){ z.textContent = 'Copie impossible : recopiez à la main.'; }
       t.remove();
     }
   };

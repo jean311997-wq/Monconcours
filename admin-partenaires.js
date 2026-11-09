@@ -71,10 +71,10 @@ async function liste(){
     const z = $('#pa-liste'); if(!z) return;
     if(error || !data || !data.ok){ z.innerHTML = '<div class="vide">' + e((data && data.message) || (error && error.message) || 'Lecture impossible.') + '</div>'; return; }
     const l = data.liste || [];
-    z.innerHTML = l.length ? `<div class="defile"><table><thead><tr><th>Partenaire</th><th>Code</th><th class="num">Inscrits</th><th class="num">Voulu payer</th><th class="num">Payés</th><th class="num">En attente</th><th class="num">À verser</th><th class="num">Versé</th><th>État</th></tr></thead><tbody>
+    z.innerHTML = l.length ? `<div class="defile"><table><thead><tr><th>Partenaire</th><th>Code</th><th class="num">Visiteurs</th><th class="num">Inscrits</th><th class="num">Voulu payer</th><th class="num">Payés</th><th class="num">En attente</th><th class="num">À verser</th><th class="num">Versé</th><th>État</th></tr></thead><tbody>
       ${l.map(p => `<tr data-pa="${e(p.id)}" style="cursor:pointer">
         <td><b>${e(p.nom)}</b></td><td>${e(p.code)}</td>
-        <td class="num">${num(p.resume.inscrits)}</td><td class="num">${num(p.resume.a_voulu_payer)}</td><td class="num">${num(p.resume.payes)}</td>
+        <td class="num">${num(p.resume.visiteurs)}</td><td class="num">${num(p.resume.inscrits)}</td><td class="num">${num(p.resume.a_voulu_payer)}</td><td class="num">${num(p.resume.payes)}</td>
         <td class="num">${F(p.resume.commission_attente)}</td><td class="num"><b>${F(p.resume.solde)}</b></td><td class="num">${F(p.resume.verse)}</td>
         <td>${p.actif ? 'Actif' : '<b>Fermé</b>'}</td></tr>`).join('')}</tbody></table></div>
       <p class="sous" style="margin:8px 0 0">Touchez un partenaire pour voir tout son historique.</p>` : '<div class="vide">Aucun partenaire pour le moment.</div>';
@@ -117,7 +117,7 @@ async function fiche(id){
     <p class="sous">Mois ${F(d.commission_mois)} · Année ${F(d.commission_an)} · validée ${num(d.delai_jours)} jours après le paiement${d.telephone ? ' · ' + e(d.telephone) : ''}</p>
 
     <div class="grille-tuiles" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:12px 0">
-      ${[['Inscrits', r.inscrits], ['Actifs 3 jours et +', r.actifs3], ['Ont voulu payer', r.a_voulu_payer], ['Ont payé', r.payes],
+      ${[['Visiteurs via son lien', r.visiteurs], ['Inscrits', r.inscrits], ['Actifs 3 jours et +', r.actifs3], ['Ont voulu payer', r.a_voulu_payer], ['Ont payé', r.payes],
          ['Commission en attente', F(r.commission_attente)], ['Validée, à verser', F(r.solde)], ['Déjà versé', F(r.verse)]]
         .map(([t, v]) => `<div class="carte" style="margin:0"><div class="sous" style="margin:0 0 4px">${t}</div><b style="font-size:21px">${typeof v === 'number' ? num(v) : v}</b></div>`).join('')}
     </div>
