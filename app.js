@@ -1843,6 +1843,28 @@ function enFrancais(msg, defaut){
   if(/[éèàùâêîôûç]|\b(le|la|les|des|votre|vous|une?)\b/i.test(m) && !/\b(the|is|not|and|with|for)\b/i.test(m)) return m;
   return defaut || "Une erreur est survenue. Réessayez dans un moment.";
 }
+/* Partenaires : le code arrive par le lien ?p=CODE, on le garde jusqu'à l'inscription */
+const CLE_PARTENAIRE = 'mc_partenaire';
+(function(){
+  try{
+    const c = (new URLSearchParams(location.search).get('p') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 14);
+    if(c.length >= 3) localStorage.setItem(CLE_PARTENAIRE, c);
+  }catch(e){}
+})();
+function codePartenaire(){ try{ return localStorage.getItem(CLE_PARTENAIRE) || ''; }catch(e){ return ''; } }
+function codeSaisiPartenaire(){
+  const v = S.form.codeP !== undefined ? S.form.codeP : codePartenaire();
+  return String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 14);
+}
+/* renvoie un message d'erreur si le code est écrit mais n'existe pas, sinon rien */
+async function verifierCodePartenaire(cp){
+  if(cp.length < 3 || !base) return '';
+  try{
+    const { data } = await base.rpc('partenaire_code_valide', { p_code: cp });
+    if(data && data.ok === false) return "Ce code partenaire n'existe pas. Corrige-le ou laisse la case vide.";
+  }catch(e){}
+  return '';
+}
 const adresseTechnique = tel => tel + '@candidat.monconcours.bf';
 const motDePasse = (tel, pin) => tel + '#' + pin;
 
@@ -8512,7 +8534,11 @@ function surcouche(){
         <select id="m-couleur" onchange="maj('couleur',this.value)">
           <option value="">— choisis —</option>
           ${COULEURS.map(c=>`<option value="${c}" ${S.form.couleur===c?'selected':''}>${c}</option>`).join('')}
-        </select></div>` : ''}
+        </select></div>
+      <div class="champ"><label for="m-codep">Code partenaire <span style="font-weight:400">(facultatif)</span></label>
+        <input id="m-codep" type="text" maxlength="14" autocapitalize="characters" autocomplete="off" spellcheck="false"
+          value="${E(S.form.codeP !== undefined ? S.form.codeP : codePartenaire())}" placeholder="Si quelqu'un t'en a donné un"
+          oninput="maj('codeP',this.value.toUpperCase())"></div>` : ''}
 
     <button class="cta" data-${mode === 'inscription' ? 'inscrire' : mode === 'connexion' ? 'connecter' : 'reinitialiser'}="1">
       ${mode === 'inscription' ? 'Créer mon compte' : mode === 'connexion' ? 'Me connecter' : 'Changer mon mot de passe'}</button>
@@ -8639,8 +8665,12 @@ document.addEventListener('click', ev=>{
     else if(!f.couleur) S.erreur = "Choisis ta couleur préférée : elle servira si tu oublies ton mot de passe.";
     else {
       S.erreur = 'Création du compte…'; surcouche();
-      creerCompte(f.nom.trim(), tel, pin).then(r => {
+      const cp = codeSaisiPartenaire();
+      verifierCodePartenaire(cp).then(msg => msg ? { erreur: msg } : creerCompte(f.nom.trim(), tel, pin)).then(r => {
         if(r.erreur){ S.erreur = r.erreur; return surcouche(); }
+        if(cp.length >= 3 && base){
+          try{ base.rpc('rattacher_partenaire', { p_code: cp }).then(() => { try{ localStorage.removeItem(CLE_PARTENAIRE); }catch(e){} }, () => {}); }catch(e){}
+        }
         S.erreur = ''; S.util = {nom:f.nom.trim(), tel:tel, pin:'', connecte:true};
         S.niveauProfil = niveauBase();
         ecrireMemoire({ nom:f.nom.trim(), tel:tel, niveauProfil:S.niveauProfil });

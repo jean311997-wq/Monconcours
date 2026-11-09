@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Espace partenaire · Mon Concours</title>
+<link rel="icon" href="/favicon.png">
+<style>
+  :root{--fond:#0C1512;--carte:#14211C;--trait:#26372F;--texte:#E9EEEA;--doux:#A2B2AA;--or:#E3A82B;--vert:#4FC28F;--bouton:#13805A;--rouge:#E5736B}
+  @media (prefers-color-scheme: light){:root{--fond:#F6F3EC;--carte:#FFFFFF;--trait:#E2DCCD;--texte:#1B1F1D;--doux:#5A645F;--or:#9A6B07;--vert:#0E7A54;--bouton:#13805A;--rouge:#B3382F}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--fond);color:var(--texte);font:16px/1.5 "IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+  main{max-width:720px;margin:0 auto;padding:22px 16px 70px}
+  .marque{font-weight:800;letter-spacing:.04em;color:var(--or);font-size:14px}
+  h1{font-size:25px;line-height:1.25;margin:14px 0 4px}
+  h2{font-size:17px;margin:28px 0 10px}
+  .doux{color:var(--doux);font-size:14px}
+  .carte{background:var(--carte);border:1px solid var(--trait);border-radius:14px;padding:14px 16px;margin:12px 0}
+  .code{font-size:34px;font-weight:800;letter-spacing:.12em;color:var(--or);margin:2px 0 10px}
+  .lien{word-break:break-all;font-size:14px;color:var(--doux);margin:0 0 10px}
+  .rang{display:flex;flex-wrap:wrap;gap:8px}
+  button,.bouton{font:inherit;font-weight:700;font-size:15px;border:0;border-radius:10px;padding:10px 14px;background:var(--bouton);color:#fff;cursor:pointer;text-decoration:none;display:inline-block}
+  button.creux,.bouton.creux{background:transparent;color:var(--texte);border:1px solid var(--trait)}
+  .tuiles{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:12px 0}
+  @media (min-width:560px){.tuiles{grid-template-columns:repeat(4,1fr)}}
+  .tuile{background:var(--carte);border:1px solid var(--trait);border-radius:14px;padding:12px}
+  .tuile b{display:block;font-size:26px;line-height:1.1}
+  .tuile span{color:var(--doux);font-size:13px}
+  .argent{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .argent .tuile b{font-size:21px}
+  .filtres{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+  .filtres button{background:transparent;color:var(--texte);border:1px solid var(--trait);font-weight:600;font-size:14px;padding:7px 12px}
+  .filtres button.on{background:var(--bouton);border-color:var(--bouton);color:#fff}
+  .fil{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+  .fil b{font-size:16px}
+  .badge{display:inline-block;font-size:12.5px;font-weight:700;border-radius:99px;padding:3px 10px;border:1px solid var(--trait);white-space:nowrap}
+  .badge.paye{background:var(--bouton);border-color:var(--bouton);color:#fff}
+  .badge.voulu{color:var(--or);border-color:var(--or)}
+  .badge.non{color:var(--rouge);border-color:var(--rouge)}
+  .ligne{color:var(--doux);font-size:13.5px;margin:4px 0 0}
+  .contact{margin-top:8px}
+  .contact a{display:inline-block;margin-right:12px;color:var(--vert);font-weight:700;font-size:14px}
+  table{width:100%;border-collapse:collapse;font-size:14.5px}
+  td,th{text-align:left;padding:7px 4px;border-bottom:1px solid var(--trait)}
+  td.n,th.n{text-align:right}
+  .vide{color:var(--doux);padding:10px 0}
+  .regles li{margin:5px 0;color:var(--doux);font-size:14px}
+  .erreur{background:var(--carte);border:1px solid var(--rouge);border-radius:14px;padding:16px;margin-top:30px}
+  .petit{font-size:12.5px;color:var(--doux)}
+</style>
+</head>
+<body>
+<main>
+  <div class="marque">MON CONCOURS · ESPACE PARTENAIRE</div>
+  <div id="zone"><p class="doux">Chargement…</p></div>
+</main>
+<script src="/supabase-js.min.js?v=13"></script>
+<script src="partenaire.js?v=1"></script>
+</body>
+</html>

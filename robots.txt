@@ -1,5 +1,6 @@
 User-agent: *
 Allow: /
 Disallow: /admin.html
+Disallow: /partenaire.html
 
 Sitemap: https://www.monconcoursbf.com/sitemap.xml
