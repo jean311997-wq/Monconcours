@@ -1865,6 +1865,31 @@ async function verifierCodePartenaire(cp){
   }catch(e){}
   return '';
 }
+
+/* Le nom du partenaire s'affiche sous le code : venu par son lien, la personne voit tout de suite à qui elle s'inscrit */
+let _minuteurNomP = null;
+function majNomPartenaire(){
+  const champ = document.getElementById('m-codep'), zone = document.getElementById('m-codep-nom');
+  if(!champ || !zone || !base) return;
+  const code = String(champ.value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const parLien = champ.dataset.lien === '1';
+  clearTimeout(_minuteurNomP);
+  if(code.length < 3){ zone.textContent = ''; return; }
+  _minuteurNomP = setTimeout(() => {
+    base.rpc('partenaire_nom_code', { p_code: code }).then(({ data }) => {
+      if(!document.getElementById('m-codep-nom')) return;
+      if(data && data.ok){ zone.style.color = ''; zone.textContent = 'Partenaire : ' + data.nom; return; }
+      if(parLien){
+        /* le code du lien n'existe plus : la case redevient libre */
+        try{ localStorage.removeItem(CLE_PARTENAIRE); }catch(e){}
+        champ.removeAttribute('readonly'); delete champ.dataset.lien; champ.value = ''; maj('codeP', '');
+        const lb = document.querySelector('label[for="m-codep"]'); if(lb) lb.innerHTML = 'Code partenaire <span style="font-weight:400">(facultatif)</span>';
+        zone.textContent = '';
+      } else { zone.style.color = 'var(--rouge, #b3382f)'; zone.textContent = 'Ce code n\'existe pas.'; }
+    }, () => {});
+  }, parLien ? 0 : 350);
+}
+window.majNomPartenaire = majNomPartenaire;
 /* Une visite venue par un lien partenaire (?p=CODE) : comptée une fois par ouverture de l'application */
 function noterVisitePartenaire(){
   if(!base) return;
@@ -8546,10 +8571,12 @@ function surcouche(){
           <option value="">— choisis —</option>
           ${COULEURS.map(c=>`<option value="${c}" ${S.form.couleur===c?'selected':''}>${c}</option>`).join('')}
         </select></div>
-      <div class="champ"><label for="m-codep">Code partenaire <span style="font-weight:400">(facultatif)</span></label>
-        <input id="m-codep" type="text" maxlength="14" autocapitalize="characters" autocomplete="off" spellcheck="false"
+      ${(() => { const venuParLien = S.form.codeP === undefined && codePartenaire().length >= 3;
+        return `<div class="champ"><label for="m-codep">Code partenaire${venuParLien ? '' : ' <span style="font-weight:400">(facultatif)</span>'}</label>
+        <input id="m-codep" type="text" maxlength="14" autocapitalize="characters" autocomplete="off" spellcheck="false" ${venuParLien ? 'readonly data-lien="1"' : ''}
           value="${E(S.form.codeP !== undefined ? S.form.codeP : codePartenaire())}" placeholder="Si quelqu'un t'en a donné un"
-          oninput="maj('codeP',this.value.toUpperCase())"></div>` : ''}
+          oninput="maj('codeP',this.value.toUpperCase()); majNomPartenaire()">
+        <div id="m-codep-nom" style="margin-top:6px;font-weight:600"></div></div>${(setTimeout(majNomPartenaire, 0), '')}`; })()}` : ''}
 
     <button class="cta" data-${mode === 'inscription' ? 'inscrire' : mode === 'connexion' ? 'connecter' : 'reinitialiser'}="1">
       ${mode === 'inscription' ? 'Créer mon compte' : mode === 'connexion' ? 'Me connecter' : 'Changer mon mot de passe'}</button>
