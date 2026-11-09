@@ -1,0 +1,6 @@
+-- Appliqué directement sur la base le 2026-11-09 : parrainage.
+--  * profils.code_parrain ; tables parrainages (filleul -> parrain) et parrain_recompenses (RLS, aucun accès direct)
+--  * mon_parrainage() : code personnel (créé au premier appel), compteurs ; rattacher_parrain(code) à l'inscription (compte de moins de 3 jours)
+--  * parrain_comptes : filleuls qui ont pratiqué au moins un jour et ne sont pas déjà rattachés à un partenaire
+--  * parrain_attribuer : un mois offert par tranche de 30 inscrits comptés, 3 mois au plus (paiement à 0 F « Offert · Parrainage »)
+--  * cron « parrains-verifier » toutes les heures (à la minute 25)

@@ -578,7 +578,7 @@ function nav(){
   n.innerHTML = OG.map(o=>{
     const on = (o.id===S.ecran || (o.id==='grille'&&S.ecran==='copie')
       || (o.id==='aujourdhui'&&['actualite','pourtoi','qdj','gagnants','correctionnat','discussion','question','notion','recherche','defi','top','proposer'].includes(S.ecran))
-      || (o.id==='compte'&&(S.ecran==='parcours'||S.ecran==='communaute'))
+      || (o.id==='compte'&&(S.ecran==='parcours'||S.ecran==='communaute'||S.ecran==='parrainage'))
       || (o.id==='revisions'&&(S.ecran==='qcm'||S.ecran==='cours'))) ? 'on':'';
     const p = (o.id==='cahier' && ouvertes()) ? `<i class="pastille num">${ouvertes()}</i>`:'';
     const centre = o.id === 'grille' ? ' pivot' : '';
@@ -587,7 +587,7 @@ function nav(){
   r.innerHTML = OG.map(o=>{
     const on = (o.id===S.ecran || (o.id==='grille'&&S.ecran==='copie')
       || (o.id==='aujourdhui'&&['actualite','pourtoi','qdj','gagnants','correctionnat','discussion','question','notion','recherche','defi','top','proposer'].includes(S.ecran))
-      || (o.id==='compte'&&(S.ecran==='parcours'||S.ecran==='communaute'))
+      || (o.id==='compte'&&(S.ecran==='parcours'||S.ecran==='communaute'||S.ecran==='parrainage'))
       || (o.id==='revisions'&&(S.ecran==='qcm'||S.ecran==='cours'))) ? 'on':'';
     const p = (o.id==='cahier' && ouvertes()) ? `<span class="pastille num">${ouvertes()}</span>`:'';
     return `<button class="${on}" data-go="${o.id}"${on?' aria-current="page"':''}>
@@ -1853,6 +1853,15 @@ const CLE_PARTENAIRE = 'mc_partenaire';
     if(c.length >= 3) localStorage.setItem(CLE_PARTENAIRE, c);
   }catch(e){}
 })();
+/* Parrainage : le lien d'un candidat porte ?r=CODE, gardé jusqu'à l'inscription */
+const CLE_PARRAIN = 'mc_parrain';
+(function(){
+  try{
+    const c = (new URLSearchParams(location.search).get('r') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
+    if(c.length >= 4) localStorage.setItem(CLE_PARRAIN, c);
+  }catch(e){}
+})();
+function codeParrain(){ try{ return localStorage.getItem(CLE_PARRAIN) || ''; }catch(e){ return ''; } }
 function codePartenaire(){ try{ return localStorage.getItem(CLE_PARTENAIRE) || ''; }catch(e){ return ''; } }
 function codeSaisiPartenaire(){
   const v = S.form.codeP !== undefined ? S.form.codeP : codePartenaire();
@@ -5470,6 +5479,10 @@ function ecranCompte(){
       <span class="ic">${ico('diagnostic',19)}</span>
       <span><b>Mon parcours</b><span>Depuis ton premier jour, matière par matière, et ta carte à partager</span></span>
       <span class="fl">→</span></button>
+    <button class="grande" style="margin-top:10px" data-go="parrainage">
+      <span class="ic">${ico('partage',19)}</span>
+      <span><b>Parrainage</b><span>30 amis inscrits avec ton lien : un mois offert</span></span>
+      <span class="fl">→</span></button>
 
     <div class="classement">
       <div class="t">${ico('trophee',14)} Position estimée</div>
@@ -7769,6 +7782,53 @@ window.majProp = (k, v) => { S.prop[k] = v; };
 window.majPropOpt = (i, v) => { S.prop.o[i] = v; };
 
 /* ---------- mon parcours ---------- */
+/* =====================================================================
+   Parrainage : 30 amis inscrits avec le lien du candidat = un mois offert
+   ===================================================================== */
+function ecranParrainage(){
+  if(!S.util.connecte){ S.modal = 'connexion'; surcouche(); return ecranCompte(); }
+  vue().innerHTML = `<div class="pad">
+    <button class="retourhaut" data-go="compte">Retour</button>
+    <div class="eyebrow">Parrainage</div>
+    <h1 class="titre">Un mois offert pour 30 amis</h1>
+    <p class="sous" style="margin-top:6px">Chaque ami qui s'inscrit avec ton lien et commence à réviser est compté. À 30 amis, un mois d'abonnement t'est offert, et ainsi de suite jusqu'à 3 mois.</p>
+    <div id="parrain-corps"><div class="squelette large" style="margin-top:14px"></div><div class="squelette"></div></div>
+  </div>`;
+  chargerParrainage();
+}
+async function chargerParrainage(){
+  if(!base) return;
+  let d = null;
+  try{ const r = await base.rpc('mon_parrainage'); d = r && r.data; }catch(e){}
+  const zone = document.getElementById('parrain-corps'); if(!zone) return;
+  if(!d || !d.ok){ zone.innerHTML = '<p class="sous" style="margin-top:14px">Le parrainage n\'est pas disponible pour le moment. Réessaie dans un moment.</p>'; return; }
+  const lien = CONTACT.site + '/?r=' + d.code;
+  const reste = Math.max(0, d.objectif - (d.comptes % d.objectif || 0));
+  const prochain = d.mois_gagnes >= d.mois_max ? null : (d.mois_gagnes + 1) * d.objectif;
+  const fait = d.mois_gagnes >= d.mois_max ? d.objectif : (d.comptes - d.mois_gagnes * d.objectif);
+  const pct = Math.max(0, Math.min(100, Math.round(fait / d.objectif * 100)));
+  const msg = "Je prépare les concours avec Mon Concours : QCM corrigés, compositions nationales chaque semaine, classement. Inscris-toi gratuitement avec mon lien : " + lien;
+  zone.innerHTML = `
+    <div class="carte" style="margin-top:14px">
+      <div class="libelle">Tes amis</div>
+      <div style="display:flex;align-items:baseline;gap:8px;margin:6px 0 8px"><b class="num" style="font-size:30px">${nombreFr(Math.max(0, fait))}</b><span class="sous">sur ${d.objectif} pour ${prochain ? 'le prochain mois offert' : 'le maximum atteint'}</span></div>
+      <div style="height:10px;border-radius:6px;background:rgba(127,127,127,.25);overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--or,#E3A82B)"></div></div>
+      <p class="sous" style="margin-top:8px;font-size:12.5px">${nombreFr(d.inscrits)} inscrit${d.inscrits > 1 ? 's' : ''} avec ton lien, dont ${nombreFr(d.comptes)} compté${d.comptes > 1 ? 's' : ''} (ceux qui ont commencé à réviser).${d.mois_gagnes ? ' Déjà offert : ' + d.mois_gagnes + ' mois.' : ''}${prochain ? ' Il en reste ' + reste + '.' : ''}</p>
+    </div>
+    <div class="carte" style="margin-top:12px">
+      <div class="libelle">Ton lien</div>
+      <p class="num" style="margin:6px 0 10px;word-break:break-all;font-size:14px">${E(lien)}</p>
+      <a class="cta vert" id="parrain-wa" style="display:block;text-decoration:none" href="https://wa.me/?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener">Partager sur WhatsApp<small>Le message est déjà écrit</small></a>
+      <button class="cta creux" id="parrain-copie" style="margin-top:9px">Copier mon lien</button>
+    </div>`;
+  const b = document.getElementById('parrain-copie');
+  if(b) b.onclick = async () => {
+    try{ await navigator.clipboard.writeText(lien); toast('Lien copié.'); }catch(e){ toast(lien, 8000); }
+  };
+  const w = document.getElementById('parrain-wa');
+  if(w) w.addEventListener('click', () => { try{ pister('REFERRAL_SHARED'); }catch(e){} });
+}
+
 function ecranParcours(){
   if(!S.util.connecte){ S.modal = 'connexion'; surcouche(); return ecranCompte(); }
   const st = S.stats || {}, dt = S.details || {};
@@ -8759,7 +8819,7 @@ function rendre(){
     grille:ecranGrille, copie:ecranCopie,
     cahier:ecranCahier, lecteur:ecranLecteur, compte:ecranCompte,
     pourtoi:ecranPourToi, qdj:ecranQdj, question:ecranQuestionPartagee, gagnants:ecranGagnants, correctionnat:ecranCorrectionNat, discussion:ecranDiscussion,
-    notion:ecranNotion, recherche:ecranRecherche, defi:ecranDefi, top:ecranTop, proposer:ecranProposer, parcours:ecranParcours, xreprise:ecranRepriseX, xbravo:ecranBravoX, communaute:ecranCommunaute, horsligne:ecranHorsLigne, suppression:ecranSuppression}[S.ecran] || ecranAujourdhui);
+    notion:ecranNotion, recherche:ecranRecherche, defi:ecranDefi, top:ecranTop, proposer:ecranProposer, parcours:ecranParcours, parrainage:ecranParrainage, xreprise:ecranRepriseX, xbravo:ecranBravoX, communaute:ecranCommunaute, horsligne:ecranHorsLigne, suppression:ecranSuppression}[S.ecran] || ecranAujourdhui);
 
   /* FILET — une erreur dans un seul écran ne doit plus jamais laisser
      le candidat devant une page noire. On affiche ce qui s'est passé
@@ -8817,6 +8877,8 @@ document.addEventListener('click', ev=>{
         if(cp.length >= 3 && base){
           try{ base.rpc('rattacher_partenaire_source', { p_code: cp, p_visiteur: idVisiteur(), p_saisi: saisiACle }).then(() => { try{ localStorage.removeItem(CLE_PARTENAIRE); }catch(e){} }, () => {}); }catch(e){}
         }
+        { const rp = codeParrain();
+          if(rp && base){ try{ base.rpc('rattacher_parrain', { p_code: rp }).then(() => { try{ localStorage.removeItem(CLE_PARRAIN); }catch(e){} }, () => {}); }catch(e){} } }
         S.erreur = ''; S.util = {nom:f.nom.trim(), tel:tel, pin:'', connecte:true};
         S.niveauProfil = niveauBase();
         ecrireMemoire({ nom:f.nom.trim(), tel:tel, niveauProfil:S.niveauProfil });
