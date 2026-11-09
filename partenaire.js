@@ -34,13 +34,31 @@ function erreur(msg){
   zone.innerHTML = `<div class="erreur"><b>${E(msg)}</b><p class="doux" style="margin:8px 0 0">Si le problème continue, écrivez à l'équipe Mon Concours sur WhatsApp.</p></div>`;
 }
 
+let acces = '';
+try{ acces = localStorage.getItem('mc_partenaire_acces') || ''; }catch(e){}
+
+function demanderCode(msg){
+  zone.innerHTML = `<h1>Espace partenaire</h1>
+    <p class="doux" style="margin:0 0 12px">Entrez votre code d'accès pour ouvrir votre espace.</p>
+    <div class="carte"><input id="acces" inputmode="numeric" autocomplete="off" placeholder="Code d'accès" style="font:inherit;font-size:22px;letter-spacing:.2em;width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--trait);background:var(--fond);color:var(--texte)">
+    <p class="petit" id="acces-msg" style="color:var(--rouge);margin:8px 0">${E(msg || '')}</p>
+    <button id="acces-ok">Ouvrir mon espace</button></div>`;
+  const champ = document.getElementById('acces');
+  const valider = () => { acces = champ.value.replace(/\D/g, ''); if(!acces) return; charger(); };
+  document.getElementById('acces-ok').onclick = valider;
+  champ.onkeydown = ev => { if(ev.key === 'Enter') valider(); };
+  champ.focus();
+}
+
 async function charger(){
   if(!db) return erreur('Le service ne répond pas pour l\'instant. Réessayez dans un moment.');
   if(!jeton) return erreur('Ce lien est incomplet. Utilisez le lien complet que l\'équipe vous a envoyé.');
   let r;
-  try{ r = await db.rpc('partenaire_tableau', { p_jeton: jeton }); }catch(e){ r = { error: e }; }
+  try{ r = await db.rpc('partenaire_tableau_acces', { p_jeton: jeton, p_acces: acces }); }catch(e){ r = { error: e }; }
   if(r.error || !r.data) return erreur('Impossible de charger votre espace. Vérifiez votre connexion puis réessayez.');
+  if(r.data.code_demande){ try{ localStorage.removeItem('mc_partenaire_acces'); }catch(e){} return demanderCode(r.data.message); }
   if(!r.data.ok) return erreur(r.data.message || 'Lien non valide.');
+  try{ localStorage.setItem('mc_partenaire_acces', acces); }catch(e){}
   donnees = r.data;
   dessiner();
 }
@@ -75,7 +93,7 @@ async function lancerRelance(a){
   const ref = a.dataset.relance, tel = a.dataset.tel, msg = a.dataset.msg;
   const retour = document.querySelector('[data-retour="' + ref + '"]');
   const w = window.open('', '_blank');
-  let r; try{ r = await db.rpc('partenaire_relancer', { p_jeton: jeton, p_ref: ref }); }catch(e){ r = { error: e }; }
+  let r; try{ r = await db.rpc('partenaire_relancer_acces', { p_jeton: jeton, p_ref: ref, p_acces: acces }); }catch(e){ r = { error: e }; }
   if(r.error || !r.data || !r.data.ok){
     if(w) w.close();
     if(retour) retour.textContent = 'Relance impossible pour le moment. Réessayez.';
