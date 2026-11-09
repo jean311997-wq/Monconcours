@@ -513,6 +513,7 @@ function prechargerOutilsPdf(){
   });
 }
 function aller(e){
+  if(paiementObligatoire() && !S.util.connecte && ['testIntro', 'test'].includes(e)){ S.modal = 'inscription'; S.erreur = ''; return surcouche(); }
   if(e !== 'abonnement' && S.raisonAbo) S.raisonAbo = '';
   /* Une copie remise ne se noircit plus. Revenir sur « Composition »
      après avoir quitté ou terminé ouvre donc un nouveau sujet, au lieu de
@@ -529,6 +530,7 @@ function aller(e){
   if(e === 'resultat' && testDejaFait() && S.testNote === null) e = 'aujourdhui';
   if(S.gratuit && (e === 'abonnement' || e === 'paiement')) e = 'compte';   // pas de formules pendant la phase gratuite
   if(['abonnement','paiement'].includes(e) && !S.gratuit) chargerPromo();
+  if(e === 'abonnement' && paiementObligatoire() && S.util.connecte) chargerAbonnement();
   if(['revisions','qcm'].includes(e)){ progressionMemo(); chargerQuestions(); }
   if(e === 'horsligne'){ S.packOuvert = false; if(!S.ressources) chargerRessources(); }
   if(e !== 'lecture'){ S.matiereOuverte = null; S.lectureReprise = null; }
@@ -566,7 +568,7 @@ const ONGLETS = [
 ];
 function nav(){
   const n = $('#nav'), r = $('#rail');
-  const cache = ['engagement','testIntro','test','resultat','verrou','verrou_d','seance','inscription','connexion','paiement','xreprise','xbravo'].includes(S.ecran);
+  const cache = ['engagement','testIntro','test','resultat','verrou','verrou_d','seance','inscription','connexion','paiement','xreprise','xbravo'].concat(bloqueParPartenaire() ? ['abonnement'] : []).includes(S.ecran);
   n.style.display = cache ? 'none' : 'grid';
   r.style.display = cache ? 'none' : '';
   const app = document.querySelector('.app'); if(app) app.classList.toggle('sans-rail', cache);
@@ -1939,7 +1941,7 @@ async function ouvrirSession(tel, pin){
 
 async function reprendreSession(){
   if(!base) return;
-  try{ await reprendreSession0(); }finally{ noterVisitePartenaire(); S.sessionPrete = true; chargerEpreuve(); setTimeout(() => rappelFinEssai(0), 5000); setTimeout(() => proposerRappel(0), 12000); }
+  try{ await reprendreSession0(); }finally{ noterVisitePartenaire(); chargerRegleVisiteur(); S.sessionPrete = true; chargerEpreuve(); setTimeout(() => rappelFinEssai(0), 5000); setTimeout(() => proposerRappel(0), 12000); }
 }
 async function reprendreSession0(){
   let data = null, erreurSession = null;
@@ -1965,6 +1967,7 @@ async function reprendreSession0(){
     /* « Mes cours » s'ouvre sur Troisième ; le niveau déclaré sert aux compositions et au fil */
     S.niveauProfil = profil.niveau || null;
     ecrireMemoire({ nom: profil.nom, tel: profil.telephone || '', niveauProfil: S.niveauProfil });
+    await chargerRegleP();
     const dejaLance = S.progLancee && Date.now() - S.progLancee < 8000;
     if(ECRANS_DECOUVERTE.includes(S.ecran)){ aller('aujourdhui'); if(!dejaLance) chargerProgression(); return; }
     rendre();
@@ -2837,6 +2840,34 @@ const numPaie = op => (CONTACT.paiement && CONTACT.paiement[op]) || CONTACT.admi
 const estAbonne = () => !!(S.abo && S.abo.actif);
 /* abonnement payé : pendant l'essai de 3 jours, les offres restent visibles (sans rien bloquer) */
 const estAbonnePaye = () => estAbonne() && S.abo.formule !== 'essai';
+
+/* Partenaire dont les candidats paient avant tout accès (Omer) : tant que l'abonnement n'est pas validé,
+   la personne ne voit que l'offre et le paiement. La règle vient du serveur et se garde sur le téléphone. */
+function lireRegleP(){ try{ return JSON.parse(localStorage.getItem('mc_regle_p') || 'null'); }catch(e){ return null; } }
+function ecrireRegleP(r){ try{ if(r) localStorage.setItem('mc_regle_p', JSON.stringify(r)); else localStorage.removeItem('mc_regle_p'); }catch(e){} S.regleP = r; }
+S.regleP = lireRegleP();
+const paiementObligatoire = () => !!(S.regleP && S.regleP.obligatoire);
+const bloqueParPartenaire = () => paiementObligatoire() && S.util.connecte && !estAbonnePaye();
+const ECRANS_AVANT_PAIEMENT = ['abonnement', 'paiement'];
+const ECRANS_VISITEUR_PARTENAIRE = ['engagement', 'inscription', 'connexion'];
+async function chargerRegleP(){
+  if(!base) return;
+  try{
+    const { data } = await base.rpc('ma_regle_partenaire');
+    ecrireRegleP(data && data.ok && data.obligatoire ? { nom: data.nom, obligatoire: true, conseiller_tel: data.conseiller_tel || '' } : null);
+  }catch(e){}
+}
+/* un visiteur arrivé par le lien d'un tel partenaire : la règle est connue avant même l'inscription */
+async function chargerRegleVisiteur(){
+  if(!base || S.util.connecte) return;
+  const c = codePartenaire();
+  if(c.length < 3){ if(S.regleP) ecrireRegleP(null); return; }
+  try{
+    const { data } = await base.rpc('partenaire_nom_code', { p_code: c });
+    ecrireRegleP(data && data.ok && data.obligatoire ? { nom: data.nom, obligatoire: true, conseiller_tel: data.conseiller_tel || '' } : null);
+    rendre();
+  }catch(e){}
+}
 /* Le candidat peut recevoir plusieurs propositions d'abonnement ; seul « À demain » les suspend 3 jours. */
 function peutProposer(point){
   const blocage = point >= 1 && point <= 3;     /* le candidat est arrêté : le chemin pour continuer doit toujours se voir */
@@ -2898,7 +2929,7 @@ function avantagesListe(){
     <li>Compositions chronométrées, sans limite, avec ton classement</li>
     <li>Cours et questions sans connexion</li>
   </ul>
-  <p class="sous" style="margin:14px 0 0;text-align:center;font-size:12.5px">${CONTACT.paiementDirect ? 'Orange Money, Moov Money ou Wave.<br>Validation souvent en quelques minutes.' : 'Un conseiller vous guide sur WhatsApp.<br>Activation souvent en quelques minutes.'}</p>`;
+  <p class="sous" style="margin:14px 0 0;text-align:center;font-size:12.5px">${CONTACT.paiementDirect ? 'Orange Money, Moov Money ou Wave.<br>Validation souvent en quelques minutes.' : (paiementObligatoire() ? 'Votre conseiller ' + E(S.regleP.nom) + ' vous guide sur WhatsApp.<br>Activation dès que votre paiement est vérifié.' : 'Un conseiller vous guide sur WhatsApp.<br>Activation souvent en quelques minutes.')}</p>`;
 }
 function offreC(point, cleConseiller, alternatives, sansEntete){
   return (sansEntete ? '' : enteteBilan()) + blocConseiller(cleConseiller, point) +
@@ -2922,6 +2953,7 @@ const peutFeuilleDetaillee = () => S.gratuit || estAbonne() || ((S.stats && S.st
 /* Payer avec l'aide d'un conseiller sur WhatsApp : premier choix, sans formulaire.
    Deux numéros se partagent les demandes ; un même appareil retombe toujours sur le même. */
 function numeroConseiller(){
+  if(paiementObligatoire() && S.regleP.conseiller_tel) return S.regleP.conseiller_tel;
   let i = null;
   try{ i = localStorage.getItem('mc_conseiller'); }catch(e){}
   if(i !== '0' && i !== '1'){
@@ -3008,9 +3040,11 @@ async function validerCode(){
 function ecranAbonnement(){
   const abo = S.abo;
   const paiement = S.paieEnAttente;
+  const verrou = bloqueParPartenaire();
   vue().innerHTML = `
   <div class="pad">
-    <button class="retourhaut" data-go="compte">Retour</button>
+    ${verrou ? `<div class="carte" style="margin:0 0 14px"><div class="eyebrow">Bienvenue</div>
+      <p class="sous" style="margin:6px 0 0">Pour accéder à Mon Concours, choisissez votre abonnement. Votre conseiller <b>${E(S.regleP.nom)}</b> vous accompagne sur WhatsApp pour le paiement.</p></div>` : '<button class="retourhaut" data-go="compte">Retour</button>'}
 
     ${abo && abo.actif ? `
     <div class="carte" style="text-align:center;padding:22px 16px">
@@ -3039,7 +3073,8 @@ function ecranAbonnement(){
       <p class="sous" style="margin:6px 0 0">Votre paiement du ${new Date(paiement.cree_le).toLocaleDateString('fr-FR')} est en cours de vérification. Validation souvent en quelques minutes. Vous recevrez une notification dès que c'est confirmé.</p>
       <p class="sous" style="margin:8px 0 0">Tu veux aller plus vite ? <a href="tel:+226${numeroConseiller()}" data-pister-appel="1">Appelle le +226 ${fmtTel(numeroConseiller())}</a> pour signaler ton paiement.</p>
     </div>` : `
-    ${offreC('abonnement', '', blocAlternatives(), true)}`}
+    ${offreC('abonnement', '', verrou ? '' : blocAlternatives(), true)}`}
+    ${verrou ? '<button class="lien" style="display:block;margin:18px auto 0" data-deconnecter="1">Me déconnecter</button>' : ''}
   </div>`;
 }
 
@@ -3076,9 +3111,9 @@ function ecranPaiement(){
       </div>
       `}
       <a class="cta creux" style="margin-top:12px;display:block;text-align:center;text-decoration:none"
-         href="https://wa.me/226${CONTACT.adminTel}?text=${encodeURIComponent(msgWa)}" target="_blank" rel="noopener" data-pister-wa="capture">
-         ${ico('partage',16)} Envoyer ma capture par WhatsApp<small>Si l'envoi dans l'application est lent</small></a>
-      ${blocAlternatives(f.cle)}
+         href="https://wa.me/226${paiementObligatoire() ? numeroConseiller() : CONTACT.adminTel}?text=${encodeURIComponent(msgWa)}" target="_blank" rel="noopener" data-pister-wa="capture">
+         ${ico('partage',16)} ${paiementObligatoire() ? 'Envoyer aussi ma capture à ' + E(S.regleP.nom) : 'Envoyer ma capture par WhatsApp'}<small>${paiementObligatoire() ? 'Votre conseiller la reçoit. La capture dans l\'application reste obligatoire.' : 'Si l\'envoi dans l\'application est lent'}</small></a>
+      ${paiementObligatoire() ? '' : blocAlternatives(f.cle)}
     </div>`;
     return;
   }
@@ -3098,8 +3133,8 @@ function ecranPaiement(){
         <div class="mat"><div class="nom">Moyen de paiement<em>${O.nom} · au +226 ${E(S.paieTel)}</em></div><div class="val">✓</div></div>
         <div class="mat"><div class="nom">Abonnement demandé<em>${f.n} · ${f.per}</em></div><div class="val num">${f.prix}</div></div>
       </div>
-      <button class="cta" style="margin-top:18px" data-go="revisions">Ouvrir mes révisions</button>
-      <button class="cta creux" style="margin-top:9px" data-go="compte">Retour à mon compte</button>
+      ${paiementObligatoire() ? '<button class="cta" style="margin-top:18px" data-go="abonnement">Voir l\'état de mon paiement</button>' : `<button class="cta" style="margin-top:18px" data-go="revisions">Ouvrir mes révisions</button>
+      <button class="cta creux" style="margin-top:9px" data-go="compte">Retour à mon compte</button>`}
     </div>`;
     return;
   }
@@ -3118,13 +3153,13 @@ function ecranPaiement(){
       <button class="cta" style="margin-top:18px" data-paiefin="1">J'ai payé<small>Je vais envoyer ma capture</small></button>
       <a class="cta creux" style="margin-top:10px;display:block;text-decoration:none" href="https://wa.me/226${numeroConseiller()}?text=${encodeURIComponent(messageConseiller(f.cle))}" target="_blank" rel="noopener" data-conseiller-wa="paiement-etape1" data-conseiller-formule="${E(f.cle)}">${logoReseau('whatsapp')} Un souci pour envoyer l'argent ?<small>Un conseiller vous guide sur WhatsApp</small></a>
       <button class="lien" data-paieannul="1">Annuler</button>
-      ${blocAlternatives(f.cle)}
+      ${paiementObligatoire() ? '' : blocAlternatives(f.cle)}
     </div>`;
     return;
   }
 
   /* Étape 0, paiement direct mis de côté : un seul chemin, le conseiller. */
-  if(!CONTACT.paiementDirect){
+  if(!CONTACT.paiementDirect && !paiementObligatoire()){
     vue().innerHTML = `
     <div class="pad">
       <button class="retourhaut" data-go="abonnement">Retour</button>
@@ -3175,7 +3210,7 @@ function ecranPaiement(){
     </div>
 
     <button class="cta vert" style="margin-top:16px" data-payer="1">Continuer<small>${f.prix} par ${O.nom}</small></button>
-    ${blocAlternatives(f.cle)}
+    ${paiementObligatoire() ? '' : blocAlternatives(f.cle)}
   </div>`;
 }
 
@@ -8634,6 +8669,8 @@ function retirerFacade(){
 }
 
 function rendre(){
+  if(bloqueParPartenaire() && !ECRANS_AVANT_PAIEMENT.includes(S.ecran)) S.ecran = 'abonnement';
+  else if(paiementObligatoire() && !S.util.connecte && !ECRANS_VISITEUR_PARTENAIRE.includes(S.ecran)) S.ecran = 'engagement';
   appliquerTheme();
   retirerFacade();
   if(typeof pister === 'function' && S.ecran !== O.dernierEcran){
@@ -8717,6 +8754,7 @@ document.addEventListener('click', ev=>{
         noterParcoursCompte();
         if(!estXX1()) setTimeout(() => invitationNotifsApresInscription(), 7000);
         S.modal = null; chargerProgression();
+        if(paiementObligatoire()){ chargerAbonnement(); S.choixFormule = S.choixFormule || 'annuelle'; return aller('abonnement'); }
         if(S.defi && S.defi.etat === 'connexion') ouvrirDefi(S.defi.id);
         else if(S.ecran === 'verrou' && S.testNote !== null){ if(estXX1()) lancerRepriseX(); else aller('resultat'); }
         else if(S.ecran === 'verrou_d' && S.testNote !== null){ S.verrouDEtape = 2; aller('verrou_d'); }
@@ -9006,7 +9044,7 @@ document.addEventListener('click', ev=>{
     S.form = {nom:'', tel:'', pin:''};
     S.lus = null; S.lusCharges = false; S.popNatVu = false;
     memoVider(); S.journee = null; S.stats = null; S.details = null; S.classement = null; S.notifications = []; S.cahier = []; S.top = null; S.rappel = null;
-    oublierIdentite();
+    oublierIdentite(); chargerRegleVisiteur();
     const connu = !!(lireMemoire() || {}).dejaVenu;
     S.modalDejaVu = connu;                    // on ne relance pas l'inscription d'un habitué
     return aller(connu ? 'aujourdhui' : 'engagement');

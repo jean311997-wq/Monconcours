@@ -636,7 +636,9 @@ async function vuePaiements(){
 
   $$('[data-pai-confirmer]').forEach(b => b.onclick = async () => {
     b.disabled = true;
-    const { data, error } = await db.rpc('confirmer_paiement', { p_id: b.dataset.paiConfirmer, p_confirme: true });
+    const ref = prompt('Identifiant de la transaction reçue sur ton téléphone (SMS Orange Money / Moov Money). Obligatoire pour les candidats d\'un partenaire en paiement obligatoire, sinon laisse vide :', '');
+    if(ref === null){ b.disabled = false; return; }
+    const { data, error } = await db.rpc('confirmer_paiement_ref', { p_id: b.dataset.paiConfirmer, p_reference: ref });
     if(error || !data || !data.ok){ alert((data && data.message) || (error && error.message) || 'Échec.'); b.disabled = false; return; }
     vuePaiements();
   });

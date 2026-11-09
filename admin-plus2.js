@@ -75,7 +75,9 @@ X().paiementsPlus = async function(zone, recharger){
     });
     haut.querySelectorAll('[data-pp-ok]').forEach(b => b.onclick = async () => {
       b.disabled = true;
-      const { data, error } = await db.rpc('confirmer_paiement', { p_id: b.dataset.ppOk, p_confirme: true });
+      const ref = prompt('Identifiant de la transaction reçue sur ton téléphone (SMS Orange Money / Moov Money). Obligatoire pour les candidats d\'un partenaire en paiement obligatoire, sinon laisse vide :', '');
+      if(ref === null){ b.disabled = false; return; }
+      const { data, error } = await db.rpc('confirmer_paiement_ref', { p_id: b.dataset.ppOk, p_reference: ref });
       if(error || !data || !data.ok){ b.disabled = false; return X().signal((data && data.message) || (error && error.message) || 'Échec.', 'mal'); }
       X().signal('Paiement confirmé : l\'abonnement est actif.', 'bien'); recharger();
     });
