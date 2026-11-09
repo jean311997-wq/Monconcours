@@ -2934,7 +2934,10 @@ const NOMS_ECRANS = {
   recherche:'Recherche', proposer:'Proposer une question', horsligne:'Révision hors ligne', suppression:'Suppression du compte',
   engagement:'Accueil découverte', testIntro:'Test d\'entrée (début)', test:'Test d\'entrée', resultat:'Résultat du test',
   inscription:'Inscription', connexion:'Connexion', apparence:'Apparence', abonnement:'Abonnement', paiement:'Paiement',
-  question:'Question partagée', communaute:'Communauté', assiduite:'Assiduité'
+  question:'Question partagée', communaute:'Communauté', assiduite:'Assiduité',
+  verrou:'Note cachée : invitation à créer un compte (après le test)', verrou_d:'Note cachée : invitation à créer un compte (après un défi)',
+  xreprise:'Séance de reprise des erreurs', xbravo:'Fin de séance (bravo)', discussion:'Discussion de la composition',
+  seance:'Séance du jour', lecteur:'Lecteur de cours', reprise:'Reprise des erreurs'
 };
 const NOMS_ACTIONS = {
   COMPOSITION_SUBMITTED:'Copies remises', COMPOSITION_COMPLETED:'Compositions terminées', COMPOSITION_ANSWER_SELECTED:'Cases noircies en composition',
