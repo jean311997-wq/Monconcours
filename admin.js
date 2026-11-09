@@ -607,19 +607,19 @@ async function vuePaiements(){
 
   zone.innerHTML = `<table class="tableau">
     <thead><tr><th>Candidat</th><th>Numéro</th><th>Abonnement · moyen</th><th>Montant</th><th>Capture</th><th>Statut</th><th>Reçu le</th><th></th></tr></thead>
-    <tbody>${liste.map(p => `
-      <tr>
-        <td><b${p.user_id ? ` class="cliquable" data-fiche="${E(p.user_id)}"` : ''}>${E(p.nom || '—')}</b><br><span style="color:var(--craie2);font-size:12px">${E(p.nom_compte||'')}</span></td>
-        <td>${p.user_id ? `<span class="cliquable" data-fiche="${E(p.user_id)}">${E(p.telephone || '—')}</span>` : E(p.telephone || '—')}</td>
-        <td>${E(NOM_PASS[p.formule] || 'Abonnement')}<br><span style="color:var(--craie2);font-size:12px">${E(NOM_OPERATEUR[p.operateur] || p.operateur || '')}</span></td>
-        <td>${offert(p) ? '<span class="etat">Offert</span>' : nombre(p.montant) + ' F'}</td>
-        <td>${p.preuve_chemin ? `<button class="mini" data-pai-voir="${E(p.preuve_chemin)}">Voir</button>` : '—'}</td>
-        <td>${offert(p) ? '<span class="etat ok">Abonnement gratuit reçu</span>' : (statutLabel[p.statut] || E(p.statut))}</td>
-        <td>${dateHeure(p.cree_le)}</td>
-        <td>${p.statut === 'en_attente' ? `
+    <tbody>${liste.map(p => { const v = p.equipe2 ? ' style="background:rgba(46,160,67,.30)"' : ''; return `
+      <tr${v}>
+        <td${v}><b${p.user_id ? ` class="cliquable" data-fiche="${E(p.user_id)}"` : ''}>${E(p.nom || '—')}</b><br><span style="color:var(--craie2);font-size:12px">${E(p.nom_compte||'')}</span></td>
+        <td${v}>${p.user_id ? `<span class="cliquable" data-fiche="${E(p.user_id)}">${E(p.telephone || '—')}</span>` : E(p.telephone || '—')}</td>
+        <td${v}>${E(NOM_PASS[p.formule] || 'Abonnement')}<br><span style="color:var(--craie2);font-size:12px">${E(p.equipe2 && p.operateur === 'admin' ? 'Activé par l\'équipe 2' : (NOM_OPERATEUR[p.operateur] || p.operateur || ''))}</span></td>
+        <td${v}>${offert(p) ? '<span class="etat">Offert</span>' : nombre(p.montant) + ' F'}</td>
+        <td${v}>${p.preuve_chemin ? `<button class="mini" data-pai-voir="${E(p.preuve_chemin)}">Voir</button>` : '—'}</td>
+        <td${v}>${offert(p) ? '<span class="etat ok">Abonnement gratuit reçu</span>' : (statutLabel[p.statut] || E(p.statut))}</td>
+        <td${v}>${dateHeure(p.cree_le)}</td>
+        <td${v}>${p.statut === 'en_attente' ? `
           <button class="mini" data-pai-confirmer="${E(p.id)}">Confirmer</button>
           <button class="mini danger" data-pai-refuser="${E(p.id)}">Refuser</button>` : (p.statut === 'confirme' ? `<button class="mini" data-pai-recu="${E(p.id)}">Reçu</button>` : '')}</td>
-      </tr>`).join('')}</tbody>
+      </tr>`; }).join('')}</tbody>
   </table>`;
 
   $$('[data-pai-voir]').forEach(b => b.onclick = async () => {

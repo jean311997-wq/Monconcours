@@ -40,9 +40,13 @@ X().paiementsPlus = async function(zone, recharger){
   let onglet = A.ppOnglet || 'recus';
 
   const ligneNom = p => p.user_id ? `<b class="cliquable" data-fiche="${e(p.user_id)}">${e(p.nom || 'Candidat')}</b><br><span class="num cliquable" data-fiche="${e(p.user_id)}" style="font-size:11.5px;color:var(--craie2)">${p.tel ? '+226 ' + e(p.tel) : '—'}</span>` : `<b>${e(p.nom || 'Candidat')}</b>`;
+  const VERT = 'background:rgba(46,160,67,.30)';
+  const moyen = p => p.equipe2 && p.operateur === 'admin' ? 'Activé par l\'équipe 2' : (X().NOM_OPERATEUR[p.operateur] || p.operateur || '');
+  const tableRecus = liste => `<div class="defile"><table><thead><tr><th>Candidat</th><th>Abonnement</th><th>Moyen</th><th>Montant</th><th>Reçu le</th></tr></thead><tbody>${liste.map(p => { const st = p.equipe2 ? ' style="' + VERT + '"' : ''; return `<tr${st}>
+      <td${st}>${ligneNom(p)}</td><td${st}>${e(nomPass(p.formule))}</td><td${st}>${e(moyen(p))}</td><td class="num"${st}>${F(p.montant)}</td><td${st}>${e(X().heureCourte(p.regle_le || p.cree_le))}</td></tr>`; }).join('')}</tbody></table></div>`;
   const corps = {
-    recus: () => (d.recus || []).length ? `<div class="defile"><table><thead><tr><th>Candidat</th><th>Abonnement</th><th>Moyen</th><th>Montant</th><th>Reçu le</th></tr></thead><tbody>${d.recus.map(p => `<tr>
-      <td>${ligneNom(p)}</td><td>${e(nomPass(p.formule))}</td><td>${e(X().NOM_OPERATEUR[p.operateur] || p.operateur || '')}</td><td class="num">${F(p.montant)}</td><td>${e(X().heureCourte(p.regle_le || p.cree_le))}</td></tr>`).join('')}</tbody></table></div>` : '<div class="vide">Aucun paiement reçu sur cette période.</div>',
+    recus: () => (d.recus || []).length ? tableRecus(d.recus) : '<div class="vide">Aucun paiement reçu sur cette période.</div>',
+    eq2: () => (d.equipe2 || []).length ? `<p class="sous" style="font-size:12.5px;margin:0 0 8px">Paiements confirmés ou activés par l'équipe 2 sur cette période.</p>` + tableRecus(d.equipe2) : '<div class="vide">L\'équipe 2 n\'a rien activé sur cette période.</div>',
     cours: () => `${(d.attente || []).length ? `<div class="libelle" style="margin-bottom:6px">Demandes envoyées, à vérifier par l'équipe</div><div class="defile"><table><thead><tr><th>Candidat</th><th>Abonnement · moyen</th><th>Montant</th><th>Depuis</th><th></th></tr></thead><tbody>${d.attente.map(p => `<tr>
       <td>${ligneNom(p)}</td><td>${e(nomPass(p.formule))}<br><span style="color:var(--craie2);font-size:12px">${e(X().NOM_OPERATEUR[p.operateur] || p.operateur || '')}</span></td><td class="num">${F(p.montant)}</td><td>${e(X().depuis(p.cree_le))}</td>
       <td>${p.preuve ? `<button class="mini" data-pp-voir="${e(p.preuve)}">Voir la capture</button> ` : ''}${d.admin ? `<button class="mini" data-pp-ok="${e(p.id)}">Confirmer</button> <button class="mini danger" data-pp-non="${e(p.id)}">Refuser</button>` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<div class="vide" style="margin-bottom:8px">Aucune demande en attente de vérification.</div>'}
@@ -63,6 +67,7 @@ X().paiementsPlus = async function(zone, recharger){
     haut.innerHTML = `
       <div class="compteurs" style="margin-bottom:12px">
         ${tuileP('recus', 'Reçu', F(total), (d.recus || []).length + ' paiement' + ((d.recus || []).length > 1 ? 's' : '') + (d.codes ? ' · ' + d.codes + ' code' + (d.codes > 1 ? 's' : '') + ' gratuit' + (d.codes > 1 ? 's' : '') : ''))}
+        ${tuileP('eq2', 'Activé par l\'équipe 2', F((d.equipe2 || []).reduce((a, p) => a + (p.montant || 0), 0)), (d.equipe2 || []).length + ' paiement' + ((d.equipe2 || []).length > 1 ? 's' : '') + ' · en vert')}
         ${tuileP('cours', 'En cours', nCours, (d.attente || []).length + ' à vérifier (' + F(montantAttente) + ') · ' + (d.en_cours || []).length + ' en train de payer')}
         ${tuileP('non', 'Non confirmé', nNon, (d.refuses || []).length + ' refusé' + ((d.refuses || []).length > 1 ? 's' : '') + ' · ' + (d.abandons || []).length + ' abandonné' + ((d.abandons || []).length > 1 ? 's' : ''))}
       </div>
