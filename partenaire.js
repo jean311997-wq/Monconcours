@@ -53,6 +53,44 @@ const ETATS = {
   inscrit:         { txt: 'Inscrit',                  cls: '',      groupe: 'inscrits' }
 };
 const NOM_FORMULE = { annuelle: 'Année', mensuelle: 'Mois' };
+const SOURCES = {
+  lien:     { txt: 'Par le lien',          court: 'Lien' },
+  code:     { txt: 'Par le code',          court: 'Code' },
+  les_deux: { txt: 'Par le lien et le code', court: 'Lien + code' }
+};
+let filtreSource = 'toutes';
+const recente = f => f.relance_le && Date.now() - Date.parse(f.relance_le) < 24 * 3600000;
+function phraseRelance(f){
+  if(!f.relance_le) return '';
+  return `Déjà relancé ${f.relance_par === 'partenaire' ? 'par vous' : 'par l\'équipe Mon Concours'} le ${jour(f.relance_le)} à ${heure(f.relance_le)}`;
+}
+/* un bouton de relance : on réserve la personne avant d'ouvrir WhatsApp, pour qu'elle ne reçoive pas deux messages */
+function boutonRelance(f, msg){
+  const tel = String(f.telephone || '').replace(/\D/g, '');
+  if(!tel) return '';
+  if(recente(f)) return `<div class="contact"><span class="petit">${E(phraseRelance(f))}. Patientez 24 h avant de la relancer.</span><a href="tel:+226${E(tel)}">Appeler ${E(tel)}</a></div>`;
+  return `<div class="contact"><a href="#" data-relance="${E(f.ref)}" data-tel="${E(tel)}" data-msg="${E(msg)}">Écrire sur WhatsApp</a><a href="tel:+226${E(tel)}">Appeler ${E(tel)}</a><span class="petit" data-retour="${E(f.ref)}"></span></div>`;
+}
+async function lancerRelance(a){
+  const ref = a.dataset.relance, tel = a.dataset.tel, msg = a.dataset.msg;
+  const retour = document.querySelector('[data-retour="' + ref + '"]');
+  const w = window.open('', '_blank');
+  let r; try{ r = await db.rpc('partenaire_relancer', { p_jeton: jeton, p_ref: ref }); }catch(e){ r = { error: e }; }
+  if(r.error || !r.data || !r.data.ok){
+    if(w) w.close();
+    if(retour) retour.textContent = 'Relance impossible pour le moment. Réessayez.';
+    return;
+  }
+  if(r.data.deja){
+    if(w) w.close();
+    const qui = r.data.par === 'vous' ? 'par vous' : 'par l\'équipe Mon Concours';
+    if(retour) retour.textContent = 'Déjà relancé ' + qui + ' à ' + heure(r.data.le) + '. Patientez 24 h.';
+    return;
+  }
+  const url = 'https://wa.me/226' + tel + '?text=' + encodeURIComponent(msg);
+  if(w) w.location.href = url; else location.href = url;
+  charger();
+}
 
 /* ---------- les messages prêts à partager ---------- */
 function messages(code){
@@ -138,16 +176,17 @@ function carte(f){
     detail = `<p class="ligne">${E(form.trim())} · dernier paiement le ${E(jour(f.paye_le))}${rep}</p>
       <p class="ligne"><b>Commissions : ${F(f.commission)}</b>${f.commission > f.commission_validee ? ' (dont ' + F(f.commission - f.commission_validee) + ' en cours de validation)' : ' · validées'}</p>`;
   }
-  const tel = f.telephone ? String(f.telephone).replace(/\D/g, '') : '';
-  const contact = tel ? `<div class="contact"><a href="tel:+226${E(tel)}">Appeler ${E(tel)}</a><a href="https://wa.me/226${E(tel)}" target="_blank" rel="noopener">WhatsApp</a></div>` : '';
+  const contact = f.telephone ? boutonRelance(f, f.etat === 'inscrit' ? msgInactif(f) : msgPaiement(f)) : '';
+  const src = SOURCES[f.source] || SOURCES.code;
   return `<div class="carte"><div class="fil"><b>${E(f.nom)}</b><span class="badge ${e.cls}">${e.txt}</span></div>
-    <p class="ligne">Inscrit le ${E(jour(f.inscrit_le))} · ${nb(f.jours_actifs)} jour${f.jours_actifs > 1 ? 's' : ''} d'activité${f.derniere_vue ? ' · vu le ' + E(jour(f.derniere_vue)) : ''}</p>
+    <p class="ligne">Inscrit le ${E(jour(f.inscrit_le))} · <b>${E(src.txt)}</b> · ${nb(f.jours_actifs)} jour${f.jours_actifs > 1 ? 's' : ''} d'activité${f.derniere_vue ? ' · vu le ' + E(jour(f.derniere_vue)) : ''}</p>
     ${detail}${contact}</div>`;
 }
 
 function evenements(d){
   const ev = [];
-  (d.filleuls || []).forEach(f => ev.push({ t: Date.parse(f.inscrit_le), txt: `<b>${E(f.nom)}</b> s'est inscrit avec votre code.` }));
+  const via = { lien: 'grâce à votre lien', code: 'avec votre code', les_deux: 'grâce à votre lien et à votre code' };
+  (d.filleuls || []).forEach(f => ev.push({ t: Date.parse(f.inscrit_le), txt: `<b>${E(f.nom)}</b> s'est inscrit ${via[f.source] || via.code}.` }));
   const vus = {};
   [...(d.paiements || [])].sort((a, b) => Date.parse(a.paye_le) - Date.parse(b.paye_le)).forEach(p => {
     const premier = !vus[p.nom]; vus[p.nom] = true;
@@ -156,19 +195,32 @@ function evenements(d){
   return ev.sort((a, b) => b.t - a.t);
 }
 
+let nomPartenaire = '';
+const msgPaiement = f => `Bonjour ${prenomDe(f.nom)}, c'est ${nomPartenaire} de Mon Concours. Vous aviez commencé votre abonnement : avez-vous besoin d'aide pour finaliser le paiement ? Je reste disponible.`;
+const msgInactif = f => `Bonjour ${prenomDe(f.nom)}, c'est ${nomPartenaire} de Mon Concours. Comment avance votre préparation ? Votre prochain entraînement vous attend sur l'application, et des compositions nationales sont organisées chaque semaine.`;
 function aRelancer(d){
   const maintenant = Date.now(), trois = 3 * 86400000, out = [];
+  nomPartenaire = d.nom;
   (d.filleuls || []).forEach(f => {
     if(!f.telephone) return;
     if(f.etat === 'a_voulu_payer' || f.etat === 'non_abouti'){
-      out.push({ f, raison: f.etat === 'non_abouti' ? 'Son paiement n\'a pas abouti' : 'A voulu payer sans finaliser', cle: 'paiement',
-        msg: `Bonjour ${prenomDe(f.nom)}, c'est ${d.nom} de Mon Concours. Vous aviez commencé votre abonnement : avez-vous besoin d'aide pour finaliser le paiement ? Je reste disponible.` });
+      out.push({ f, raison: f.etat === 'non_abouti' ? 'Son paiement n\'a pas abouti' : 'A voulu payer sans finaliser', msg: msgPaiement(f) });
     }else if(f.etat === 'inscrit' && (!f.derniere_vue || maintenant - Date.parse(f.derniere_vue) > trois)){
-      out.push({ f, raison: 'Inactif depuis 3 jours ou plus', cle: 'inactif',
-        msg: `Bonjour ${prenomDe(f.nom)}, c'est ${d.nom} de Mon Concours. Comment avance votre préparation ? Votre prochain entraînement vous attend sur l'application, et des compositions nationales sont organisées chaque semaine.` });
+      out.push({ f, raison: 'Inactif depuis 3 jours ou plus', msg: msgInactif(f) });
     }
   });
   return out;
+}
+
+function sectionSources(d){
+  const r = d.resume;
+  if(!r.inscrits) return '<div class="vide" style="padding:0">Les inscrits apparaîtront ici, avec la manière dont ils sont arrivés.</div>';
+  const t = (titre, n, p, aide) => `<div class="tuile"><span>${titre}</span><b>${nb(n)}</b><span>${nb(p)} ont payé</span><div class="petit">${aide}</div></div>`;
+  return `<div class="tuiles">
+    ${t('Par votre lien', r.via_lien, r.payes_lien, 'Ouvert le lien, puis inscrit sans écrire le code.')}
+    ${t('Par votre code', r.via_code, r.payes_code, 'Code écrit à l\'inscription, sans passer par le lien.')}
+    ${t('Lien et code', r.via_les_deux, r.payes_les_deux, 'Ont ouvert le lien et écrit le code.')}
+  </div>`;
 }
 
 function sectionSemaines(d){
@@ -198,8 +250,10 @@ function sectionPaliers(d){
 function dessiner(){
   const d = donnees, r = d.resume, code = d.code;
   const lien = SITE + '/?p=' + code;
-  const liste = (d.filleuls || []).filter(f => filtre === 'tous' ? true : (ETATS[f.etat] || ETATS.inscrit).groupe === filtre);
-  const compte = g => (d.filleuls || []).filter(f => g === 'tous' ? true : (ETATS[f.etat] || ETATS.inscrit).groupe === g).length;
+  const parSource = (d.filleuls || []).filter(f => filtreSource === 'toutes' ? true : f.source === filtreSource);
+  const liste = parSource.filter(f => filtre === 'tous' ? true : (ETATS[f.etat] || ETATS.inscrit).groupe === filtre);
+  const compte = g => parSource.filter(f => g === 'tous' ? true : (ETATS[f.etat] || ETATS.inscrit).groupe === g).length;
+  const compteS = s => (d.filleuls || []).filter(f => s === 'toutes' ? true : f.source === s).length;
   const total = (r.commission_attente || 0) + (r.commission_validee || 0);
   const taux = r.visiteurs > 0 ? Math.min(100, Math.round(100 * r.inscrits / r.visiteurs)) : null;
   const msgAdmin = 'Bonjour, je suis ' + d.nom + ', partenaire Mon Concours (code ' + code + '). ';
@@ -273,11 +327,15 @@ function dessiner(){
     <h2>À relancer en priorité</h2>
     ${relances.length ? relances.map(x => `<div class="carte"><div class="fil"><b>${E(x.f.nom)}</b><span class="badge voulu">${E(x.raison)}</span></div>
       <p class="ligne">Inscrit le ${E(jour(x.f.inscrit_le))} · ${nb(x.f.jours_actifs)} jour${x.f.jours_actifs > 1 ? 's' : ''} d'activité${x.f.derniere_vue ? ' · vu le ' + E(jour(x.f.derniere_vue)) : ''}</p>
-      <div class="contact"><a href="https://wa.me/226${E(String(x.f.telephone).replace(/\D/g, ''))}?text=${encodeURIComponent(x.msg)}" target="_blank" rel="noopener">Écrire sur WhatsApp</a><a href="tel:+226${E(String(x.f.telephone).replace(/\D/g, ''))}">Appeler ${E(x.f.telephone)}</a></div></div>`).join('')
+      ${boutonRelance(x.f, x.msg)}</div>`).join('')
       : '<div class="carte"><div class="vide" style="padding:0">Personne à relancer pour le moment.</div></div>'}
-    <p class="petit">Un seul message, courtois, suffit. Ne relancez pas plusieurs fois la même personne.</p>
+    <p class="petit">Un seul message, courtois, suffit. Dès que vous ouvrez WhatsApp, la personne est notée comme relancée : ni vous, ni l'équipe Mon Concours ne la relancerez de nouveau avant 24 h.</p>
 
     <h2 id="inscrits">Vos inscrits</h2>
+    ${sectionSources(d)}
+    <div class="filtres" id="filtres-source">
+      ${[['toutes', 'Toutes les sources'], ['lien', 'Par le lien'], ['code', 'Par le code'], ['les_deux', 'Lien et code']].map(([k, t]) => `<button data-s="${k}" class="${filtreSource === k ? 'on' : ''}">${t} (${compteS(k)})</button>`).join('')}
+    </div>
     <div class="filtres" id="filtres">
       ${[['tous', 'Tous'], ['payes', 'Ont payé'], ['voulu', 'Ont voulu payer'], ['inscrits', 'Inscrits seulement']].map(([k, t]) => `<button data-f="${k}" class="${filtre === k ? 'on' : ''}">${t} (${compte(k)})</button>`).join('')}
     </div>
@@ -339,6 +397,8 @@ function dessiner(){
   document.getElementById('cp-lien').onclick = () => copier(lien, 'Lien copié.');
   document.getElementById('actualiser').onclick = () => charger();
   document.querySelectorAll('#filtres [data-f]').forEach(b => b.onclick = () => { filtre = b.dataset.f; dessiner(); });
+  document.querySelectorAll('#filtres-source [data-s]').forEach(b => b.onclick = () => { filtreSource = b.dataset.s; dessiner(); });
+  document.querySelectorAll('[data-relance]').forEach(a => a.onclick = ev => { ev.preventDefault(); lancerRelance(a); });
   document.querySelectorAll('[data-cp-msg]').forEach(b => b.onclick = async () => {
     const t = msgs[+b.dataset.cpMsg].texte;
     try{ await navigator.clipboard.writeText(t); b.textContent = 'Copié'; }catch(e){ b.textContent = 'Copie impossible'; }

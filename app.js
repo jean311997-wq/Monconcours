@@ -8677,10 +8677,11 @@ document.addEventListener('click', ev=>{
     else {
       S.erreur = 'Création du compte…'; surcouche();
       const cp = codeSaisiPartenaire();
+      const saisiACle = S.form.codeP !== undefined;
       verifierCodePartenaire(cp).then(msg => msg ? { erreur: msg } : creerCompte(f.nom.trim(), tel, pin)).then(r => {
         if(r.erreur){ S.erreur = r.erreur; return surcouche(); }
         if(cp.length >= 3 && base){
-          try{ base.rpc('rattacher_partenaire', { p_code: cp }).then(() => { try{ localStorage.removeItem(CLE_PARTENAIRE); }catch(e){} }, () => {}); }catch(e){}
+          try{ base.rpc('rattacher_partenaire_source', { p_code: cp, p_visiteur: idVisiteur(), p_saisi: saisiACle }).then(() => { try{ localStorage.removeItem(CLE_PARTENAIRE); }catch(e){} }, () => {}); }catch(e){}
         }
         S.erreur = ''; S.util = {nom:f.nom.trim(), tel:tel, pin:'', connecte:true};
         S.niveauProfil = niveauBase();

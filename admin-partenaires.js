@@ -118,7 +118,7 @@ async function fiche(id){
     <p class="sous">À chaque paiement : Mois ${F(d.commission_mois)} · Année ${F(d.commission_an)} · validée ${num(d.delai_jours)} jours après chaque paiement${d.telephone ? ' · ' + e(d.telephone) : ''}</p>
 
     <div class="grille-tuiles" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:12px 0">
-      ${[['Visiteurs via son lien', r.visiteurs], ['Inscrits', r.inscrits], ['Actifs 3 jours et +', r.actifs3], ['Ont voulu payer', r.a_voulu_payer], ['Ont payé', r.payes], ['Paiements reçus', r.nb_paiements],
+      ${[['Visiteurs via son lien', r.visiteurs], ['Inscrits', r.inscrits], ['Par le lien', r.via_lien], ['Par le code', r.via_code], ['Lien + code', r.via_les_deux], ['Actifs 3 jours et +', r.actifs3], ['Ont voulu payer', r.a_voulu_payer], ['Ont payé', r.payes], ['Paiements reçus', r.nb_paiements],
          ['Commission en attente', F(r.commission_attente)], ['Validée, à verser', F(r.solde)], ['Déjà versé', F(r.verse)]].concat(r.bonus ? [['Dont bonus de paliers', F(r.bonus)]] : [])
         .map(([t, v]) => `<div class="carte" style="margin:0"><div class="sous" style="margin:0 0 4px">${t}</div><b style="font-size:21px">${typeof v === 'number' ? num(v) : v}</b></div>`).join('')}
     </div>
@@ -162,12 +162,14 @@ async function fiche(id){
     </div>` : ''}
 
     <div class="bloc"><div class="libelle">Ses inscrits (${num(r.inscrits)})</div><div class="carte">
-      ${(d.filleuls || []).length ? `<div class="defile"><table><thead><tr><th>Inscrit le</th><th>Nom</th><th>Numéro</th><th>État</th><th class="num">Jours actifs</th><th>Dernière visite</th><th>Paiements</th><th class="num">Commission</th></tr></thead><tbody>
+      ${(d.filleuls || []).length ? `<div class="defile"><table><thead><tr><th>Inscrit le</th><th>Nom</th><th>Numéro</th><th>Arrivé</th><th>État</th><th>Relance</th><th class="num">Jours actifs</th><th>Dernière visite</th><th>Paiements</th><th class="num">Commission</th></tr></thead><tbody>
         ${d.filleuls.map(f => `<tr>
           <td style="white-space:nowrap">${e(jour(f.inscrit_le))}</td>
           <td><b>${e(f.nom)}</b></td>
           <td>${f.telephone ? `<a target="_blank" rel="noopener" href="${e(lienWa(f.telephone))}">${e(f.telephone)}</a>` : ''}</td>
+          <td>${e(({lien:'Lien',code:'Code',les_deux:'Lien + code'})[f.source] || '')}</td>
           <td>${e(ETAT[f.etat] || f.etat)}</td>
+          <td style="white-space:nowrap">${f.relance_le ? e(jour(f.relance_le) + (f.relance_par === 'partenaire' ? ' (lui)' : ' (équipe)')) : ''}</td>
           <td class="num">${num(f.jours_actifs)}</td>
           <td style="white-space:nowrap">${e(jour(f.derniere_vue))}</td>
           <td>${f.etat === 'paye' ? e(num(f.nb_paiements) + ' paiement' + (f.nb_paiements > 1 ? 's' : '') + ' · dernier : ' + (f.formule === 'annuelle' ? 'Année' : f.formule === 'mensuelle' ? 'Mois' : 'Autre') + ' ' + F(f.montant) + ' le ' + jour(f.paye_le)) : ''}</td>
