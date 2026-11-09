@@ -301,7 +301,7 @@ function rendre(){
      pedagogie:vuePedagogie, candidats:vueCandidats,
      depot:vueDepot, import:vueImport, bibliotheque:vueBibliotheque,
      validation:vueValidation, questions:vueQuestions, sujets:vueSujets, actualites:vueActualites,
-     referentiel:vueReferentiel, journal:vueJournal, musique:vueMusique, paiements:vuePaiements,
+     referentiel:vueReferentiel, journal:vueJournal, musique:vueMusique, paiements:vuePaiements, relances_paiement:vueRelancesPaiement,
      collectives:vueCollectives, signalements:vueSignalements, avis:vueAvis, indicateurs:vueIndicateurs, propositions:vuePropositions }[A.vue] || vueTableau)();
   $('#vue').scrollTop = 0;
 }
@@ -533,6 +533,17 @@ async function chargerAbandonnes(){
   A.tAband = setTimeout(() => { if(document.getElementById('pai-aband')) chargerAbandonnes(); }, 45000);
 }
 
+/* ---------- relance de paiement : sa propre page, hors de la liste des paiements ---------- */
+async function vueRelancesPaiement(){
+  $('#vue').innerHTML = `
+  <div class="entete-vue">
+    <h2>Relance de paiement</h2>
+    <p>Les candidats qui ont commencé un abonnement sans le terminer. Une relance WhatsApp en un clic.</p>
+  </div>
+  <div class="carte" id="pai-aband"><h3 style="margin:0 0 6px">Paiements abandonnés</h3><p style="margin:0">Chargement…</p></div>`;
+  chargerAbandonnes();
+}
+
 /* ---------- paiements ---------- */
 const NOM_PASS = { semaine:'Abonnement Semaine', mensuelle:'Abonnement Mois', annuelle:'Abonnement Année' };
 const NOM_OPERATEUR = { orange_money:'Orange Money', moov_money:'Moov Money', wave:'Wave', code:'Code', admin:'Activé par l\'équipe' };
@@ -544,7 +555,6 @@ async function vuePaiements(){
        le nom et le montant, puis confirmez ou refusez. La confirmation active
        immédiatement l'abonnement du candidat.</p>
   </div>
-  <div class="carte" id="pai-aband"><h3 style="margin:0 0 6px">Paiements abandonnés</h3><p style="margin:0">Chargement…</p></div>
   <div id="pai-plus"></div>
   <div class="carte"><h3 style="margin:0 0 8px">Toutes les demandes, une par une</h3><div id="pai-liste">Chargement…</div></div>
   <div class="carte" style="margin-top:14px">
@@ -572,7 +582,6 @@ async function vuePaiements(){
   </div>`;
 
   if(window.ADMIN && window.ADMIN.paiementsPlus) window.ADMIN.paiementsPlus($('#pai-plus'), vuePaiements);
-  chargerAbandonnes();
   $('#act-go').onclick = async () => {
     const msg = $('#act-msg'); msg.textContent = '…';
     const { data, error } = await db.rpc('admin_activer_pass', { p_telephone: $('#act-tel').value, p_formule: $('#act-formule').value, p_note: $('#act-note').value });
