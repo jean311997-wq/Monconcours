@@ -285,7 +285,7 @@ function dessiner(){
     <h1>Bienvenue, ${E(d.nom)}</h1>
     <p class="doux" style="margin:0">Partenaire Mon Concours. Cet espace suit en temps réel les personnes venues grâce à votre code et à votre lien, et vos commissions.</p>
     ${nouveaux ? `<div class="nouveau">${nb(nouveaux)} nouveauté${nouveaux > 1 ? 's' : ''} depuis votre dernière visite. <a href="#nouvelles">Voir</a></div>` : ''}
-    <nav class="ancres"><a href="#resultats">Résultats</a><a href="#commissions">Commissions</a><a href="#inscrits">Inscrits</a><a href="#partager">Partager</a><a href="#aide">Aide</a></nav>
+    <nav class="ancres"><a href="#conditions">Conditions</a><a href="#resultats">Résultats</a><a href="#commissions">Commissions</a><a href="#inscrits">Inscrits</a><a href="#partager">Partager</a><a href="#aide">Aide</a></nav>
 
     <div class="carte">
       <div class="doux">Votre code partenaire</div>
@@ -299,6 +299,18 @@ function dessiner(){
       </div>
       <p class="petit" id="cp-etat" style="margin:8px 0 0"></p>
       <p class="petit" style="margin:6px 0 0">La personne ouvre votre lien, ou écrit votre code dans la case « Code partenaire » en créant son compte.</p>
+    </div>
+
+    <h2 id="conditions">Conditions du partenariat</h2>
+    <div class="carte">
+      <ol class="regles" style="padding-left:20px;margin:0">
+        <li>Vous avez un code et un lien personnels. Une personne est comptée pour vous si elle s'inscrit par votre lien, avec votre code, ou les deux.</li>
+        <li>Vous êtes rémunéré à chaque paiement réel d'une personne venue par vous : ${F(d.commission_mois)} pour un Abonnement Mois, ${F(d.commission_an)} pour un Abonnement Année, à chaque renouvellement, sans limite de durée. Un abonnement offert ne donne pas de commission.</li>
+        <li>Chaque commission est validée ${nb(d.delai_jours)} jours après le paiement, puis versée. Chaque versement apparaît dans « Vos versements ».</li>
+        <li>Vous accompagnez vos candidats sur WhatsApp. Pour chaque paiement, le candidat envoie sa capture dans l'application : l'administrateur vérifie la réception de l'argent avant d'activer son abonnement.</li>
+        <li>Présentez Mon Concours avec honnêteté : aucune promesse de réussite au concours, pas de messages en masse non sollicités, et ne vous présentez jamais comme l'équipe Mon Concours.</li>
+        <li>Les conditions peuvent évoluer avec un préavis de 7 jours. Les commissions déjà validées restent dues. L'administration peut fermer un accès en cas d'abus.</li>
+      </ol>
     </div>
 
     <h2>Votre rémunération</h2>
@@ -392,14 +404,6 @@ function dessiner(){
       <span class="petit" style="margin-left:8px">77 95 98 48</span>
     </div>
 
-    <h2>Règles du partenariat</h2>
-    <ul class="regles">
-      <li>Une commission est due pour chaque paiement réel d'une personne venue avec votre code. Un abonnement offert n'en donne pas.</li>
-      <li>Présentez Mon Concours avec honnêteté : aucune promesse de réussite au concours.</li>
-      <li>Pas de messages en masse non sollicités, et ne vous présentez jamais comme l'équipe Mon Concours.</li>
-      <li>L'administration peut fermer un accès en cas d'abus.</li>
-      <li>Les conditions peuvent évoluer avec un préavis de 7 jours. Les commissions déjà validées restent dues.</li>
-    </ul>
     <div class="rang" style="margin-top:16px"><button id="actualiser" class="creux">Actualiser</button></div>
     <p class="petit">Mis à jour à ${E(heure(new Date()))} (heure de Ouagadougou).</p>`;
 
