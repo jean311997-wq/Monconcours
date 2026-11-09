@@ -3154,7 +3154,7 @@ async function vueTableau(){
     <div class="bloc">
       <div class="libelle">Les nouveautés : sont-elles utilisées ?<span>${libellePeriode(j)}</span></div>
       <div class="carte"><div class="mini-compteurs">
-        ${[['Inscriptions à la nationale', nv.nationale_inscrits], ['Défis créés', nv.defis], ['Invitations à des défis', nv.invitations],
+        ${[['Inscriptions à la nationale', nv.nationale_inscrits], ['Invitations à des défis', nv.invitations],
            ['Packs hors ligne', nv.packs], ['Cartes de résultat partagées', nv.cartes], ['Attestations téléchargées', nv.attestations],
            ['Badges gagnés', nv.badges], ['Relances J+3 / J+7 envoyées', nv.relances], ['Revenus après une relance', nv.retours_relance],
            ['Rappels actifs (notifications)', t.push_actifs]]
