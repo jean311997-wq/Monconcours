@@ -2180,7 +2180,14 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('pagehide', fermerSession);
 setInterval(viderFile, 15000);
 window.addEventListener('error', e => {
-  pister('ERROR_OCCURRED', { message: String(e.message).slice(0,200) });
+  /* « Script error. » sans fichier = un script étranger à l'application (navigateur intégré de Facebook, extension, traduction) :
+     on garde la trace, mais avec le navigateur d'origine pour pouvoir en trouver la source */
+  const ua = navigator.userAgent || '';
+  const nav = /FBAN|FBAV|FB_IAB|FBIOS/.test(ua) ? 'facebook' : /Instagram/.test(ua) ? 'instagram' : /TikTok|musical_ly/.test(ua) ? 'tiktok' : /; wv\)/.test(ua) ? 'webview' : 'autre';
+  const meta = { message: String(e.message).slice(0,200), nav };
+  if(e.filename){ meta.fichier = String(e.filename).split('/').pop().slice(0,60); meta.ligne = e.lineno; meta.colonne = e.colno; }
+  else meta.etranger = true;
+  pister('ERROR_OCCURRED', meta);
 });
 
 let profondeurVue = 0;

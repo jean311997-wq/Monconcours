@@ -1,0 +1,7 @@
+-- Appliqué directement sur la base le 2026-11-09 (voir historique des migrations Supabase) :
+--  * preparer_relances_abonnement : relances aux jours 1, 3, 7, 14, 30 (au lieu d'une par jour pendant 60 jours), jamais deux en 48 h
+--  * preparer_relances_fin_essai : seulement « expire demain » et « terminé »
+--  * preparer_renouvellements + cron « renouvellements » : J-7 bilan personnel, J-3 passer à l'Année, J-1 conseiller WhatsApp
+--  * admin_renouvellements() : liste des abonnés à renouveler pour le tableau de bord
+--  * usage_jour + purger_evenements : le détail d'usage (par jour, candidat, événement, écran, temps) est gardé avant la purge
+--  * suppression des index idx_ev_ecran et idx_ev_element (jamais utilisés)

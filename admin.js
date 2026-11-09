@@ -533,14 +533,48 @@ async function chargerAbandonnes(){
   A.tAband = setTimeout(() => { if(document.getElementById('pai-aband')) chargerAbandonnes(); }, 45000);
 }
 
+/* ---------- abonnés à renouveler : relance WhatsApp en un clic (7 jours avant à 7 jours après la fin) ---------- */
+function messageRenouvellement(c){
+  const prenom = (c.nom || '').trim().split(/\s+/)[0];
+  const reste = Math.ceil((new Date(c.fin_le) - Date.now()) / 86400000);
+  const debut = 'Bonjour ' + prenom + ', c\'est l\'équipe Mon Concours. ';
+  if(reste <= 0) return debut + 'Ton abonnement est terminé. Tu veux le renouveler pour retrouver l\'accès complet ? Je peux t\'aider à payer en deux minutes. L\'Abonnement Année (4 000 F) couvre toute la saison.';
+  if(reste <= 1) return debut + 'Ton abonnement se termine demain. Je peux t\'aider à le renouveler en deux minutes, pour ne pas perdre ton rythme.';
+  return debut + 'Ton abonnement se termine dans ' + reste + ' jours. Pour continuer sans limite, tu peux le renouveler, ou passer à l\'Abonnement Année (4 000 F) qui couvre toute la saison. Je t\'aide si tu veux.';
+}
+async function chargerRenouvellements(){
+  const zone = $('#pai-renouv'); if(!zone) return;
+  if(!(A.admin || A.investisseur)){ zone.remove(); return; }
+  const { data, error } = await db.rpc('admin_renouvellements');
+  if(error || !data || !data.ok){ zone.innerHTML = '<h3 style="margin:0 0 6px">Abonnements à renouveler</h3><p style="margin:0">' + E((data && data.message) || (error && error.message) || 'Indisponible.') + '</p>'; return; }
+  const liste = data.liste || [];
+  zone.innerHTML = '<h3 style="margin:0 0 6px">Abonnements à renouveler · ' + liste.length + '</h3>' +
+    '<p style="margin:0 0 10px;color:var(--craie2);font-size:13px">Abonnés Mois ou Semaine dont la fin tombe dans les 7 jours, ou terminée depuis moins de 7 jours. Les notifications partent seules à 7, 3 et 1 jour ; ici, la relance personnelle sur WhatsApp.</p>' +
+    (liste.length ? liste.map(c => {
+      const tel = String(c.telephone || '').replace(/\D/g, '');
+      const lien = 'https://wa.me/' + (tel.length === 8 ? '226' + tel : tel) + '?text=' + encodeURIComponent(messageRenouvellement(c));
+      const fin = new Date(c.fin_le); const reste = Math.ceil((fin - Date.now()) / 86400000);
+      const etat = reste <= 0 ? 'terminé le ' : 'se termine le ';
+      return '<div class="ligne-aband" style="display:flex;gap:8px;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid var(--trait,#2a2a2a)' + (c.envoye_le ? ';opacity:.55' : '') + '">' +
+        '<div style="min-width:0"><b>' + E(c.nom || 'Candidat') + '</b><br><span style="font-size:12px;color:var(--craie2)">' + E(c.telephone) + ' · ' + E(NOM_PASS[c.formule] || c.formule) + ' · ' + etat + fin.toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit' }) + (c.envoye_le ? ' · relancé' : '') + '</span></div>' +
+        '<a class="mini" data-relance="' + E(c.user_id) + '" style="display:inline-block;text-decoration:none;background:var(--laterite,#13805A);color:#fff;padding:7px 13px;border-radius:9px;font-size:13px;font-weight:600;white-space:nowrap" href="' + E(lien) + '" target="_blank" rel="noopener">' + (c.envoye_le ? 'Renvoyer' : 'Envoyer') + '</a></div>';
+    }).join('') : '<p style="margin:0">Aucun abonnement à renouveler pour le moment.</p>');
+  zone.querySelectorAll('[data-relance]').forEach(a => a.addEventListener('click', ev => {
+    ev.preventDefault();
+    relancerUnique(a, () => { const l = a.closest('.ligne-aband'); if(l){ l.style.opacity = '.55'; a.textContent = 'Renvoyer'; } });
+  }));
+}
+
 /* ---------- relance de paiement : sa propre page, hors de la liste des paiements ---------- */
 async function vueRelancesPaiement(){
   $('#vue').innerHTML = `
   <div class="entete-vue">
     <h2>Relance de paiement</h2>
-    <p>Les candidats qui ont commencé un abonnement sans le terminer. Une relance WhatsApp en un clic.</p>
+    <p>Les abonnés à renouveler et les candidats qui ont commencé un abonnement sans le terminer. Une relance WhatsApp en un clic.</p>
   </div>
+  <div class="carte" id="pai-renouv"><h3 style="margin:0 0 6px">Abonnements à renouveler</h3><p style="margin:0">Chargement…</p></div>
   <div class="carte" id="pai-aband"><h3 style="margin:0 0 6px">Paiements abandonnés</h3><p style="margin:0">Chargement…</p></div>`;
+  chargerRenouvellements();
   chargerAbandonnes();
 }
 
