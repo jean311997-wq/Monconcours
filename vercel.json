@@ -1,4 +1,7 @@
 {
+  "rewrites": [
+    { "source": "/espace", "destination": "/partenaire.html" }
+  ],
   "redirects": [
     {
       "source": "/(.*)",

@@ -107,18 +107,19 @@ async function fiche(id){
     return;
   }
   const r = d.resume;
-  const lienPage = SITE + '/partenaire.html#' + d.jeton;
+  const lienPage = SITE + '/espace#' + (d.jeton_court || d.jeton);
   const lienCode = SITE + '/?p=' + d.code;
-  const msgPartenaire = 'Bonjour ' + d.nom + ', voici ton espace partenaire Mon Concours : ' + lienPage + '\nTon code : ' + d.code + '\nTon lien à partager : ' + lienCode + '\nGarde ce premier lien pour toi : il ouvre ton tableau de bord.';
+  const msgPartenaire = 'Bonjour ' + d.nom + ', voici votre espace partenaire Mon Concours : ' + lienPage + '\nVotre code : ' + d.code + '\nVotre lien à partager : ' + lienCode + '\nGardez le premier lien pour vous : il ouvre votre tableau de bord.';
+  const msgPoint = 'Bonjour ' + d.nom + ', voici votre point Mon Concours : ' + num(r.visiteurs) + ' visiteurs par votre lien, ' + num(r.inscrits) + ' inscrits, ' + num(r.payes) + ' personnes ayant payé (' + num(r.nb_paiements) + ' paiements). Commissions validées à vous verser : ' + num(r.solde) + ' F. Votre espace : ' + lienPage;
 
   $('#vue').innerHTML = `
     <p><button class="mini" id="pa-retour">← Tous les partenaires</button></p>
     <h2 class="titre">${e(d.nom)} <span class="sous" style="font-size:15px">· code ${e(d.code)}${d.actif ? '' : ' · accès fermé'}</span></h2>
-    <p class="sous">Mois ${F(d.commission_mois)} · Année ${F(d.commission_an)} · validée ${num(d.delai_jours)} jours après le paiement${d.telephone ? ' · ' + e(d.telephone) : ''}</p>
+    <p class="sous">À chaque paiement : Mois ${F(d.commission_mois)} · Année ${F(d.commission_an)} · validée ${num(d.delai_jours)} jours après chaque paiement${d.telephone ? ' · ' + e(d.telephone) : ''}</p>
 
     <div class="grille-tuiles" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:12px 0">
-      ${[['Visiteurs via son lien', r.visiteurs], ['Inscrits', r.inscrits], ['Actifs 3 jours et +', r.actifs3], ['Ont voulu payer', r.a_voulu_payer], ['Ont payé', r.payes],
-         ['Commission en attente', F(r.commission_attente)], ['Validée, à verser', F(r.solde)], ['Déjà versé', F(r.verse)]]
+      ${[['Visiteurs via son lien', r.visiteurs], ['Inscrits', r.inscrits], ['Actifs 3 jours et +', r.actifs3], ['Ont voulu payer', r.a_voulu_payer], ['Ont payé', r.payes], ['Paiements reçus', r.nb_paiements],
+         ['Commission en attente', F(r.commission_attente)], ['Validée, à verser', F(r.solde)], ['Déjà versé', F(r.verse)]].concat(r.bonus ? [['Dont bonus de paliers', F(r.bonus)]] : [])
         .map(([t, v]) => `<div class="carte" style="margin:0"><div class="sous" style="margin:0 0 4px">${t}</div><b style="font-size:21px">${typeof v === 'number' ? num(v) : v}</b></div>`).join('')}
     </div>
 
@@ -130,6 +131,7 @@ async function fiche(id){
         <button class="cta" id="pa-cp-page">Copier son lien secret</button>
         ${d.telephone ? `<a class="cta creux" target="_blank" rel="noopener" href="${e(lienWa(d.telephone, msgPartenaire))}" style="text-decoration:none">Lui envoyer sur WhatsApp</a>` : ''}
         <button class="cta creux" id="pa-cp-code">Copier son lien à partager</button>
+        ${d.telephone ? `<a class="cta creux" target="_blank" rel="noopener" href="${e(lienWa(d.telephone, msgPoint))}" style="text-decoration:none">Lui envoyer son point par WhatsApp</a>` : ''}
       </div>
       <p id="pa-cp-etat" class="sous" style="margin:8px 0 0"></p>
     </div>
@@ -160,7 +162,7 @@ async function fiche(id){
     </div>` : ''}
 
     <div class="bloc"><div class="libelle">Ses inscrits (${num(r.inscrits)})</div><div class="carte">
-      ${(d.filleuls || []).length ? `<div class="defile"><table><thead><tr><th>Inscrit le</th><th>Nom</th><th>Numéro</th><th>État</th><th class="num">Jours actifs</th><th>Dernière visite</th><th>Paiement</th><th class="num">Commission</th></tr></thead><tbody>
+      ${(d.filleuls || []).length ? `<div class="defile"><table><thead><tr><th>Inscrit le</th><th>Nom</th><th>Numéro</th><th>État</th><th class="num">Jours actifs</th><th>Dernière visite</th><th>Paiements</th><th class="num">Commission</th></tr></thead><tbody>
         ${d.filleuls.map(f => `<tr>
           <td style="white-space:nowrap">${e(jour(f.inscrit_le))}</td>
           <td><b>${e(f.nom)}</b></td>
@@ -168,8 +170,8 @@ async function fiche(id){
           <td>${e(ETAT[f.etat] || f.etat)}</td>
           <td class="num">${num(f.jours_actifs)}</td>
           <td style="white-space:nowrap">${e(jour(f.derniere_vue))}</td>
-          <td>${f.etat === 'paye' ? e((f.formule === 'annuelle' ? 'Année' : f.formule === 'mensuelle' ? 'Mois' : 'Autre') + ' · ' + F(f.montant) + ' · ' + jour(f.paye_le)) : ''}</td>
-          <td class="num">${f.commission_etat ? '<b>' + F(f.commission) + '</b><br><span class="sous" style="font-size:12px">' + (f.commission_etat === 'validee' ? 'validée' : 'validée le ' + e(jour(f.valide_le))) + '</span>' : (f.etat === 'paye' ? '0 F' : '')}</td>
+          <td>${f.etat === 'paye' ? e(num(f.nb_paiements) + ' paiement' + (f.nb_paiements > 1 ? 's' : '') + ' · dernier : ' + (f.formule === 'annuelle' ? 'Année' : f.formule === 'mensuelle' ? 'Mois' : 'Autre') + ' ' + F(f.montant) + ' le ' + jour(f.paye_le)) : ''}</td>
+          <td class="num">${f.etat === 'paye' ? '<b>' + F(f.commission) + '</b><br><span class="sous" style="font-size:12px">dont validée : ' + F(f.commission_validee) + '</span>' : ''}</td>
         </tr>`).join('')}</tbody></table></div>` : '<div class="vide">Personne ne s\'est inscrit avec son code pour le moment.</div>'}
     </div></div>
 
