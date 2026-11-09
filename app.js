@@ -528,7 +528,7 @@ function aller(e){
   /* le test de niveau se passe une seule fois : plus jamais d'étapes 1, 2, 3 ensuite */
   if(['engagement','testIntro','test'].includes(e) && testDejaFait()) e = 'aujourdhui';
   if(e === 'resultat' && testDejaFait() && S.testNote === null) e = 'aujourdhui';
-  if(S.gratuit && (e === 'abonnement' || e === 'paiement')) e = 'compte';   // pas de formules pendant la phase gratuite
+  if(S.gratuit && !paiementObligatoire() && (e === 'abonnement' || e === 'paiement')) e = 'compte';   // pas de formules pendant la phase gratuite
   if(['abonnement','paiement'].includes(e) && !S.gratuit) chargerPromo();
   if(e === 'abonnement' && paiementObligatoire() && S.util.connecte) chargerAbonnement();
   if(['revisions','qcm'].includes(e)){ progressionMemo(); chargerQuestions(); }
@@ -3037,7 +3037,46 @@ async function validerCode(){
 }
 
 /* La page « Mon abonnement » : trois cartes, deux boutons dessous */
+function ecranOffrePartenaire(){
+  const nom = E(S.regleP.nom), paiement = S.paieEnAttente;
+  const liste = [
+    ['grille', 'Des compositions nationales chronométrées, sur la vraie feuille, corrigées, avec votre classement'],
+    ['cahier', 'Le cahier d\'erreurs : chaque erreur revient jusqu\'à ce que vous ayez juste'],
+    ['crayon', 'Questions et corrections sans limite, matière par matière'],
+    ['doc', 'La feuille corrigée détaillée, en PDF'],
+    ['hors', 'Les cours et les questions sans connexion'],
+    ['partage', 'Votre conseiller ' + S.regleP.nom + ' vous accompagne sur WhatsApp']
+  ];
+  vue().innerHTML = `
+  <div class="pad">
+    ${S.paiementEtat && S.paiementEtat.statut === 'refuse' ? `<div class="carte" style="margin:0 0 14px;text-align:center;border-color:var(--rouge-bord);background:var(--rouge-fond)"><div class="eyebrow">Paiement rejeté</div><p class="sous" style="margin:6px 0 0">${E(S.paiementEtat.message || '')}</p></div>` : ''}
+    ${paiement ? `
+    <div class="carte" style="margin:0 0 14px;text-align:center">
+      <div class="eyebrow">Capture reçue</div>
+      <h1 class="titre" style="font-size:22px;margin:8px 0">Paiement en cours de vérification</h1>
+      <p class="sous">Votre paiement du ${new Date(paiement.cree_le).toLocaleDateString('fr-FR')} est en cours de vérification. Votre accès s'ouvre dès qu'il est confirmé, et vous recevez une notification.</p>
+      <p class="sous" style="margin:8px 0 0">Besoin d'aller plus vite ? Écrivez à ${nom} : <a href="tel:+226${numeroConseiller()}" data-pister-appel="1">+226 ${fmtTel(numeroConseiller())}</a></p>
+    </div>` : `
+    <div class="eyebrow">Mon Concours · avec ${nom}</div>
+    <div class="serment" style="font-size:34px;margin:10px 0 0">Prépare ton concours<br><em>avec méthode</em>.</div>
+    <p class="hero-texte">Tout ce qu'il faut pour t'entraîner, te corriger et te situer, avec un conseiller qui t'accompagne du premier jour au concours.</p>
+    <ul class="inclus-liste" style="margin-top:16px">${liste.map(x => `<li>${E(x[1])}</li>`).join('')}</ul>
+    <h2 class="titre" style="font-size:19px;margin:22px 0 10px">Choisissez votre abonnement</h2>
+    ${carteFormule('annuelle')}${carteFormule('mensuelle')}
+    <div class="carte" style="margin-top:6px">
+      <div class="eyebrow">Comment ça se passe</div>
+      <ol style="margin:10px 0 0;padding-left:20px;line-height:1.6;font-size:14.5px">
+        <li>Vous choisissez votre abonnement.</li>
+        <li>${nom} vous guide sur WhatsApp pour le paiement.</li>
+        <li>Vous envoyez votre capture ici : l'accès s'ouvre dès que le paiement est vérifié.</li>
+      </ol>
+    </div>`}
+    <button class="lien" style="display:block;margin:18px auto 0" data-deconnecter="1">Me déconnecter</button>
+  </div>`;
+}
+
 function ecranAbonnement(){
+  if(bloqueParPartenaire()) return ecranOffrePartenaire();
   const abo = S.abo;
   const paiement = S.paieEnAttente;
   const verrou = bloqueParPartenaire();
@@ -3083,6 +3122,29 @@ function ecranPaiement(){
   const op = OPERATEURS[S.operateur] ? S.operateur : 'orange';
   const O = OPERATEURS[op];
 
+  /* Candidats d'un partenaire en paiement obligatoire : pas de formulaire, le conseiller guide, puis la capture. */
+  if(paiementObligatoire() && S.paieEtape !== 3 && S.paieEtape !== 2){
+    vue().innerHTML = `
+    <div class="pad">
+      <button class="retourhaut" data-go="abonnement">Retour</button>
+      <h1 class="titre">Votre abonnement</h1>
+      <div class="carte" style="margin:12px 0 16px">
+        <div class="mat"><div class="nom">${E(f.n)}<em>${E(f.per)}, sans renouvellement automatique</em></div><div class="val num" style="white-space:nowrap">${E(f.prix)}</div></div>
+      </div>
+      <div class="carte" style="margin:0 0 16px">
+        <div class="eyebrow">Comment payer</div>
+        <ol style="margin:10px 0 0;padding-left:20px;line-height:1.6;font-size:14.5px">
+          <li><b>Écrivez à ${E(S.regleP.nom)}</b> sur WhatsApp : il vous indique où envoyer ${E(f.prix)}.</li>
+          <li><b>Payez</b>, puis gardez le message de confirmation.</li>
+          <li><b>Revenez ici</b> et envoyez votre capture : c'est elle qui active votre abonnement.</li>
+        </ol>
+      </div>
+      ${blocConseiller(f.cle, 'paiement')}
+      <button class="cta" style="margin-top:12px" data-paiefin="1">J'ai payé : envoyer ma capture<small>Obligatoire pour activer l'abonnement</small></button>
+    </div>`;
+    return;
+  }
+
   /* Étape 3 : la capture du paiement, dans l'application ou par WhatsApp. */
   if(S.paieEtape === 3){
     const msgWa = 'Bonjour, j\'ai payé l\'' + f.n + ' (' + f.prix + ') par ' + O.nom + '. Mon numéro de compte Mon Concours : ' + ((S.util && S.util.tel) || S.paieTel) + '. Je vous envoie ma capture.';
@@ -3090,7 +3152,7 @@ function ecranPaiement(){
     <div class="pad">
       <button class="retourhaut" data-paieretour="1">Retour</button>
       <h1 class="titre">Envoyez la capture<br>de votre paiement</h1>
-      <p class="sous" style="margin:10px 0 18px">Capture d'écran du message ${O.nom} qui confirme votre paiement de ${f.prix}.</p>
+      <p class="sous" style="margin:10px 0 18px">${paiementObligatoire() ? 'Capture d\'écran du message qui confirme votre paiement de ' + f.prix + '. Elle est obligatoire : sans elle, votre paiement ne peut pas être vérifié.' : 'Capture d\'écran du message ' + O.nom + ' qui confirme votre paiement de ' + f.prix + '.'}</p>
 
       ${S.erreur ? `<div class="alerte" role="alert">${E(S.erreur)}</div>` : ''}
 
@@ -8845,10 +8907,12 @@ document.addEventListener('click', ev=>{
     /* Un clic du candidat ne vaut pas un paiement : on demande la
        preuve avant toute activation, et c'est le serveur qui décide. */
     pister('PAYMENT_DECLARED', { formule: S.choixFormule, operateur: S.operateur });
+    if(paiementObligatoire()){ S.paieTel = (S.util.tel || '').replace(/\D/g, ''); S.paieNomCompte = (S.util.nom && S.util.nom !== 'Candidat') ? S.util.nom : 'Candidat'; S.operateur = 'orange'; }
     S.paieEtape = 3; S.paievePreuve = null; S.erreur = '';
     return rendre();
   }
   if(d.paieretour){
+    if(paiementObligatoire()){ S.paieEtape = 0; S.erreur = ''; return rendre(); }
     S.paieEtape = S.paievePreuve ? 3 : 1; S.erreur='';
     if(S.paieEtape === 1) return rendre();
     S.paieEtape = 1; return rendre();
