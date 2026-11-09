@@ -398,6 +398,7 @@ function dessiner(){
       <li>Présentez Mon Concours avec honnêteté : aucune promesse de réussite au concours.</li>
       <li>Pas de messages en masse non sollicités, et ne vous présentez jamais comme l'équipe Mon Concours.</li>
       <li>L'administration peut fermer un accès en cas d'abus.</li>
+      <li>Les conditions peuvent évoluer avec un préavis de 7 jours. Les commissions déjà validées restent dues.</li>
     </ul>
     <div class="rang" style="margin-top:16px"><button id="actualiser" class="creux">Actualiser</button></div>
     <p class="petit">Mis à jour à ${E(heure(new Date()))} (heure de Ouagadougou).</p>`;

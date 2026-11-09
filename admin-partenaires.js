@@ -64,7 +64,30 @@ async function liste(){
       <button class="cta" id="pa-creer" style="margin-top:6px">Créer le partenaire</button>
       <p id="pa-etat" class="sous" style="margin-top:8px"></p>
     </div>` : ''}
+    <div class="bloc" id="pa-prevenir"></div>
     <div class="bloc"><div class="libelle">Tous les partenaires</div><div class="carte" id="pa-liste">Chargement…</div></div>`;
+
+  /* les partenaires à prévenir : un message prêt dès qu'un de leurs candidats a payé */
+  const chargerPrevenir = async () => {
+    const b = $('#pa-prevenir'); if(!b) return;
+    const { data } = await db.rpc('admin_partenaires_a_prevenir');
+    const l = (data && data.ok && data.liste) || [];
+    if(!l.length){ b.innerHTML = ''; return; }
+    const jourFr = d => new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', timeZone: 'UTC' });
+    b.innerHTML = `<div class="libelle">À prévenir (${num(l.length)})</div><div class="carte">
+      ${l.map(x => {
+        const prenom = String(x.partenaire || '').trim().split(/\s+/)[0];
+        const valide = new Date(Date.parse(x.paye_le) + x.delai_jours * 86400000);
+        const msg = 'Bonjour ' + prenom + ', bonne nouvelle : ' + x.candidat + ' vient de payer l\'Abonnement ' + (x.formule === 'annuelle' ? 'Année' : 'Mois') + ' grâce à vous. Votre commission : ' + num(x.commission) + ' F, validée le ' + jourFr(valide) + '. Merci pour votre travail. Votre espace : ' + SITE + '/espace#' + x.jeton_court;
+        return `<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--trait)">
+          <div><b>${e(x.partenaire)}</b> · ${e(x.candidat)} a payé l'Abonnement ${x.formule === 'annuelle' ? 'Année' : 'Mois'} · <b>${F(x.commission)}</b></div>
+          ${x.telephone ? `<a class="cta petit" target="_blank" rel="noopener" data-prevenu="${e(x.paiement)}" href="${e(lienWa(x.telephone, msg))}">Prévenir sur WhatsApp</a>` : '<span class="sous">Pas de numéro</span>'}
+        </div>`; }).join('')}</div>`;
+    $$('[data-prevenu]').forEach(a => a.addEventListener('click', () => {
+      db.rpc('admin_partenaire_prevenu', { p_paiement: a.dataset.prevenu }).then(() => setTimeout(chargerPrevenir, 800));
+    }));
+  };
+  chargerPrevenir();
 
   const charger = async () => {
     const { data, error } = await db.rpc('admin_partenaires');
@@ -107,6 +130,8 @@ async function fiche(id){
     return;
   }
   const r = d.resume;
+  const { data: ca } = await db.rpc('admin_partenaire_code_acces', { p_id: id });
+  const codeAcces = (ca && ca.ok && ca.code) || '';
   const lienPage = SITE + '/espace#' + (d.jeton_court || d.jeton);
   const lienCode = SITE + '/?p=' + d.code;
   const msgPartenaire = 'Bonjour ' + d.nom + ', voici votre espace partenaire Mon Concours : ' + lienPage + '\nVotre code : ' + d.code + '\nVotre lien à partager : ' + lienCode + '\nGardez le premier lien pour vous : il ouvre votre tableau de bord.';
@@ -153,6 +178,7 @@ async function fiche(id){
         <label>Commission Année (F)<input id="pr-an" type="number" min="0" step="50" value="${d.commission_an}"></label>
       </div>
       <label>Note interne<input id="pr-note" maxlength="200" value="${e(d.note || '')}"></label>
+      <label>Code d'accès à son espace (chiffres)<input id="pr-acces" inputmode="numeric" maxlength="10" value="${e(codeAcces)}"></label>
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
         <button class="cta" id="pr-save">Enregistrer</button>
         <button class="cta creux" id="pr-actif">${d.actif ? 'Fermer son accès' : 'Rouvrir son accès'}</button>
@@ -202,7 +228,14 @@ async function fiche(id){
     if(er || !data || !data.ok){ z.textContent = (data && data.message) || (er && er.message) || 'Échec.'; return; }
     X().signal(msg, 'info'); fiche(id);
   };
-  $('#pr-save').onclick = () => maj({ p_mois: parseInt($('#pr-mois').value, 10), p_an: parseInt($('#pr-an').value, 10), p_note: $('#pr-note').value }, 'Réglages enregistrés.');
+  $('#pr-save').onclick = async () => {
+    const nouveau = $('#pr-acces').value.replace(/\D/g, '');
+    if(nouveau !== codeAcces){
+      const { data: r2 } = await db.rpc('admin_partenaire_code_acces', { p_id: id, p_code: nouveau });
+      if(!r2 || !r2.ok){ $('#pr-etat').textContent = (r2 && r2.message) || 'Code d\'accès refusé.'; return; }
+    }
+    maj({ p_mois: parseInt($('#pr-mois').value, 10), p_an: parseInt($('#pr-an').value, 10), p_note: $('#pr-note').value }, 'Réglages enregistrés.');
+  };
   $('#pr-actif').onclick = () => {
     if(d.actif && !confirm('Fermer l\'accès de ' + d.nom + ' ? Son lien et son code ne fonctionneront plus.')) return;
     maj({ p_actif: !d.actif }, d.actif ? 'Accès fermé.' : 'Accès rouvert.');

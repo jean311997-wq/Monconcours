@@ -2847,6 +2847,7 @@ function lireRegleP(){ try{ return JSON.parse(localStorage.getItem('mc_regle_p')
 function ecrireRegleP(r){ try{ if(r) localStorage.setItem('mc_regle_p', JSON.stringify(r)); else localStorage.removeItem('mc_regle_p'); }catch(e){} S.regleP = r; }
 S.regleP = lireRegleP();
 const paiementObligatoire = () => !!(S.regleP && S.regleP.obligatoire);
+const paiementParPartenaire = () => !!(S.regleP && S.regleP.conseiller_tel);
 const bloqueParPartenaire = () => paiementObligatoire() && S.util.connecte && !estAbonnePaye();
 const ECRANS_AVANT_PAIEMENT = ['abonnement', 'paiement'];
 const ECRANS_VISITEUR_PARTENAIRE = ['engagement', 'inscription', 'connexion'];
@@ -2854,7 +2855,7 @@ async function chargerRegleP(){
   if(!base) return;
   try{
     const { data } = await base.rpc('ma_regle_partenaire');
-    ecrireRegleP(data && data.ok && data.obligatoire ? { nom: data.nom, obligatoire: true, conseiller_tel: data.conseiller_tel || '' } : null);
+    ecrireRegleP(data && data.ok ? { nom: data.nom, obligatoire: !!data.obligatoire, conseiller_tel: data.conseiller_tel || '' } : null);
   }catch(e){}
 }
 /* un visiteur arrivé par le lien d'un tel partenaire : la règle est connue avant même l'inscription */
@@ -2864,7 +2865,7 @@ async function chargerRegleVisiteur(){
   if(c.length < 3){ if(S.regleP) ecrireRegleP(null); return; }
   try{
     const { data } = await base.rpc('partenaire_nom_code', { p_code: c });
-    ecrireRegleP(data && data.ok && data.obligatoire ? { nom: data.nom, obligatoire: true, conseiller_tel: data.conseiller_tel || '' } : null);
+    ecrireRegleP(data && data.ok ? { nom: data.nom, obligatoire: !!data.obligatoire, conseiller_tel: data.conseiller_tel || '' } : null);
     rendre();
   }catch(e){}
 }
@@ -2929,7 +2930,7 @@ function avantagesListe(){
     <li>Compositions chronométrées, sans limite, avec ton classement</li>
     <li>Cours et questions sans connexion</li>
   </ul>
-  <p class="sous" style="margin:14px 0 0;text-align:center;font-size:12.5px">${CONTACT.paiementDirect ? 'Orange Money, Moov Money ou Wave.<br>Validation souvent en quelques minutes.' : (paiementObligatoire() ? 'Votre conseiller ' + E(S.regleP.nom) + ' vous guide sur WhatsApp.<br>Activation dès que votre paiement est vérifié.' : 'Un conseiller vous guide sur WhatsApp.<br>Activation souvent en quelques minutes.')}</p>`;
+  <p class="sous" style="margin:14px 0 0;text-align:center;font-size:12.5px">${CONTACT.paiementDirect ? 'Orange Money, Moov Money ou Wave.<br>Validation souvent en quelques minutes.' : (paiementParPartenaire() ? 'Votre conseiller ' + E(S.regleP.nom) + ' vous guide sur WhatsApp.<br>Activation dès que votre paiement est vérifié.' : 'Un conseiller vous guide sur WhatsApp.<br>Activation souvent en quelques minutes.')}</p>`;
 }
 function offreC(point, cleConseiller, alternatives, sansEntete){
   return (sansEntete ? '' : enteteBilan()) + blocConseiller(cleConseiller, point) +
@@ -2953,7 +2954,7 @@ const peutFeuilleDetaillee = () => S.gratuit || estAbonne() || ((S.stats && S.st
 /* Payer avec l'aide d'un conseiller sur WhatsApp : premier choix, sans formulaire.
    Deux numéros se partagent les demandes ; un même appareil retombe toujours sur le même. */
 function numeroConseiller(){
-  if(paiementObligatoire() && S.regleP.conseiller_tel) return S.regleP.conseiller_tel;
+  if(paiementParPartenaire() && S.regleP.conseiller_tel) return S.regleP.conseiller_tel;
   let i = null;
   try{ i = localStorage.getItem('mc_conseiller'); }catch(e){}
   if(i !== '0' && i !== '1'){
@@ -3123,7 +3124,7 @@ function ecranPaiement(){
   const O = OPERATEURS[op];
 
   /* Candidats d'un partenaire en paiement obligatoire : pas de formulaire, le conseiller guide, puis la capture. */
-  if(paiementObligatoire() && S.paieEtape !== 3 && S.paieEtape !== 2){
+  if(paiementParPartenaire() && S.paieEtape !== 3 && S.paieEtape !== 2){
     vue().innerHTML = `
     <div class="pad">
       <button class="retourhaut" data-go="abonnement">Retour</button>
@@ -3152,7 +3153,7 @@ function ecranPaiement(){
     <div class="pad">
       <button class="retourhaut" data-paieretour="1">Retour</button>
       <h1 class="titre">Envoyez la capture<br>de votre paiement</h1>
-      <p class="sous" style="margin:10px 0 18px">${paiementObligatoire() ? 'Capture d\'écran du message qui confirme votre paiement de ' + f.prix + '. Elle est obligatoire : sans elle, votre paiement ne peut pas être vérifié.' : 'Capture d\'écran du message ' + O.nom + ' qui confirme votre paiement de ' + f.prix + '.'}</p>
+      <p class="sous" style="margin:10px 0 18px">${paiementParPartenaire() ? 'Capture d\'écran du message qui confirme votre paiement de ' + f.prix + '. Elle est obligatoire : sans elle, votre paiement ne peut pas être vérifié.' : 'Capture d\'écran du message ' + O.nom + ' qui confirme votre paiement de ' + f.prix + '.'}</p>
 
       ${S.erreur ? `<div class="alerte" role="alert">${E(S.erreur)}</div>` : ''}
 
@@ -3173,8 +3174,8 @@ function ecranPaiement(){
       </div>
       `}
       <a class="cta creux" style="margin-top:12px;display:block;text-align:center;text-decoration:none"
-         href="https://wa.me/226${paiementObligatoire() ? numeroConseiller() : CONTACT.adminTel}?text=${encodeURIComponent(msgWa)}" target="_blank" rel="noopener" data-pister-wa="capture">
-         ${ico('partage',16)} ${paiementObligatoire() ? 'Envoyer aussi ma capture à ' + E(S.regleP.nom) : 'Envoyer ma capture par WhatsApp'}<small>${paiementObligatoire() ? 'Votre conseiller la reçoit. La capture dans l\'application reste obligatoire.' : 'Si l\'envoi dans l\'application est lent'}</small></a>
+         href="https://wa.me/226${paiementParPartenaire() ? numeroConseiller() : CONTACT.adminTel}?text=${encodeURIComponent(msgWa)}" target="_blank" rel="noopener" data-pister-wa="capture">
+         ${ico('partage',16)} ${paiementParPartenaire() ? 'Envoyer aussi ma capture à ' + E(S.regleP.nom) : 'Envoyer ma capture par WhatsApp'}<small>${paiementParPartenaire() ? 'Votre conseiller la reçoit. La capture dans l\'application reste obligatoire.' : 'Si l\'envoi dans l\'application est lent'}</small></a>
       ${paiementObligatoire() ? '' : blocAlternatives(f.cle)}
     </div>`;
     return;
@@ -8907,12 +8908,12 @@ document.addEventListener('click', ev=>{
     /* Un clic du candidat ne vaut pas un paiement : on demande la
        preuve avant toute activation, et c'est le serveur qui décide. */
     pister('PAYMENT_DECLARED', { formule: S.choixFormule, operateur: S.operateur });
-    if(paiementObligatoire()){ S.paieTel = (S.util.tel || '').replace(/\D/g, ''); S.paieNomCompte = (S.util.nom && S.util.nom !== 'Candidat') ? S.util.nom : 'Candidat'; S.operateur = 'orange'; }
+    if(paiementParPartenaire()){ S.paieTel = (S.util.tel || '').replace(/\D/g, ''); S.paieNomCompte = (S.util.nom && S.util.nom !== 'Candidat') ? S.util.nom : 'Candidat'; S.operateur = 'orange'; }
     S.paieEtape = 3; S.paievePreuve = null; S.erreur = '';
     return rendre();
   }
   if(d.paieretour){
-    if(paiementObligatoire()){ S.paieEtape = 0; S.erreur = ''; return rendre(); }
+    if(paiementParPartenaire()){ S.paieEtape = 0; S.erreur = ''; return rendre(); }
     S.paieEtape = S.paievePreuve ? 3 : 1; S.erreur='';
     if(S.paieEtape === 1) return rendre();
     S.paieEtape = 1; return rendre();
