@@ -2187,7 +2187,7 @@ function pister(nom, meta, element){
   });
   O.precedent = nom;
   if(O.file.length > 200) O.file.splice(0, O.file.length - 200);
-  if(base && O.file.length >= 8) viderFile();
+  if(base && O.file.length >= 25) viderFile();
 }
 
 async function viderFile(){
@@ -2228,7 +2228,7 @@ document.addEventListener('visibilitychange', () => {
   if(document.visibilityState === 'hidden') viderFile();
 });
 window.addEventListener('pagehide', fermerSession);
-setInterval(viderFile, 15000);
+setInterval(viderFile, 45000);
 window.addEventListener('error', e => {
   /* « Script error. » sans fichier = un script étranger à l'application (navigateur intégré de Facebook, extension, traduction) :
      on garde la trace, mais avec le navigateur d'origine pour pouvoir en trouver la source */
