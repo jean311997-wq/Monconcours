@@ -3136,6 +3136,7 @@ async function vueTableau(){
           <td class="num">${nombre(x.personnes)}</td>
           <td class="num" style="${x.moyenne_s < 15 ? 'color:var(--rouge-texte)' : ''}">${x.moyenne_s} s</td></tr>`).join('')}
         </tbody></table>
+        ${t.zones_estimees_avant && croiss[0] && croiss[0].jour < t.zones_estimees_avant ? `<p class="sous" style="font-size:12.5px">Avant le ${E(new Date(t.zones_estimees_avant + 'T12:00:00').toLocaleDateString('fr-FR', { day:'numeric', month:'long' }))}, les visites sont comptées exactement mais le temps est une estimation prudente (visites × durée type, 5 minutes au plus par visite). À partir de cette date, le temps est exact et s'accumule sans limite.</p>` : ''}
         <p class="sous" style="font-size:12.5px">Une durée moyenne très courte (en rouge) veut dire que les candidats passent sans s'arrêter : la zone n'accroche pas ou sert seulement de passage.</p>`}
       </div>
     </div>
