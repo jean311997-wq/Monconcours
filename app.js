@@ -1328,7 +1328,7 @@ function fenetreAnnonce(n){
   f.className = 'fenetre-evt annonce';
   f.setAttribute('role', 'dialog'); f.setAttribute('aria-modal', 'true');
   f.setAttribute('aria-label', n.titre || 'Message de Mon Concours');
-  const [genre] = String(n.lien || '').split(':');
+  const [genre, idLien] = String(n.lien || '').split(':');
   const suite = { abonnement:'Voir mon abonnement', compte:'Ouvrir mon compte', parcours:'Ouvrir mon parcours', offre:'Voir l\'offre', communaute:'Entrer dans la communauté', epreuve:'Oui, je participe' }[genre];
   const guide = String(n.lien || '') === 'annonce:guide-compo';
   if(guide){
@@ -1353,7 +1353,8 @@ function fenetreAnnonce(n){
     <div class="fe-marque">Mon Concours · ${reponse ? 'Réponse de l\'administration' : 'Message de l\'équipe'}</div>
     <h2 class="fe-titre">${E(reponse ? 'Votre avis a été lu' : (n.titre || 'Information'))}</h2>
     <p class="fe-texte fe-long">${E(n.message || '').replace(/\n/g, '<br>')}</p>
-    ${suite ? `<button class="cta" data-fe="suite">${suite}</button><button class="lien" style="display:block;margin:10px auto 0" data-fe="fermer">${genre === 'epreuve' ? 'Plus tard' : 'Fermer'}</button>`
+    ${genre === 'inscrire' ? `${(S.epreuve && S.epreuve.id === idLien && S.epreuve.inscrit) ? '' : '<button class="cta" data-fe="inscrire">Oui, je m\'inscris</button>'}${notifsAEncourager() ? '<button class="cta creux" style="margin-top:10px" data-fe="notifs">Oui, j\'active les notifications</button>' : ''}<button class="lien" style="display:block;margin:12px auto 0" data-fe="fermer">${(S.epreuve && S.epreuve.id === idLien && S.epreuve.inscrit && !notifsAEncourager()) ? 'J\'ai compris' : 'Plus tard'}</button>`
+    : suite ? `<button class="cta" data-fe="suite">${suite}</button><button class="lien" style="display:block;margin:10px auto 0" data-fe="fermer">${genre === 'epreuve' ? 'Plus tard' : 'Fermer'}</button>`
             : `<button class="cta" data-fe="fermer">J'ai compris</button>`}
   </div>`;
   const fermer = aller_ => {
@@ -1364,7 +1365,9 @@ function fenetreAnnonce(n){
   };
   f.addEventListener('click', e => {
     const b = e.target.closest('[data-fe]');
-    if(b) fermer(b.dataset.fe === 'suite');
+    if(b && b.dataset.fe === 'inscrire'){ fermer(false); S.sansInvitation = notifsAEncourager(); inscrireNationale(idLien, false).finally(() => { S.sansInvitation = false; }); }
+    else if(b && b.dataset.fe === 'notifs'){ fermer(false); pister('COMPO_COMMUNE_NOTIFS_CLICKED', {}); activerRappel(18, 0); }
+    else if(b) fermer(b.dataset.fe === 'suite');
     else if(e.target === f && !guide) fermer(false);
   });
   f.addEventListener('keydown', e => { if(e.key === 'Escape' && !guide) fermer(false); });
@@ -1434,11 +1437,12 @@ function ouvrirNotif(n){
     if(S.epreuve && S.epreuve.id === id && S.epreuve.etat !== 'terminee') return aller('aujourdhui');
     compterVueResultats(id); chargerClassement(id); return aller('gagnants');
   }
+  if(genre === 'inscrire' && id) return fenetreAnnonce(Object.assign({}, n, { type:'annonce_plein', lue:true }));
   if(genre === 'defi' && id) return ouvrirDefi(id);
   if(genre === 'communaute') return ouvrirCommunaute(id);
   if(genre === 'nouveau-code') return verifierChangementCode(true);
   if(genre === 'avis' || genre === 'annonce'){
-    if(NOTIFS_FENETRE.includes(n.type) || n.type === 'reponse_admin' || n.type === 'annonce') return fenetreAnnonce(Object.assign({}, n, { type: n.type === 'reponse_admin' ? 'reponse_admin_plein' : (n.type === 'annonce' ? 'annonce_plein' : n.type), lue:true, lien:(String(n.lien || '').startsWith('epreuve:') ? n.lien : '') }));
+    if(NOTIFS_FENETRE.includes(n.type) || n.type === 'reponse_admin' || n.type === 'annonce') return fenetreAnnonce(Object.assign({}, n, { type: n.type === 'reponse_admin' ? 'reponse_admin_plein' : (n.type === 'annonce' ? 'annonce_plein' : n.type), lue:true, lien:(/^(epreuve|inscrire):/.test(String(n.lien || '')) ? n.lien : '') }));
   }
   if(genre === 'compte') return aller('compte');
   if(genre === 'abonnement'){ chargerPromo().then(() => aller('abonnement')); return; }
@@ -6011,7 +6015,7 @@ async function inscrireNationale(id, depuisPopup){
     pister('NATIONAL_REGISTERED', { nom: afficher });
     const v = document.getElementById('voile');
     /* il vient de dire oui : c'est le moment de lui proposer d'être prévenu avant le début */
-    if(notifsAEncourager() && !document.getElementById('invitation')){
+    if(notifsAEncourager() && !S.sansInvitation && !document.getElementById('invitation')){
       if(v){ v.hidden = true; v.innerHTML = ''; } S.modal = null;
       fenetreInvitation({ cle:'notifs', icone:'cloche', titre:'Vous êtes inscrit',
         texte:'Autorisez les notifications pour être prévenu avant le début de la composition. Vous pourrez entrer même en retard, tant que la composition n\'est pas terminée.',
