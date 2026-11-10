@@ -7756,16 +7756,19 @@ function ecranDefi(){
 async function chargerTop(){
   if(!base) return;
   try{ const { data } = await base.rpc('top_semaine'); S.top = data || { top:[] }; memoEcrire('top', S.top, true); }catch(e){ if(!S.top) S.top = { erreur:true }; }
+  try{ const { data } = await base.rpc('top_general'); S.topG = data || { top:[] }; }catch(e){ if(!S.topG) S.topG = { erreur:true }; }
   if(S.ecran === 'top') rendre();
 }
 function ecranTop(){
-  const t = S.top;
+  const gen = (S.topMode || 'general') === 'general';
+  const t = gen ? (S.topG || (S.top ? null : null)) : S.top;
   const tete = `<button class="retourhaut" data-go="aujourdhui">Retour</button>`;
   if(!t){ chargerTop(); vue().innerHTML = `<div class="pad">${tete}<div class="squelette large" style="margin-top:16px"></div></div>`; return; }
   vue().innerHTML = `<div class="pad">${tete}
-    <div class="eyebrow">Depuis lundi</div>
-    <h1 class="titre">Top 10 de la semaine</h1>
-    <p class="sous" style="margin:6px 0 14px">Classé par points gagnés cette semaine (bonnes réponses, compositions, erreurs refermées). Les candidats apparaissent avec leur nom et prénom. Touchez « Défier » pour lancer un défi à l'un d'eux. Remise à zéro chaque lundi.</p>
+    <div class="eyebrow">${gen ? 'Depuis le début' : 'Depuis lundi'}</div>
+    <h1 class="titre">${gen ? 'Classement général' : 'Top 10 de la semaine'}</h1>
+    <div class="duo" style="margin:10px 0 12px;gap:8px"><button class="cta ${gen ? '' : 'creux'}" data-top-mode="general">Général</button><button class="cta ${gen ? 'creux' : ''}" data-top-mode="semaine">Cette semaine</button></div>
+    <p class="sous" style="margin:6px 0 14px">${gen ? 'Tous les inscrits, classés sur l\'ensemble de leur travail : bonnes réponses, compositions, erreurs refermées, jours de travail. Ta place est ta position réelle parmi tous.' : 'Classé par points gagnés cette semaine. Remise à zéro chaque lundi.'} Touchez « Défier » pour lancer un défi à l'un d'eux.</p>
     ${t.erreur ? '<p class="sous">Le classement n\'a pas pu être chargé.</p>' : `<div class="carte">
       ${(t.top || []).length ? t.top.map(l => `<div class="ligne-rang${l.moi ? ' moi' : ''}"><span class="p num">${l.rang}</span><span class="n">${E(l.nom || l.pseudo)}${l.moi ? ' (vous)' : ''}<em class="num">${nombreFr(l.points)} pts</em></span>${l.moi ? '' : `<button class="mini btn-defier" data-defier-pseudo="${E(l.pseudo)}">${ico('duel',13)} Défier</button>`}</div>`).join('') : '<p class="sous">Personne n\'a encore marqué de points cette semaine. Soyez le premier.</p>'}
     </div>
@@ -9774,3 +9777,8 @@ setInterval(() => {
   if(t >= SURPRISE_SECONDES && surprisePossible()){ ecrireReglage('sup_cumul', 0); surpriseCarte(); }
   else ecrireReglage('sup_cumul', Math.min(t, SURPRISE_SECONDES));
 }, 30000);
+
+document.addEventListener('click', ev => {
+  const b = ev.target.closest('[data-top-mode]'); if(!b) return;
+  S.topMode = b.dataset.topMode; if(S.ecran === 'top') rendre();
+});
