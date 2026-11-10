@@ -513,6 +513,7 @@ function prechargerOutilsPdf(){
   });
 }
 function aller(e){
+  if(['resultat', 'gagnants', 'copie'].includes(S.ecran)) S.dernierResultatA = Date.now();
   if(paiementObligatoire() && !S.util.connecte && ['testIntro', 'test'].includes(e)){ S.modal = 'inscription'; S.erreur = ''; return surcouche(); }
   if(e !== 'abonnement' && S.raisonAbo) S.raisonAbo = '';
   /* Une copie remise ne se noircit plus. Revenir sur « Composition »
@@ -6007,8 +6008,12 @@ function proposerNationale(){
   const v = document.getElementById('voile');
   if(!v || !v.hidden) return;
   if(lireReglages()['nonNat-' + ep.id]) return;
-  /* le 10 novembre : l'inscription à la prochaine composition ne se présente qu'après 5 minutes sur le site */
-  if(new Date().toISOString().slice(0, 10) === '2026-11-10' && Date.now() - T_OUVERTURE < 300000) return;
+  /* l'inscription à la prochaine composition vient après 5 minutes sur le site (10 novembre),
+     et jamais avant 5 minutes de calme après les résultats d'une composition : on les laisse lire */
+  const attente = Math.max(
+    new Date().toISOString().slice(0, 10) === '2026-11-10' ? 300000 - (Date.now() - T_OUVERTURE) : 0,
+    S.dernierResultatA ? 300000 - (Date.now() - S.dernierResultatA) : 0);
+  if(attente > 0 || ['resultat', 'gagnants', 'copie'].includes(S.ecran)){ setTimeout(proposerNationale, Math.max(attente, 30000) + 500); return; }
   S.popNatVu = true;
   S.modal = 'nationale';
   v.hidden = false;
