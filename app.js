@@ -5489,28 +5489,22 @@ function ecranCompte(){
       <span class="fl">→</span></button>
 
     <div class="classement">
-      <div class="t">${ico('trophee',14)} Position estimée</div>
+      <div class="t">${ico('trophee',14)} Ta position</div>
       ${S.classement ? `
       <div class="rangbig"><span class="num">${nombreFr(S.classement.rang)}ᵉ</span></div>
-      <div class="pts">sur <span class="num">${nombreFr(S.classement.population)}</span> candidats inscrits · <span class="num">${nombreFr(S.classement.points)}</span> point${S.classement.points>1?'s':''}</div>
+      <div class="pts">sur <span class="num">${nombreFr(S.classement.population)}</span> inscrits · <span class="num">${nombreFr(S.classement.points)}</span> point${S.classement.points>1?'s':''}</div>
       <div class="up ${S.classement.places_semaine < 0 ? 'baisse' : ''}">${
         S.classement.places_semaine > 0
           ? '▲ Vous avez gagné ' + S.classement.places_semaine + ' place' + (S.classement.places_semaine>1?'s':'') + ' cette semaine'
           : S.classement.places_semaine < 0
             ? '▼ Vous avez perdu ' + Math.abs(S.classement.places_semaine) + ' place' + (Math.abs(S.classement.places_semaine)>1?'s':'') + ' cette semaine'
             : 'Aucun mouvement cette semaine'}</div>
-      <div class="jauge-places">
-        <div class="piste"></div>
-        <div class="admis" style="width:${(S.classement.places / S.classement.population * 100).toFixed(1)}%"></div>
-        <div class="curseur" style="left:${Math.min(100, S.classement.rang / S.classement.population * 100).toFixed(1)}%"></div>
-      </div>
-      <div class="legende-places"><span>${nombreFr(S.classement.places)} postes</span><span>${nombreFr(S.classement.population)}ᵉ</span></div>
       <p class="sous" style="margin-top:9px">${
-        S.classement.dans_les_admis
-          ? 'Vous êtes dans la place, tenez la position. Le seuil monte chaque semaine.'
-          : 'Il vous manque <b>' + nombreFr(S.classement.places_manquantes) + ' places</b> pour entrer dans les '
-            + nombreFr(S.classement.places) + ' admis, soit <b>' + nombreFr(S.classement.points_manquants) + ' points</b>.'}</p>
-      <p class="sous" style="font-size:12px">${S.classement.points_par_place} points font gagner une place.</p>`
+        S.classement.dans_le_top10
+          ? 'Vous êtes dans les 10 premiers. Tenez la position : les autres avancent chaque jour.'
+          : (S.classement.points_pour_place > 0
+              ? 'Il vous faut <b>' + nombreFr(S.classement.points_pour_place) + ' point' + (S.classement.points_pour_place > 1 ? 's' : '') + '</b> pour gagner une place, et <b>' + nombreFr(S.classement.points_pour_top10) + ' points</b> pour entrer dans les 10 premiers.'
+              : 'Vous êtes en tête de ceux qui ont votre nombre de points.')}</p>`
       : (S.util.connecte
         ? `<div class="squelette large" style="margin-top:6px"></div>
            <div class="squelette"></div>
