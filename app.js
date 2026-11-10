@@ -1366,7 +1366,7 @@ function fenetreAnnonce(n){
   f.addEventListener('click', e => {
     const b = e.target.closest('[data-fe]');
     if(b && b.dataset.fe === 'inscrire'){ fermer(false); S.sansInvitation = notifsAEncourager(); inscrireNationale(idLien, false).finally(() => { S.sansInvitation = false; }); }
-    else if(b && b.dataset.fe === 'notifs'){ fermer(false); pister('COMPO_COMMUNE_NOTIFS_CLICKED', {}); activerRappel(18, 0); }
+    else if(b && b.dataset.fe === 'notifs'){ fermer(false); pister('COMPO_COMMUNE_NOTIFS_CLICKED', {}); activerNotifsSeules(); }
     else if(b) fermer(b.dataset.fe === 'suite');
     else if(e.target === f && !guide) fermer(false);
   });
@@ -6835,6 +6835,25 @@ async function activerRappel(heure, minute){
     pister('REMINDER_ENABLED', { heure, minute });
     rendre();
   }catch(e){ toast('Le rappel n\'a pas pu être activé. Réessayez avec une meilleure connexion.'); }
+}
+/* « Oui, j'active les notifications » : on active, rien d'autre. Pas de rappel quotidien automatique, c'est l'équipe qui envoie. */
+async function activerNotifsSeules(){
+  if(!S.util.connecte){ S.modal = 'inscription'; S.erreur = ''; return surcouche(); }
+  if(!pushPossible()){ pister('REMINDER_UNAVAILABLE'); fenetreRappel('impossible'); return; }
+  try{
+    const perm = await Notification.requestPermission();
+    if(perm !== 'granted'){ ecrireReglage('rappelRefus', Date.now()); pister('REMINDER_PERMISSION_DENIED'); fenetreRappel('refuse'); return; }
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if(!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: cleVapid(VAPID_PUBLIC) });
+    const j = sub.toJSON();
+    const { data } = await base.rpc('activer_notifs_seules', { p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth });
+    if(!data || !data.ok) throw new Error('refus');
+    S.rappel = { heure:18, minute:0, actif:true, frequence:'quotidien' };
+    signalCandidat('Notifications activées.');
+    pister('REMINDER_ENABLED', { seules:true });
+    rendre();
+  }catch(e){ toast('Les notifications n\'ont pas pu être activées. Réessayez avec une meilleure connexion.'); }
 }
 async function retirerRappel(){
   try{
