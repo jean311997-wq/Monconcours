@@ -320,18 +320,25 @@ function messageRenouvellement(c){
   const fin = new Date(c.fin_le).toLocaleDateString('fr-FR', { day:'numeric', month:'long' });
   return 'Bonjour ' + prenom + ', c\'est Mon Concours. Ton abonnement se termine le ' + fin + (c.concours ? ' et tu prépares le concours ' + c.concours : '') + '. Pour continuer sans coupure, tu peux le renouveler dans l\'application : Mois 1 000 F, Année 4 000 F. Je t\'aide si tu veux.';
 }
+function messageInactif(c){
+  const prenom = (c.nom || '').trim().split(/\s+/)[0];
+  return 'Bonjour ' + prenom + ', c\'est l\'équipe Mon Concours. On ne t\'a pas vu depuis hier' + (c.concours ? ', et tu prépares le concours ' + c.concours : '') + '. Ta place est gardée : reviens faire ta séance du jour, 5 questions, 2 minutes. Ouvre l\'application ou le site ici : https://monconcoursbf.com . Si quelque chose t\'a bloqué, dis-le-moi, je t\'aide.';
+}
 async function lirePriorites(){
   const peutRelancer = !!(A.admin || A.investisseur);
-  const [r, ab] = await Promise.all([
+  const [r, ab, ina] = await Promise.all([
     db.rpc('admin_priorites'),
-    peutRelancer ? db.rpc('admin_paiements_abandonnes') : Promise.resolve({ data: null })
+    peutRelancer ? db.rpc('admin_paiements_abandonnes') : Promise.resolve({ data: null }),
+    peutRelancer ? db.rpc('admin_relance_inactifs') : Promise.resolve({ data: null })
   ]);
+  const inactifs = ina && ina.data && ina.data.ok ? (ina.data.liste || []) : [];
   if(r.error || !r.data || !r.data.ok) return { erreur: (r.error && r.error.message) || 'Lecture impossible.' };
   const p = r.data;
   const abandonnes = ab && ab.data && ab.data.ok ? (ab.data.liste || []).filter(c => !c.envoye_le) : [];
   const h = p.prochaine_nationale ? (new Date(p.prochaine_nationale) - Date.now()) / 3600000 : null;
   const items = [];
   const ajouter = (niveau, titre, detail, bouton, vue, extra) => items.push(Object.assign({ niveau, titre, detail, bouton, vue }, extra || {}));
+  if(inactifs.length) ajouter('urgent', 'Relance candidat WhatsApp · ' + inactifs.length + ' à faire revenir', 'Inscrits depuis plus de 24 h qui ne sont pas revenus. Un clic ouvre WhatsApp avec le message déjà écrit : ils reviennent sur le site ou l\'application.', '', 'priorites', { personnes: inactifs.slice(0, 10).map(c => ({ id: c.user_id, nom: c.nom, tel: c.telephone, lien: lienWa(c.telephone, messageInactif(c)), mot: 'WhatsApp', sous: c.derniere ? 'vu le ' + new Date(c.derniere).toLocaleDateString('fr-FR', { day:'numeric', month:'short' }) : 'jamais revenu' })) });
   if(p.paiements) ajouter('urgent', p.paiements + ' paiement' + (p.paiements > 1 ? 's' : '') + ' à vérifier', p.paiement_age_min != null ? 'Le plus ancien attend depuis ' + (p.paiement_age_min >= 60 ? Math.round(p.paiement_age_min / 60) + ' h' : p.paiement_age_min + ' min') + '. Confirmer active l\'abonnement tout de suite.' : '', 'Vérifier maintenant', 'paiements');
   if(abandonnes.length) ajouter('urgent', abandonnes.length + ' paiement' + (abandonnes.length > 1 ? 's' : '') + ' abandonné' + (abandonnes.length > 1 ? 's' : '') + ' à relancer', 'Le système a déjà envoyé sa notification. Un message WhatsApp personnel double les chances.', 'Voir la liste', 'paiements', { personnes: abandonnes.slice(0, 3).map(c => ({ id: c.user_id, nom: c.nom, tel: c.telephone, lien: lienWa(c.telephone, messageRelance(c)), mot: 'WhatsApp' })) });
   if((p.expirent || []).length) ajouter('urgent', p.expirent.length + ' abonnement' + (p.expirent.length > 1 ? 's' : '') + ' se termine' + (p.expirent.length > 1 ? 'nt' : '') + ' dans 3 jours', 'Un mot avant la fin vaut mieux qu\'une relance après.', '', 'paiements', { personnes: p.expirent.slice(0, 5).map(c => ({ nom: c.nom, tel: c.telephone, lien: lienWa(c.telephone, messageRenouvellement(c)), mot: 'Prévenir', sous: 'fin le ' + new Date(c.fin_le).toLocaleDateString('fr-FR', { day:'numeric', month:'short' }) })) });

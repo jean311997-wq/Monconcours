@@ -2151,3 +2151,18 @@ body.sans-anim .stat-comm .sc-new.jamais{animation:none}
 
 .derniere-nat .dn-vues{position:absolute;top:9px;right:12px;display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:99px;background:rgba(255,255,255,.18);color:#fff;font-size:12px}
 .derniere-nat .dn-vues b{font-family:var(--m);font-size:12px;font-weight:700;letter-spacing:0}
+
+/* la surprise : une carte discrète, puis la question par-dessus l'écran en cours */
+.sup-carte{position:fixed;left:12px;right:12px;bottom:calc(var(--nav-h,0px) + env(safe-area-inset-bottom,0px) + 74px);z-index:45;max-width:440px;margin:0 auto;display:flex;align-items:center;gap:10px;
+  padding:11px 12px;background:var(--ardoise);border:1px solid var(--or);border-radius:16px;box-shadow:0 14px 34px rgba(0,0,0,.5);animation:supEntree .35s ease-out}
+.sup-pastille{flex:none;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:var(--or);color:var(--or-encre)}
+.sup-pastille svg{fill:currentColor}
+.sup-texte{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;font-size:12.5px;color:var(--craie2);line-height:1.3}
+.sup-texte b{color:var(--craie);font-size:14px}
+.sup-voir{flex:none;border:0;border-radius:10px;padding:9px 12px;background:var(--laterite);color:#fff;font-weight:700;font-size:13px;font-family:inherit;cursor:pointer}
+.sup-x{flex:none;border:0;background:none;color:var(--craie2);font-size:15px;padding:6px;cursor:pointer}
+.sup-plein{position:fixed;inset:0;z-index:1000;background:var(--encre);overflow-y:auto;-webkit-overflow-scrolling:touch}
+.sup-pad{max-width:560px;margin:0 auto;padding:calc(env(safe-area-inset-top,0px) + 22px) 18px 40px}
+.sup-tete{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+@keyframes supEntree{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.sup-carte{animation:none}}

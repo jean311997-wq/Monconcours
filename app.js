@@ -6105,7 +6105,7 @@ function ecranPourToi(){
       ${(f.fautes || []).length ? `<div class="bloc"><div class="libelle">À revoir avant de partir</div>
         ${f.fautes.slice(0, 3).map(x => `<div class="err" style="margin-bottom:8px"><div class="q" style="font-size:13.5px">${E(x.q)}</div><div class="ligne">Bonne réponse : <b>${E(x.bon)}</b></div></div>`).join('')}</div>` : ''}
       <div class="verdict solide" style="margin-top:12px"><b>Pour ta prochaine visite</b>${E(conseilProchaineVisite(f))}</div>
-      <button class="cta" style="margin-top:14px" data-pourtoi="10">Encore 10 questions</button>
+      <button class="cta" style="margin-top:14px" data-pourtoi="5">Encore 5 ?</button>
       <button class="cta creux" style="margin-top:9px" data-go="aujourdhui">Revenir à l'actualité</button>
     </div>`;
     return;
@@ -8571,7 +8571,7 @@ function initialesCompte(){
    plus du tout une fois la chaîne rejointe */
 function majBoutonCanal(){
   let r = {}; try{ r = lireReglages() || {}; }catch(e){}
-  const veut = S.ecran === 'aujourdhui' && !!CONTACT.canal && !r['inv_whatsapp_fait'] && !S.modal && !enComposition() && !document.getElementById('invitation') && (Date.now() - T_OUVERTURE) > DELAI_BOUTON_CANAL;
+  const veut = !!CONTACT.canal && !['test','testIntro','verrou','verrou_d','engagement','inscription','connexion','paiement'].includes(S.ecran) && !S.modal && !enComposition() && !document.getElementById('invitation') && (Date.now() - T_OUVERTURE) > 6000;
   let b = document.getElementById('fab-canal');
   if(!veut){ if(b) b.remove(); return; }
   if(!b){
@@ -9509,7 +9509,7 @@ function ecranBravoX(){
       <div class="stat"><div class="v num">${S.testNote}/10</div><div class="l">Note au test</div></div>
       <div class="stat"><div class="v num">${j}/${k}</div><div class="l">Fautes reprises justes</div></div>
     </div>
-    <button class="cta" style="margin-top:16px" data-xseance="bravo">Continuer : ma séance du jour<small>10 questions choisies pour toi · environ 8 min</small></button>
+    <button class="cta" style="margin-top:16px" data-xseance="bravo">Continuer : ma séance du jour<small>5 questions choisies pour toi · environ 2 min</small></button>
     ${lignesSuiteX('bravo')}
     <button class="lien" style="display:block;margin:14px auto 0" data-go="resultat">Revoir ma note et ma feuille corrigée</button>
     <button class="lien" style="display:block;margin:6px auto 0" data-go="aujourdhui">Aller à l'accueil</button>
@@ -9517,7 +9517,7 @@ function ecranBravoX(){
 }
 
 function lancerSeanceX(){
-  lancerFil(10);
+  lancerFil(5);
   if(S.fil){ S.fil.titre = 'MA SÉANCE DU JOUR'; S.fil.seanceX = true; }
   if(S.ecran === 'pourtoi') rendre();
 }
@@ -9546,17 +9546,17 @@ function finSeanceX(f, tete){
       <p class="sous">Avec l'abonnement : corrections sans limite, compositions chronométrées avec ton classement, et la feuille corrigée de tes erreurs en PDF.</p>
       <button class="cta creux" style="margin-top:10px" data-go="abonnement">Voir l'abonnement</button>
     </div>`}
-    <button class="cta" style="margin-top:14px" data-pourtoi="10">Encore 10 questions</button>
+    <button class="cta" style="margin-top:14px" data-pourtoi="5">Encore 5 ?<small>5 autres questions, environ 2 minutes</small></button>
     <button class="cta creux" style="margin-top:9px" data-go="aujourdhui">Revenir à l'accueil</button>
   </div>`;
 }
 
 function blocSeanceX(){
-  if(!estXX1() || !S.util.connecte) return '';
+  if(!S.util.connecte) return '';
   const fait = seanceXFaite(), s = serieX();
   return `<div class="carte seance-x${fait ? ' fait' : ''}">
     <div class="sx-tete"><span class="eyebrow">Ma séance du jour</span>${s ? `<span class="sx-serie">${ico('flamme', 14)} <b class="num">${s}</b> jour${s > 1 ? 's' : ''}</span>` : ''}</div>
-    <h2>${fait ? 'Séance faite aujourd\'hui' : '10 questions, environ 8 minutes'}</h2>
+    <h2>${fait ? 'Séance faite aujourd\'hui' : '5 questions, environ 2 minutes'}</h2>
     <p class="sous">${fait ? 'Reviens demain pour garder ta série. Tu peux en refaire une maintenant.' : 'Tes erreurs à reprendre d\'abord, puis des questions nouvelles de ton niveau.'}</p>
     <button class="cta" style="margin-top:10px" data-xseance="accueil">${fait ? 'Encore une séance' : (s ? 'Commencer ma séance' : 'Commencer ma première séance')}</button>
     <button class="lien-mini" style="margin-top:8px" data-go="revisions">${ico('revisions', 13)} Mes cours</button>
@@ -9687,3 +9687,97 @@ async function assignerParcours(){
   }catch(e){}
 }
 setTimeout(assignerParcours, 1500);
+
+/* =====================================================================
+   LA SURPRISE — toutes les 20 minutes d'utilisation, jamais en pleine composition.
+   Elle ne déplace personne : une carte discrète propose, le candidat décide. La question
+   s'ouvre PAR-DESSUS l'écran où il était ; « Revenir où j'étais » referme et il y est encore.
+   ===================================================================== */
+const SURPRISE_SECONDES = 1200, SURPRISE_SANS = ['test','testIntro','verrou','verrou_d','engagement','inscription','connexion','paiement','grille'];
+const SURPRISE_GENRES = {
+  concours: { titre:'Tombée au vrai concours', accroche:'Une question comme celles du vrai concours.' },
+  piege:    { titre:'Le piège du jour',        accroche:'Beaucoup se trompent sur celle-ci.' },
+  bonus:    { titre:'Question bonus',          accroche:'Une question en plus, pour le plaisir de progresser.' }
+};
+let SUP = { carte:null, plein:null, q:null, rep:undefined, c:null, ouvert:false };
+function surprisePossible(){
+  return !!base && !document.hidden && !SUP.ouvert && !S.modal && !enComposition() && !SURPRISE_SANS.includes(S.ecran) && !document.getElementById('invitation');
+}
+function surpriseCarte(){
+  if(SUP.carte) return;
+  const d = document.createElement('div');
+  d.className = 'sup-carte'; d.id = 'sup-carte'; d.setAttribute('role', 'dialog'); d.setAttribute('aria-label', 'Une surprise');
+  d.innerHTML = `<div class="sup-pastille">${ico('etoile', 20)}</div>
+    <div class="sup-texte"><b>Une surprise t'attend</b><span>Une question rien que pour toi, 30 secondes.</span></div>
+    <button type="button" class="sup-voir" data-sup="voir">Voir la surprise</button>
+    <button type="button" class="sup-x" data-sup="plus-tard" aria-label="Plus tard">✕</button>`;
+  document.body.appendChild(d); SUP.carte = d;
+  const nav = document.getElementById('nav');
+  d.style.setProperty('--nav-h', ((nav && nav.offsetHeight) || 0) + 'px');
+  pister('SURPRISE_PROPOSEE', { ecran: S.ecran });
+}
+function surpriseFermerCarte(){ if(SUP.carte){ SUP.carte.remove(); SUP.carte = null; } }
+function surpriseRendre(){
+  const q = SUP.q, c = SUP.c, g = SURPRISE_GENRES[q.genre] || SURPRISE_GENRES.bonus;
+  const fin = c && c.ok;
+  SUP.plein.innerHTML = `<div class="sup-pad">
+    <div class="sup-tete"><span class="tampon t-att">${E(g.titre)}${q.genre === 'concours' && q.annee ? ' · ' + E(String(q.annee)) : ''}</span><span class="eyebrow">${E(q.matiere || '')}</span></div>
+    <p class="sous" style="margin:0 0 12px">${E(g.accroche)}</p>
+    <div class="qtexte">${E(q.enonce)}</div>
+    ${(q.options || []).map((o, i) => {
+      let k = '';
+      if(fin){ if(i === c.bonne) k = 'juste'; else if(i === SUP.rep) k = 'faux'; }
+      else if(i === SUP.rep) k = 'choisi attente';
+      return `<button class="opt ${k}" ${SUP.rep !== undefined ? 'disabled' : ''} data-sup-rep="${i}"><span class="lettre">${'ABCD'[i] || '•'}</span>${E(o)}</button>`;
+    }).join('')}
+    ${fin ? `<div class="retour ${c.correcte ? 'bien' : 'mal'}"><b>${c.correcte ? 'Bonne réponse' : 'Réponse incorrecte'}</b>
+        ${c.correcte ? '' : `<div style="margin-bottom:6px">La bonne réponse : <strong class="bonne-rep">${'ABCD'[c.bonne]}. ${E(q.options[c.bonne])}</strong></div>`}
+        ${c.explication ? `<b style="margin-top:2px">Pourquoi ?</b>${E(c.explication)}` : ''}</div>` : ''}
+    ${c && !c.ok ? `<div class="retour mal"><b>Correction indisponible</b>Vérifie ta connexion.</div>` : ''}
+    <button type="button" class="cta" style="margin-top:16px" data-sup="retour">${fin || (c && !c.ok) ? 'Revenir où j\'étais' : 'Plus tard : revenir où j\'étais'}</button>
+  </div>`;
+}
+async function surpriseOuvrir(){
+  surpriseFermerCarte();
+  SUP.ouvert = true; SUP.rep = undefined; SUP.c = null;
+  let q = null;
+  try{ const { data } = await base.rpc('surprise_tirer', { p_niveau: niveauCand() }); if(data && data.ok) q = data; }catch(e){}
+  if(!q){ SUP.ouvert = false; return; }
+  SUP.q = q;
+  const p = document.createElement('div'); p.className = 'sup-plein'; p.id = 'sup-plein';
+  p.setAttribute('role', 'dialog'); p.setAttribute('aria-modal', 'true');
+  document.body.appendChild(p); SUP.plein = p;
+  surpriseRendre();
+  pister('SURPRISE_OUVERTE', { genre: q.genre });
+}
+function surpriseRetour(){
+  if(SUP.plein){ SUP.plein.remove(); SUP.plein = null; }
+  SUP.ouvert = false; SUP.q = null; SUP.c = null; SUP.rep = undefined;
+}
+async function surpriseRepondre(i){
+  if(SUP.rep !== undefined || !SUP.q) return;
+  SUP.rep = i; surpriseRendre();
+  let c = { ok:false };
+  try{ const { data } = await base.rpc('surprise_repondre', { p_id: SUP.q.id, p_choix: i }); if(data) c = data; }catch(e){}
+  if(!SUP.q) return;
+  SUP.c = c;
+  if(c.ok){ c.correcte ? sonJuste() : sonFaux(); if(S.util.connecte) compterReponse(); }
+  pister('SURPRISE_REPONDUE', { genre: SUP.q.genre, juste: !!c.correcte });
+  surpriseRendre();
+}
+document.addEventListener('click', ev => {
+  const b = ev.target.closest('[data-sup],[data-sup-rep]'); if(!b) return;
+  if(b.dataset.supRep !== undefined) return surpriseRepondre(+b.dataset.supRep);
+  if(b.dataset.sup === 'voir') return surpriseOuvrir();
+  if(b.dataset.sup === 'plus-tard'){ pister('SURPRISE_REPORTEE'); return surpriseFermerCarte(); }
+  if(b.dataset.sup === 'retour') return surpriseRetour();
+});
+/* une minute sur le site = une minute au compteur ; elle ne compte pas onglet caché */
+setInterval(() => {
+  if(document.hidden) return;
+  if(SUP.carte && !surprisePossible()){ surpriseFermerCarte(); return; }
+  if(SUP.carte || SUP.ouvert) return;
+  const r = lireReglages(); let t = (+r.sup_cumul || 0) + 30;
+  if(t >= SURPRISE_SECONDES && surprisePossible()){ ecrireReglage('sup_cumul', 0); surpriseCarte(); }
+  else ecrireReglage('sup_cumul', Math.min(t, SURPRISE_SECONDES));
+}, 30000);
