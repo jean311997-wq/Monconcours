@@ -2171,3 +2171,11 @@ body.sans-anim .stat-comm .sc-new.jamais{animation:none}
 .bilan-lignes{background:var(--ardoise);border:1px solid var(--trait);border-radius:14px;padding:4px 14px;margin:0 0 14px;text-align:left}
 .bilan-l{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--trait);font-size:14px;color:var(--craie2)}
 .bilan-l:last-child{border:0}.bilan-l b{color:var(--craie);font-size:15px;text-align:right}
+
+/* candidats en ligne, et « un candidat vient de te dépasser » */
+.en-ligne{display:flex;align-items:center;justify-content:center;gap:9px;margin:16px 0 4px;padding:11px 14px;border-radius:14px;background:var(--vert-fond);border:1px solid var(--vert-bord);color:var(--vert-texte);font-size:13.5px}
+.en-ligne b{color:var(--craie);font-size:15px}
+.pt-vert{width:9px;height:9px;border-radius:50%;background:var(--vert-texte);box-shadow:0 0 0 4px rgba(79,194,143,.25);flex:none}
+.depasse{display:flex;flex-direction:column;gap:3px;margin:12px 0 4px;padding:12px 14px;border-radius:14px;background:var(--or-fond);border:1px solid var(--or);font-size:13.5px;color:var(--or-texte)}
+.depasse>b:first-child{color:var(--or);font-size:15px}
+.depasse .num{color:var(--craie)}

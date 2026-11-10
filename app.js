@@ -2573,6 +2573,31 @@ function blocProgres(){
       <span class="pl-t">Vous avez commis <b class="num">${d.erreurs_mois}</b> ${d.erreurs_mois > 1 ? 'erreurs' : 'erreur'} récemment</span>
       <span class="pl-s">Voir mon cahier d'erreurs ›</span></button>` : ''}`;
 }
+
+/* « N candidats révisent en ce moment » : chiffre réel, calculé sur les réponses des 10 dernières minutes */
+async function chargerEnLigne(){
+  if(!base || S.enLigneCharge) return;
+  S.enLigneCharge = true;
+  try{
+    const { data } = await base.rpc('candidats_en_ligne');
+    if(data){ const change = !S.enLigne || S.enLigne.maintenant !== data.maintenant || S.enLigne.aujourdhui !== data.aujourdhui; S.enLigne = Object.assign({ t:Date.now() }, data); if(change && S.ecran === 'aujourdhui') rendre(); }
+  }catch(e){}
+  setTimeout(() => { S.enLigneCharge = false; }, 60000);
+}
+function blocEnLigne(){
+  chargerEnLigne();
+  const e = S.enLigne; if(!e) return '';
+  if(e.maintenant >= 15) return `<div class="en-ligne"><i class="pt-vert" aria-hidden="true"></i><span><b class="num">${nombreFr(e.maintenant)}</b> candidats révisent en ce moment</span></div>`;
+  if(e.aujourdhui >= 20) return `<div class="en-ligne"><i class="pt-vert" aria-hidden="true"></i><span><b class="num">${nombreFr(e.aujourdhui)}</b> candidats ont révisé aujourd'hui</span></div>`;
+  return '';
+}
+/* le candidat a perdu des places : on le lui dit à l'endroit du classement, avec le chemin pour les reprendre */
+function blocDepasse(){
+  const c = S.classement;
+  if(!c || !(c.places_semaine < 0) || c.dans_le_top10 || !(c.points_pour_place > 0)) return '';
+  return `<div class="depasse"><b>Un candidat vient de te dépasser</b><span>Il te manque <b class="num">${nombreFr(c.points_pour_place)} point${c.points_pour_place > 1 ? 's' : ''}</b> pour reprendre ta place.</span>
+    <button class="cta" style="margin-top:8px" data-pourtoi="5">Reprendre ma place · 5 questions</button></div>`;
+}
 function ecranAujourdhui(){
   const f = S.taches.filter(Boolean).length;
   const enCours = !S.corrige && Object.keys(S.reponses).length > 0;
@@ -5519,6 +5544,7 @@ function ecranCompte(){
           : S.classement.places_semaine < 0
             ? '▼ Vous avez perdu ' + Math.abs(S.classement.places_semaine) + ' place' + (Math.abs(S.classement.places_semaine)>1?'s':'') + ' cette semaine'
             : 'Aucun mouvement cette semaine'}</div>
+      ${blocDepasse()}
       <p class="sous" style="margin-top:9px">${
         S.classement.dans_le_top10
           ? 'Vous êtes dans les 10 premiers. Tenez la position : les autres avancent chaque jour.'
@@ -7472,6 +7498,7 @@ function blocPlus(){
       <button data-go="qdj">${ico('question',18)}<b>Question du jour</b><span>La même pour tous</span></button>
       <button data-go="top" style="align-items:center;justify-content:center;text-align:center">${ico('trophee',18)}<b>Top 10 de la semaine</b><span>Défiez les meilleurs</span></button>
     </div>
+    ${blocEnLigne()}
     ${blocCitation()}`;
 }
 
@@ -7800,6 +7827,7 @@ function ecranTop(){
     ${t.erreur ? '<p class="sous">Le classement n\'a pas pu être chargé.</p>' : `<div class="carte">
       ${(t.top || []).length ? t.top.map(l => `<div class="ligne-rang${l.moi ? ' moi' : ''}"><span class="p num">${l.rang}</span><span class="n">${E(l.nom || l.pseudo)}${l.moi ? ' (vous)' : ''}<em class="num">${nombreFr(l.points)} pts</em></span>${l.moi ? '' : `<button class="mini btn-defier" data-defier-pseudo="${E(l.pseudo)}">${ico('duel',13)} Défier</button>`}</div>`).join('') : '<p class="sous">Personne n\'a encore marqué de points cette semaine. Soyez le premier.</p>'}
     </div>
+    ${t.moi && S.classement && gen ? blocDepasse() : ''}
     ${t.moi ? `<div class="ma-place"><span>Ta place</span><b class="num">${t.moi.rang}<sup>${t.moi.rang === 1 ? 'er' : 'e'}</sup> sur ${nombreFr(t.participants)} inscrits</b><span class="num">${nombreFr(t.moi.points)} pts</span></div>` : ''}`}
     <button class="cta" style="margin-top:14px" data-pourtoi="10">Gagner des points maintenant</button>
   </div>`;
