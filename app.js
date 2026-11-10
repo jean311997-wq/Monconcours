@@ -1330,7 +1330,7 @@ function fenetreAnnonce(n){
   f.setAttribute('role', 'dialog'); f.setAttribute('aria-modal', 'true');
   f.setAttribute('aria-label', n.titre || 'Message de Mon Concours');
   const [genre, idLien] = String(n.lien || '').split(':');
-  const suite = { abonnement:'Voir mon abonnement', compte:'Ouvrir mon compte', parcours:'Ouvrir mon parcours', offre:'Voir l\'offre', communaute:'Entrer dans la communauté', epreuve:(S.epreuve && S.epreuve.id === idLien && salleOuverte(S.epreuve) ? 'Rejoindre la salle' : 'Oui, je participe') }[genre];
+  const suite = { abonnement:'Voir mon abonnement', compte:'Ouvrir mon compte', parcours:'Ouvrir mon parcours', offre:'Voir l\'offre', resultats:'Voir mes résultats', communaute:'Entrer dans la communauté', epreuve:(S.epreuve && S.epreuve.id === idLien && salleOuverte(S.epreuve) ? 'Rejoindre la salle' : 'Oui, je participe') }[genre];
   const guide = String(n.lien || '') === 'annonce:guide-compo';
   if(guide){
     f.classList.add('guide-compo');
@@ -1348,6 +1348,21 @@ function fenetreAnnonce(n){
       <div class="gc-retard"><b>Je suis en retard, puis-je encore composer ?</b><span>Oui. Vous pouvez entrer tant que l'heure de la composition n'est pas terminée. Le temps qui vous reste est celui qui reste jusqu'à la fin.</span></div>
       <button class="cta" data-fe="fermer">J'ai compris</button>
     </div>`;
+  } else if(genre === 'resultats'){
+    f.classList.add('obligatoire');
+    f.innerHTML = `<div class="fe-carte">
+      <div class="fe-badge" aria-hidden="true">🏆</div>
+      <div class="fe-marque">Mon Concours · Composition nationale</div>
+      <h2 class="fe-titre">${E(n.titre || 'Vérifie tes résultats')}</h2>
+      <p class="fe-texte fe-long">${E(n.message || '').replace(/\n/g, '<br>')}</p>
+      <button class="cta" data-fe="suite">Voir mes résultats</button>
+      <p class="fe-compte" style="text-align:center;margin:12px 0 0;font-size:13px;opacity:.7">Cette fenêtre se ferme dans <b class="num" data-cpt>30</b> s</p>
+    </div>`;
+    let reste = 30;
+    const cpt = setInterval(() => {
+      reste--; const c = f.querySelector('[data-cpt]'); if(c) c.textContent = reste;
+      if(reste <= 0 || !f.isConnected){ clearInterval(cpt); if(f.isConnected) fermer(false); }
+    }, 1000);
   } else if(genre === 'bilan'){
     const lignes = String(n.message || '').split('\n').map(l => l.split('|')).filter(l => l.length === 2);
     const place = lignes.find(l => l[0] === 'Ta place');
@@ -1389,9 +1404,9 @@ function fenetreAnnonce(n){
     else if(b && b.dataset.fe === 'suite-erreurs'){ fermer(false); aller('cahier'); }
     else if(b && b.dataset.fe === 'notifs'){ fermer(false); pister('COMPO_COMMUNE_NOTIFS_CLICKED', {}); activerNotifsSeules(); }
     else if(b) fermer(b.dataset.fe === 'suite');
-    else if(e.target === f && !guide) fermer(false);
+    else if(e.target === f && !guide && genre !== 'resultats') fermer(false);
   });
-  f.addEventListener('keydown', e => { if(e.key === 'Escape' && !guide) fermer(false); });
+  f.addEventListener('keydown', e => { if(e.key === 'Escape' && !guide && genre !== 'resultats') fermer(false); });
   document.body.appendChild(f);
   setTimeout(() => { f.classList.add('vu'); const b = f.querySelector('button'); if(b) b.focus(); }, 30);
   pister(reponse ? 'ADMIN_REPLY_POPUP' : (guide ? 'COMPO_GUIDE_SHOWN' : 'ADMIN_ANNOUNCE_POPUP'), {});
@@ -1458,12 +1473,13 @@ function ouvrirNotif(n){
     if(S.epreuve && S.epreuve.id === id && S.epreuve.etat !== 'terminee') return aller('aujourdhui');
     compterVueResultats(id); chargerClassement(id); return aller('gagnants');
   }
+  if(genre === 'resultats' && id){ compterVueResultats(id); chargerClassement(id); return aller('gagnants'); }
   if(genre === 'inscrire' && id) return fenetreAnnonce(Object.assign({}, n, { type:'annonce_plein', lue:true }));
   if(genre === 'defi' && id) return ouvrirDefi(id);
   if(genre === 'communaute') return ouvrirCommunaute(id);
   if(genre === 'nouveau-code') return verifierChangementCode(true);
   if(genre === 'avis' || genre === 'annonce'){
-    if(NOTIFS_FENETRE.includes(n.type) || n.type === 'reponse_admin' || n.type === 'annonce') return fenetreAnnonce(Object.assign({}, n, { type: n.type === 'reponse_admin' ? 'reponse_admin_plein' : (n.type === 'annonce' ? 'annonce_plein' : n.type), lue:true, lien:(/^(epreuve|inscrire|bilan):/.test(String(n.lien || '')) ? n.lien : '') }));
+    if(NOTIFS_FENETRE.includes(n.type) || n.type === 'reponse_admin' || n.type === 'annonce') return fenetreAnnonce(Object.assign({}, n, { type: n.type === 'reponse_admin' ? 'reponse_admin_plein' : (n.type === 'annonce' ? 'annonce_plein' : n.type), lue:true, lien:(/^(epreuve|inscrire|bilan|resultats):/.test(String(n.lien || '')) ? n.lien : '') }));
   }
   if(genre === 'compte') return aller('compte');
   if(genre === 'abonnement'){ chargerPromo().then(() => aller('abonnement')); return; }
