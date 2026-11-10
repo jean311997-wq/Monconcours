@@ -7768,11 +7768,11 @@ function ecranTop(){
     <div class="eyebrow">${gen ? 'Depuis le début' : 'Depuis lundi'}</div>
     <h1 class="titre">${gen ? 'Classement général' : 'Top 10 de la semaine'}</h1>
     <div class="duo" style="margin:10px 0 12px;gap:8px"><button class="cta ${gen ? '' : 'creux'}" data-top-mode="general">Général</button><button class="cta ${gen ? 'creux' : ''}" data-top-mode="semaine">Cette semaine</button></div>
-    <p class="sous" style="margin:6px 0 14px">${gen ? 'Tous les inscrits, classés sur l\'ensemble de leur travail : bonnes réponses, compositions, erreurs refermées, jours de travail. Ta place est ta position réelle parmi tous.' : 'Classé par points gagnés cette semaine. Remise à zéro chaque lundi.'} Touchez « Défier » pour lancer un défi à l'un d'eux.</p>
+    <p class="sous" style="margin:6px 0 14px">${gen ? 'Tous les inscrits, classés sur l\'ensemble de leurs points : bonnes réponses, compositions, erreurs refermées. Ta place est ta position réelle parmi tous les inscrits.' : 'Classé par points gagnés cette semaine, parmi tous les inscrits. Remise à zéro chaque lundi.'} Touchez « Défier » pour lancer un défi à l'un d'eux.</p>
     ${t.erreur ? '<p class="sous">Le classement n\'a pas pu être chargé.</p>' : `<div class="carte">
       ${(t.top || []).length ? t.top.map(l => `<div class="ligne-rang${l.moi ? ' moi' : ''}"><span class="p num">${l.rang}</span><span class="n">${E(l.nom || l.pseudo)}${l.moi ? ' (vous)' : ''}<em class="num">${nombreFr(l.points)} pts</em></span>${l.moi ? '' : `<button class="mini btn-defier" data-defier-pseudo="${E(l.pseudo)}">${ico('duel',13)} Défier</button>`}</div>`).join('') : '<p class="sous">Personne n\'a encore marqué de points cette semaine. Soyez le premier.</p>'}
     </div>
-    ${t.moi && t.moi.rang > 10 ? `<div class="ma-place"><span>Ta place</span><b class="num">${t.moi.rang}<sup>e</sup> sur ${t.participants}</b><span class="num">${nombreFr(t.moi.points)} pts</span></div>` : ''}`}
+    ${t.moi ? `<div class="ma-place"><span>Ta place</span><b class="num">${t.moi.rang}<sup>${t.moi.rang === 1 ? 'er' : 'e'}</sup> sur ${nombreFr(t.participants)} inscrits</b><span class="num">${nombreFr(t.moi.points)} pts</span></div>` : ''}`}
     <button class="cta" style="margin-top:14px" data-pourtoi="10">Gagner des points maintenant</button>
   </div>`;
 }
