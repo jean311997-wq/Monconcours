@@ -1329,7 +1329,7 @@ function fenetreAnnonce(n){
   f.setAttribute('role', 'dialog'); f.setAttribute('aria-modal', 'true');
   f.setAttribute('aria-label', n.titre || 'Message de Mon Concours');
   const [genre, idLien] = String(n.lien || '').split(':');
-  const suite = { abonnement:'Voir mon abonnement', compte:'Ouvrir mon compte', parcours:'Ouvrir mon parcours', offre:'Voir l\'offre', communaute:'Entrer dans la communauté', epreuve:'Oui, je participe' }[genre];
+  const suite = { abonnement:'Voir mon abonnement', compte:'Ouvrir mon compte', parcours:'Ouvrir mon parcours', offre:'Voir l\'offre', communaute:'Entrer dans la communauté', epreuve:(S.epreuve && S.epreuve.id === idLien && salleOuverte(S.epreuve) ? 'Rejoindre la salle' : 'Oui, je participe') }[genre];
   const guide = String(n.lien || '') === 'annonce:guide-compo';
   if(guide){
     f.classList.add('guide-compo');
