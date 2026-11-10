@@ -5532,12 +5532,11 @@ function ecranCompte(){
           ['Top 10', 10],
           ['Top 50', 50],
           ['Top 100', 100],
-          ['Dernier admis', S.classement.places],
           ['Votre position', S.classement.rang]
         ].sort((x,y)=>x[1]-y[1]).map(p => {
           const moi = p[0] === 'Votre position';
           const atteint = S.classement.rang <= p[1] && !moi;
-          const manque = Math.max(0, (S.classement.rang - p[1]) * S.classement.points_par_place);
+          const manque = Math.max(0, ((S.classement.seuils || {})[String(p[1])] ?? S.classement.points) - S.classement.points + 1);
           return `<div class="rang ${moi?'moi':''}">
             <span class="p num">${nombreFr(p[1])}</span>
             <span class="av">${atteint ? '✓' : (moi ? '▸' : '·')}</span>
