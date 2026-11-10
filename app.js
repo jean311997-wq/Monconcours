@@ -5798,6 +5798,7 @@ async function chargerEpreuve(){
     const change = !pareil(data || null, S.epreuve);
     S.epreuve = data || null;
     memoEcrire('epreuve', S.epreuve, true);
+    noterFinCompo(S.epreuve);
     nettoyerCopieAbandonnee();
     if(S.lienSalle && S.epreuve && S.epreuve.id === S.lienSalle){
       const idSalle = S.lienSalle; S.lienSalle = null;
@@ -6000,6 +6001,19 @@ function fermerClassement(id){
   const v = document.getElementById('voile'); if(v) v.hidden = true;
   S.modal = null;
 }
+/* On retient l'heure de fin des compositions vues : les 5 minutes de calme partent de là, que le candidat ait ouvert ses résultats ou non. */
+function noterFinCompo(ep){
+  try{
+    if(!ep || !ep.fin_le) return;
+    const t = new Date(ep.fin_le).getTime();
+    const l = (lireReglages().finsCompo || []).filter(x => typeof x === 'number');
+    if(!l.includes(t)){ l.push(t); ecrireReglage('finsCompo', l.sort((a, b) => a - b).slice(-6)); }
+  }catch(e){}
+}
+function finCompoRecente(){
+  const l = (lireReglages().finsCompo || []).filter(x => typeof x === 'number' && x <= Date.now());
+  return l.length ? Math.max(...l) : 0;
+}
 function proposerNationale(){
   const ep = S.epreuve;
   if(ep && ep.etat === 'terminee') return annoncerClassement(ep);
@@ -6012,8 +6026,8 @@ function proposerNationale(){
      et jamais avant 5 minutes de calme après les résultats d'une composition : on les laisse lire */
   const attente = Math.max(
     new Date().toISOString().slice(0, 10) === '2026-11-10' ? 300000 - (Date.now() - T_OUVERTURE) : 0,
-    S.dernierResultatA ? 300000 - (Date.now() - S.dernierResultatA) : 0);
-  if(attente > 0 || ['resultat', 'gagnants', 'copie'].includes(S.ecran)){ setTimeout(proposerNationale, Math.max(attente, 30000) + 500); return; }
+    finCompoRecente() ? 300000 - (Date.now() - finCompoRecente()) : 0);
+  if(attente > 0){ setTimeout(proposerNationale, Math.max(attente, 30000) + 500); return; }
   S.popNatVu = true;
   S.modal = 'nationale';
   v.hidden = false;
