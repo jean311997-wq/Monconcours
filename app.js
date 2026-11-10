@@ -1347,6 +1347,19 @@ function fenetreAnnonce(n){
       <div class="gc-retard"><b>Je suis en retard, puis-je encore composer ?</b><span>Oui. Vous pouvez entrer tant que l'heure de la composition n'est pas terminée. Le temps qui vous reste est celui qui reste jusqu'à la fin.</span></div>
       <button class="cta" data-fe="fermer">J'ai compris</button>
     </div>`;
+  } else if(genre === 'bilan'){
+    const lignes = String(n.message || '').split('\n').map(l => l.split('|')).filter(l => l.length === 2);
+    const place = lignes.find(l => l[0] === 'Ta place');
+    f.innerHTML = `<div class="fe-carte">
+      <div class="fe-marque">Mon Concours · Ta semaine</div>
+      <h2 class="fe-titre">Ta semaine sur Mon Concours</h2>
+      <p class="fe-texte" style="margin-bottom:10px">Tes 7 derniers jours, en chiffres.</p>
+      <div class="bilan-lignes">${lignes.map(l => `<div class="bilan-l"><span>${E(l[0])}</span><b class="num">${E(l[1])}</b></div>`).join('')}</div>
+      <button class="cta" data-fe="partager-bilan">Partager mon bilan sur WhatsApp</button>
+      <button class="cta creux" style="margin-top:10px" data-fe="suite-erreurs">Voir mes erreurs</button>
+      <button class="lien" style="display:block;margin:12px auto 0" data-fe="fermer">Fermer</button>
+    </div>`;
+    f._bilan = lignes;
   } else
   f.innerHTML = `<div class="fe-carte">
     <div class="fe-badge" aria-hidden="true">${reponse ? '✉' : '📣'}</div>
@@ -1366,6 +1379,13 @@ function fenetreAnnonce(n){
   f.addEventListener('click', e => {
     const b = e.target.closest('[data-fe]');
     if(b && b.dataset.fe === 'inscrire'){ fermer(false); S.sansInvitation = notifsAEncourager(); inscrireNationale(idLien, false).finally(() => { S.sansInvitation = false; }); }
+    else if(b && b.dataset.fe === 'partager-bilan'){
+      const l = f._bilan || [], g = k => (l.find(x => x[0] === k) || [])[1] || '';
+      const t = `Ma semaine sur Mon Concours : ${g('Jours travaillés')} jours travaillés, ${g('Questions faites')} questions, ${g('Bonnes réponses')} de bonnes réponses, ${g('Erreurs refermées')} erreurs refermées. ${g('Ta place')}. Prépare ton concours avec moi : ${CONTACT.site}`;
+      pister('WEEK_REPORT_SHARED', {});
+      window.open('https://wa.me/?text=' + encodeURIComponent(t), '_blank', 'noopener');
+    }
+    else if(b && b.dataset.fe === 'suite-erreurs'){ fermer(false); aller('cahier'); }
     else if(b && b.dataset.fe === 'notifs'){ fermer(false); pister('COMPO_COMMUNE_NOTIFS_CLICKED', {}); activerNotifsSeules(); }
     else if(b) fermer(b.dataset.fe === 'suite');
     else if(e.target === f && !guide) fermer(false);
@@ -1442,7 +1462,7 @@ function ouvrirNotif(n){
   if(genre === 'communaute') return ouvrirCommunaute(id);
   if(genre === 'nouveau-code') return verifierChangementCode(true);
   if(genre === 'avis' || genre === 'annonce'){
-    if(NOTIFS_FENETRE.includes(n.type) || n.type === 'reponse_admin' || n.type === 'annonce') return fenetreAnnonce(Object.assign({}, n, { type: n.type === 'reponse_admin' ? 'reponse_admin_plein' : (n.type === 'annonce' ? 'annonce_plein' : n.type), lue:true, lien:(/^(epreuve|inscrire):/.test(String(n.lien || '')) ? n.lien : '') }));
+    if(NOTIFS_FENETRE.includes(n.type) || n.type === 'reponse_admin' || n.type === 'annonce') return fenetreAnnonce(Object.assign({}, n, { type: n.type === 'reponse_admin' ? 'reponse_admin_plein' : (n.type === 'annonce' ? 'annonce_plein' : n.type), lue:true, lien:(/^(epreuve|inscrire|bilan):/.test(String(n.lien || '')) ? n.lien : '') }));
   }
   if(genre === 'compte') return aller('compte');
   if(genre === 'abonnement'){ chargerPromo().then(() => aller('abonnement')); return; }
@@ -3359,7 +3379,7 @@ function ecranRevisions(){
           <div class="mr-co"><b>${E(nom)}</b>
             ${nb ? `<span class="bar"><i style="width:${pc}%"></i></span>
             <span class="pc">${faites} sur ${nb} question${nb>1?'s':''} travaillée${nb>1?'s':''}${p && p.faites ? ' · ' + Math.round(100 * p.reussies / Math.max(1, p.faites)) + ' % de réussite' : ''}</span>
-            ${limiteMatiere ? `<span class="pc gratuit-reste">${faites >= LIMITE_MATIERE ? 'Aperçu gratuit terminé' : 'Gratuit : ' + faites + ' sur ' + LIMITE_MATIERE + ' questions'}</span>` : ''}` : ''}
+            ${limiteMatiere ? `<span class="pc gratuit-reste">${faites >= LIMITE_MATIERE ? 'Abonnement gratuit terminé' : 'Gratuit : ' + faites + ' sur ' + LIMITE_MATIERE + ' questions'}</span>` : ''}` : ''}
             ${chap.length ? `<span class="pc">${chap.length} chapitre${chap.length>1?'s':''} de cours${S.util.connecte ? ' · ' + nLus + ' lu' + (nLus>1?'s':'') : ''}</span>` : ''}
           </div>
         </div>
@@ -4505,7 +4525,7 @@ function ecranQcm(){
       <div class="retour mal">
         ${c.quota
           ? (c.motif === 'matiere'
-              ? `<b>Aperçu gratuit terminé en ${E(c.matiere || m.nom)}.</b>Vos 15 questions gratuites dans cette matière sont faites. Pour la continuer, faites l'abonnement. Les autres matières restent ouvertes.`
+              ? `<b>Abonnement gratuit terminé en ${E(c.matiere || m.nom)}.</b>Vos 15 questions gratuites dans cette matière sont faites. Pour la continuer, faites l'abonnement. Les autres matières restent ouvertes.`
               : `<b>Vous avez atteint votre limite gratuite du jour.</b>Vos 5 corrections du jour sont faites : elles reviennent demain. Pour continuer maintenant, faites l'abonnement.`)
           : `<b>${c.connexion ? 'Compte nécessaire' : 'Correction indisponible'}</b>${E(c.message || '')}`}
       </div>
@@ -6071,6 +6091,19 @@ function prechargerFil(){
   if(!base || !S.util.connecte || S.filPret) return;
   base.rpc('fil_pour_toi', { p_niveau: niveauCand(), p_nombre: 10 }).then(({ data }) => { if(Array.isArray(data) && data.length) S.filPret = { liste:data, t:Date.now() }; }, () => {});
 }
+
+/* Le moment de payer : un seul message, choisi selon ce que le candidat fait le plus */
+function offreSelonUsage(){
+  const compos = (S.stats && S.stats.compositions) || 0, qcm = (S.stats && S.stats.questions_resolues) || 0, err = ouvertes();
+  const rang = S.classement ? S.classement.rang : null, pop = S.classement ? S.classement.population : null;
+  const place = rang && pop ? ` Tu es ${nombreFr(rang)}ᵉ sur ${nombreFr(pop)}.` : '';
+  if(err >= 20 && err * 2 >= qcm / 10) return { titre:'Corriger tes erreurs, c\'est ce qui te fait progresser le plus vite', texte:`Tu as ${nombreFr(err)} erreurs à reprendre. Chacune refermée rapporte 20 points. Avec l\'abonnement, les corrections n\'ont plus de limite : tu peux toutes les reprendre.` };
+  if(compos >= 3 && compos * 25 >= qcm / 4) return { titre:`Tu as déjà fait ${compos} compositions`, texte:`${place.trim()} L\'abonnement ouvre toutes les compositions chronométrées et le classement national jusqu\'au concours.`.trim() };
+  return { titre:'Tu avances bien, continue sur ta lancée', texte:`${nombreFr(qcm)} questions faites.${place} L\'abonnement ouvre toutes les questions de toutes les matières, corrigées et expliquées.` };
+}
+function boutonConseillerAbo(){
+  return `<a class="cta" style="display:block;margin-top:12px;text-align:center;text-decoration:none" href="https://wa.me/226${numeroConseiller()}?text=${encodeURIComponent(messageConseiller('annuelle'))}" target="_blank" rel="noopener" data-conseiller-wa="mur-fil" data-conseiller-formule="annuelle">${logoReseau('whatsapp')} Faire l'abonnement avec un conseiller sur WhatsApp</a>`;
+}
 function ecranPourToi(){
   const f = S.fil;
   if(!f) return lancerFil(10);
@@ -6119,9 +6152,11 @@ function ecranPourToi(){
     }).join('')}
 
     ${c && !c.ok && c.quota ? `<div class="retour mal">${c.motif === 'matiere'
-        ? `<b>Aperçu gratuit terminé en ${E(c.matiere || q.matiere || 'cette matière')}.</b>Vos 15 questions gratuites dans cette matière sont faites. Pour la continuer, faites l'abonnement.`
+        ? `<b>Abonnement gratuit terminé en ${E(c.matiere || q.matiere || 'cette matière')}.</b>Vos 15 questions gratuites dans cette matière sont faites. Pour la continuer, faites l'abonnement.`
         : `<b>Vous avez atteint votre limite gratuite du jour.</b>Vos 5 corrections du jour sont faites : elles reviennent demain. Pour continuer maintenant, faites l'abonnement.`}</div>
-      <button class="cta" style="margin-top:12px" data-go="abonnement">Faire l'abonnement</button>
+      ${(() => { const o = offreSelonUsage(); return `<div class="carte" style="margin-top:12px"><b>${E(o.titre)}</b><p class="sous" style="margin-top:6px">${E(o.texte)}</p></div>`; })()}
+      <button class="cta" style="margin-top:12px" data-go="abonnement">Voir les abonnements</button>
+      ${boutonConseillerAbo()}
       ${c.motif === 'matiere' ? `<button class="cta creux" style="margin-top:9px" data-fil-suiv="1">Question suivante →</button>` : `<button class="cta creux" style="margin-top:9px" data-demain="1">À demain</button>`}` : ''}
     ${c && !c.ok && !c.quota ? `<div class="retour mal"><b>Correction indisponible</b>${E(c.message || '')}</div>
       <button class="cta" style="margin-top:12px" data-fil-suiv="1">Question suivante →</button>` : ''}

@@ -2166,3 +2166,8 @@ body.sans-anim .stat-comm .sc-new.jamais{animation:none}
 .sup-tete{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
 @keyframes supEntree{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 @media(prefers-reduced-motion:reduce){.sup-carte{animation:none}}
+
+/* bilan de la semaine en plein écran */
+.bilan-lignes{background:var(--ardoise);border:1px solid var(--trait);border-radius:14px;padding:4px 14px;margin:0 0 14px;text-align:left}
+.bilan-l{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--trait);font-size:14px;color:var(--craie2)}
+.bilan-l:last-child{border:0}.bilan-l b{color:var(--craie);font-size:15px;text-align:right}
