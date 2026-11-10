@@ -2588,7 +2588,6 @@ function blocEnLigne(){
   chargerEnLigne();
   const e = S.enLigne; if(!e) return '';
   if(e.maintenant >= 15) return `<div class="en-ligne"><i class="pt-vert" aria-hidden="true"></i><span><b class="num">${nombreFr(e.maintenant)}</b> candidats révisent en ce moment</span></div>`;
-  if(e.aujourdhui >= 20) return `<div class="en-ligne"><i class="pt-vert" aria-hidden="true"></i><span><b class="num">${nombreFr(e.aujourdhui)}</b> candidats ont révisé aujourd'hui</span></div>`;
   return '';
 }
 /* le candidat a perdu des places : on le lui dit à l'endroit du classement, avec le chemin pour les reprendre */
