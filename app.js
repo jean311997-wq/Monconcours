@@ -7439,17 +7439,10 @@ function blocPlus(){
     ${debutant && S.util.connecte ? `<div class="carte" style="margin-top:12px"><div class="libelle" style="margin-bottom:6px">Pour bien commencer</div>
       <p class="sous" style="margin-bottom:10px">Commence par les bases : quelques questions chaque jour, puis ta première composition. Ton cahier d'erreurs se remplit tout seul et te guide.</p></div>` : ''}
 
-    ${S.util.connecte ? `<div class="carte mission" style="margin-top:18px">
-      <div class="libelle" style="margin-bottom:6px"><span>${ico('cible',14)} Défi du jour</span></div>
-      <div style="font-weight:600;font-size:14.5px;margin-bottom:10px">${E(mission.t)}</div>
-      <button class="cta creux" ${mission.a}>Relever le défi</button>
-    </div>` : ''}
-
     <h2 class="titre-section">S'entraîner autrement</h2>
     <div class="raccourcis">
       <button data-go="qdj">${ico('question',18)}<b>Question du jour</b><span>La même pour tous</span></button>
-      <button data-defi-lancer="1">${ico('duel',18)}<b>Défier un ami</b><span>Un ou plusieurs, par leur numéro</span></button>
-      <button data-go="top" style="grid-column:1 / -1">${ico('trophee',18)}<b>Top 10 de la semaine</b><span>Défiez les meilleurs</span></button>
+      <button data-go="top" style="align-items:center;justify-content:center;text-align:center">${ico('trophee',18)}<b>Top 10 de la semaine</b><span>Défiez les meilleurs</span></button>
     </div>
     ${blocCitation()}`;
 }
