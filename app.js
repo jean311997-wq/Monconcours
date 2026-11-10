@@ -6007,6 +6007,8 @@ function proposerNationale(){
   const v = document.getElementById('voile');
   if(!v || !v.hidden) return;
   if(lireReglages()['nonNat-' + ep.id]) return;
+  /* le 10 novembre : l'inscription à la prochaine composition ne se présente qu'après 5 minutes sur le site */
+  if(new Date().toISOString().slice(0, 10) === '2026-11-10' && Date.now() - T_OUVERTURE < 300000) return;
   S.popNatVu = true;
   S.modal = 'nationale';
   v.hidden = false;
