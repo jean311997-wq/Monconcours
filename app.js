@@ -6461,7 +6461,7 @@ function partagerQuestion(id, texteQ){
 }
 
 /* ---------- les résultats d'une composition nationale ---------- */
-/* chaque candidat qui ouvre les résultats est compté une fois (le chiffre s'affiche sur la carte de l'accueil) */
+/* chaque ouverture des résultats compte, même par la même personne (le chiffre s'affiche sur la carte de l'accueil) */
 const _vuesComptees = new Set();
 function idVisiteur(){
   try{
@@ -6471,12 +6471,11 @@ function idVisiteur(){
   }catch(e){ return null; }
 }
 function compterVueResultats(id){
-  if(!base || !id || _vuesComptees.has(id)) return;
-  _vuesComptees.add(id);
+  if(!base || !id) return;
   base.rpc('compter_vue_resultats', S.util.connecte ? { p_epreuve: id } : { p_epreuve: id, p_visiteur: idVisiteur() }).then(() => {
     const d = S.derniereNat;
     if(d && d.id === id){ d.vues = (d.vues || 0) + 1; if(S.ecran === 'aujourdhui') rendre(); }
-  }, () => { _vuesComptees.delete(id); });
+  }, () => {});
 }
 async function chargerClassement(id){
   /* déjà là (préchargé ou vu) : on l'affiche et on le met à jour en silence */
@@ -6588,7 +6587,7 @@ function ecranCorrectionNat(){
     <h1 class="titre" style="margin:0 0 4px">Correction générale</h1>
     <p class="cg-sous">${cl ? 'Composition nationale · ' + E(cl.concours || cl.titre || '') + (cl.debut_le ? ' · ' + E(jourFr(cl.debut_le)) : '') : 'Composition nationale'}</p>
     <div class="cg-stats"><div><b class="num">${nq}</b><span>question${nq > 1 ? 's' : ''}</span></div><div><b class="num">${nombreFr(c.participants || 0)}</b><span>candidat${(c.participants||0)>1?'s':''}</span></div>${cl && cl.moyenne !== null && cl.moyenne !== undefined ? `<div><b class="num">${String(cl.moyenne).replace('.', ',')}/${cl.sur}</b><span>moyenne</span></div>` : ''}</div>
-    <p class="sous" style="margin:12px 0 16px">Les réponses attendues sont en vert. Le pourcentage indique la part des candidats qui ont trouvé.</p>
+    <div style="height:16px"></div>
     <div class="libelle">Feuille de réponses</div>
     <div class="carte"><div class="cg-grille">${grille}</div><p class="sous" style="margin:10px 0 0;font-size:12px"><span class="cg-b on" style="display:inline-grid;width:16px;height:16px;font-size:9px">✓</span> Réponse attendue</p></div>
     <div class="libelle" style="margin-top:22px">Le sujet corrigé</div>
