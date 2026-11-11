@@ -2512,14 +2512,32 @@ function tacheNeuve(k){
   return ' vient';
 }
 /* Un salut sobre en tête de l'accueil, pour un candidat connu seulement */
+/* Le mot d'accueil apparaît à l'arrivée (ouverture ou retour sur l'application), reste quelques secondes puis s'efface et rend sa place. */
+const SALUT_DUREE = 5.5;
+let _salutArrivee = Date.now(), _salutRetour = false, _salutCache = 0;
+function motAccueil(prenom){
+  const h = new Date().getHours();
+  const base = h < 5 || h >= 18 ? 'Bonsoir' : 'Bonjour';
+  if(!_salutRetour) return base + ' <b>' + E(prenom) + '</b>';
+  const mots = ['Bon retour <b>' + E(prenom) + '</b>', 'Content de te revoir <b>' + E(prenom) + '</b>', 'On t\'attendait <b>' + E(prenom) + '</b>', base + ' <b>' + E(prenom) + '</b>, on reprend ?'];
+  return mots[_salutCache % mots.length];
+}
 function salutAccueil(){
+  const ecoule = (Date.now() - _salutArrivee) / 1000;
+  if(ecoule >= SALUT_DUREE) return '';
   const nom = ((S.util && S.util.connecte && S.util.nom) || (lireMemoire() || {}).nom || '').trim();
   if(!nom || /^candidat$/i.test(nom)) return '';
   const prenom = nom.split(/\s+/)[0];
-  const h = new Date().getHours();
-  const mot = h < 5 || h >= 18 ? 'Bonsoir' : 'Bonjour';
-  return `<p class="salut-accueil">${mot} <b>${E(prenom)}</b></p>`;
+  return `<p class="salut-accueil" style="animation-delay:-${ecoule.toFixed(2)}s">${motAccueil(prenom)}</p>`;
 }
+let _salutPartiLe = 0;
+document.addEventListener('visibilitychange', () => {
+  if(document.hidden){ _salutPartiLe = Date.now(); return; }
+  if(_salutPartiLe && Date.now() - _salutPartiLe > 30000){
+    _salutArrivee = Date.now(); _salutRetour = true; _salutCache = Math.floor(Math.random() * 4);
+    if(S.ecran === 'aujourdhui') rendre();
+  }
+});
 /* Pour un visiteur : un bloc net en haut de l'accueil, qui dit comment s'inscrire en trois gestes */
 function blocInscriptionVisiteur(){
   if(S.util.connecte) return '';

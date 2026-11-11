@@ -1857,7 +1857,9 @@ body[data-theme="clair"] .fe-carte{background:#fff}
 @media(prefers-reduced-motion:reduce){.fe-badge,.fe-confettis i{animation:none}.fe-confettis{display:none}}
 .panneau .titre-panneau + .champ{margin-top:14px}
 
-.salut-accueil{margin:2px 0 6px;font-size:19px;font-weight:500;color:var(--craie);letter-spacing:-.01em}
+.salut-accueil{margin:2px 0 6px;font-size:19px;font-weight:500;color:var(--craie);letter-spacing:-.01em;overflow:hidden;animation:salutVie 5.5s ease both}
+@keyframes salutVie{0%{opacity:0;transform:translateY(-4px);max-height:40px}8%{opacity:1;transform:none;max-height:40px}78%{opacity:1;max-height:40px;margin-bottom:6px}100%{opacity:0;max-height:0;margin:0}}
+@media (prefers-reduced-motion:reduce){.salut-accueil{animation-duration:5.5s}}
 .salut-accueil b{font-weight:700}
 
 .statut-nat.sn-absent .sn-tampon{color:var(--craie2);border-color:var(--trait)}
