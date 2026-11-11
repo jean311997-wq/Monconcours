@@ -4227,7 +4227,6 @@ function htmlFeuilleComposition(source){
   matsFeuille.map(x => '<tr><td>' + E(x.nom) + '</td><td class="n">' + x.j + ' / ' + x.n + '</td><td class="n">' + Math.round(x.j / x.n * 100) + ' %</td></tr>').join('') + '</table>' : '') +
 '<h1>Recommandations</h1><ol class="recos">' + recommandations.map(r => '<li>' + E(r) + '</li>').join('') + '</ol>' +
 
-'<div class="saut-page"></div>' +
 '<h1>Le sujet corrigé</h1>' + sujetHtml +
 '<div class="pied"><span><b>monconcoursbf.com</b> · WhatsApp <b>' + telAffiche() + '</b></span><span>Document remis le ' + quand + '</span></div>' +
 '<div class="noimp"><button onclick="window.print()">Enregistrer en PDF ou imprimer</button></div>' +
@@ -6834,7 +6833,7 @@ function ecranGagnants(){
 
     <div class="actions-res">
       <button class="cta" data-corr-nat="${E(c.id)}">${ico('lire',16)} Voir la correction</button>
-      <button class="cta creux" data-resultats-pdf="1">${ico('telecharger',16)} Résultats en PDF</button>
+      <button class="cta creux" data-resultats-pdf="1">${ico('telecharger',16)} Télécharger la correction en PDF</button>
     </div>
     ${S.util.connecte ? blocDiscussionApercu(c.id) : ''}
     ${!m && S.epreuve && S.epreuve.id !== c.id && S.epreuve.etat === 'a_venir' && !S.epreuve.inscrit ? `<div class="carte" style="margin-top:12px;text-align:left"><p class="sous" style="margin:0 0 10px">Prochaine composition nationale : ${E(dateLongue(S.epreuve.debut_le))} à ${heureH(S.epreuve.debut_le)}. Venez composer et voir votre nom dans ce classement.</p>
@@ -6907,7 +6906,6 @@ function resultatsPdf(){
 '<h1>Feuille de réponses</h1>' +
 '<div class="grille">' + grilleHtml + '</div>' +
 '<div class="legende"><span><i style="background:#0E7A54"></i> Réponse attendue</span><span><i style="border:1px solid #ccc"></i> Réponse non retenue</span></div>' +
-'<div class="saut-page"></div>' +
 '<h1>Le sujet corrigé</h1>' + sujetHtml +
 (syn.mats.length ? '<div class="bloc-fin"><h1>Résultats par matière</h1><table class="mats">' +
   syn.mats.map(x => '<tr><td>' + E(x.nom) + '</td><td class="n">' + x.n + ' question' + (x.n > 1 ? 's' : '') + '</td><td class="n">' + (x.pct === null ? '—' : x.pct + ' %') + '</td></tr>').join('') + '</table></div>' : '') +
