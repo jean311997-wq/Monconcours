@@ -3943,7 +3943,7 @@ async function htmlVersPdf(html){
       const st = doc.defaultView.getComputedStyle(el);
       if(st.display === 'inline' || st.position === 'fixed') return;
       const r = el.getBoundingClientRect();
-      if(r.height > 0) bords.add(Math.round(r.bottom + doc.defaultView.scrollY));
+      if(r.height > 0 && !el.closest('h1,h2,h3')) bords.add(Math.round(r.bottom + doc.defaultView.scrollY));
       if(el.classList.contains('saut-page')) forces.push(Math.round(r.top + doc.defaultView.scrollY));
     });
     const candidats = [...bords].sort((a, b) => a - b);
@@ -4092,6 +4092,47 @@ function feuilleComposition(source){
   if(feuilleBloquee()) return;
   return sortirDocument('Feuille corrigée ' + (S.util.nom || 'candidat'), () => htmlFeuilleComposition(source));
 }
+/* Feuille corrigée : une seule feuille de style pour la copie perso et la correction nationale */
+const CSS_FEUILLE =
+'@page{size:A4;margin:14mm}*{box-sizing:border-box}' +
+'body{font-family:Georgia,"Times New Roman",serif;color:#111;margin:0;line-height:1.45}' +
+'.tete{display:flex;align-items:center;gap:14px;border-bottom:3px double #111;padding-bottom:12px;flex-wrap:wrap}' +
+'body{max-width:190mm;margin:0 auto;padding:0 10px}@media print{body{padding:0}}' +
+'.marque .n{font-size:19px;font-weight:bold;letter-spacing:.04em}.marque .d{font-size:11px;color:#555;font-style:italic}' +
+'.sceau{width:52px;height:52px;border-radius:13px;background:#EDE4D3;border:1px solid #C9BEA9;display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:7px;flex:0 0 auto}' +
+'.sceau i{border-radius:50%;background:#FBFAF7;border:1px solid #C9BEA9}.sceau i:nth-child(2),.sceau i:nth-child(3){background:#1C1C1C;border-color:#1C1C1C}' +
+'h1{font-size:15px;letter-spacing:.2em;text-transform:uppercase;margin:16px 0 10px;border-bottom:1px solid #111;padding-bottom:5px;break-after:avoid}' +
+'.ident{display:flex;gap:6px;flex-wrap:wrap}.ident div{flex:1 1 90px;border:1px solid #bbb;padding:3px 7px}' +
+'.ident b{display:block;font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:#666;font-weight:normal}.ident span{font-size:12px}' +
+'.resultat{display:flex;gap:10px;align-items:stretch;margin-top:8px}.note{border:2px solid #111;padding:6px 12px;text-align:center;min-width:110px}' +
+'.note .n{font-size:28px;font-weight:bold;line-height:1}.note .l{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#555;margin-top:5px}' +
+'.rec{flex:1;border-collapse:collapse;font-size:11.5px}.rec td{border:1px solid #bbb;padding:2px 8px}.rec td:last-child{text-align:right;font-weight:bold;width:70px}' +
+'ol.recos{margin:6px 0 0 18px;font-size:13px}ol.recos li{margin-bottom:5px}' +
+'.saut-page{break-before:page;page-break-before:always}.bloc-fin{break-inside:avoid}' +
+'.q{break-inside:avoid;margin:0 0 9px;font-size:12.5px}.q ol{margin:3px 0 0 22px;padding:0}.q li{margin:1px 0}' +
+'.q li.bonne{color:#0E7A54;font-weight:bold}.q li.mauvaise{color:#B4231C;text-decoration:line-through}' +
+'.etat{font-family:Helvetica,Arial,sans-serif;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;border:1px solid #999;padding:0 4px;margin-left:4px}' +
+'.etat.juste{color:#0E7A54;border-color:#0E7A54}.etat.fausse{color:#B4231C;border-color:#B4231C}.etat.blanche{color:#777}' +
+'.grille{display:grid;grid-template-columns:repeat(5,1fr);gap:3px 12px;font-family:Helvetica,Arial,sans-serif}' +
+'.ligne{display:flex;align-items:center;gap:3px;font-size:11px;break-inside:avoid}.no{width:20px;text-align:right;color:#666;font-size:10px}' +
+'.b{width:17px;height:17px;line-height:16px;text-align:center;border:1px solid #ccc;border-radius:50%;font-size:10px;color:#bbb}' +
+'.b.juste{background:#0E7A54;border-color:#0E7A54;color:#fff;font-weight:bold}.b.attendue{border:2px solid #0E7A54;color:#0E7A54;font-weight:bold}' +
+'.b.faute{background:#fff;border:2px solid #B4231C;color:#B4231C;font-weight:bold;text-decoration:line-through}' +
+'.legende{display:flex;gap:16px;font-size:11px;margin:8px 0 0;font-family:Helvetica,Arial,sans-serif;color:#444;flex-wrap:wrap}' +
+'.legende span{display:flex;align-items:center;gap:5px}.legende i{width:14px;height:14px;border-radius:50%;display:inline-block}' +
+'.pied{margin-top:20px;border-top:2px solid #111;padding-top:8px;font-size:12px;color:#111;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-family:Helvetica,Arial,sans-serif}' +
+'.pied b{font-size:13px}' +
+'.site{margin-left:auto;display:flex;align-items:center;gap:10px;text-align:right}' +
+'.site .adr{font-family:Helvetica,Arial,sans-serif;font-weight:bold;font-size:15px;color:#000;letter-spacing:.01em}' +
+'.site .sc{font-size:10.5px;color:#333;font-family:Helvetica,Arial,sans-serif}' +
+'.site svg{display:block;border:1px solid #ccc}' +
+'.filigrane{position:fixed;top:50%;left:50%;width:120mm;height:120mm;transform:translate(-50%,-50%) rotate(-12deg);opacity:.045;z-index:-1;pointer-events:none;display:grid;grid-template-columns:1fr 1fr;gap:9mm;padding:12mm;border-radius:28mm;background:#1C1C1C}' +
+'.filigrane i{border-radius:50%;background:#fff}.filigrane i:nth-child(2),.filigrane i:nth-child(3){background:#1C1C1C;border:4mm solid #fff}' +
+'.filigrane b{position:absolute;bottom:-16mm;left:0;right:0;text-align:center;font:bold 13mm Helvetica,Arial,sans-serif;color:#1C1C1C;white-space:nowrap}' +
+'table.mats{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:6px}table.mats td{border:1px solid #bbb;padding:4px 8px}table.mats td.n{text-align:right;width:90px;font-weight:bold}' +
+'@media print{.noimp{display:none}}.noimp{text-align:center;margin:20px 0}' +
+'.noimp button{font:inherit;padding:11px 22px;border:1px solid #111;background:#111;color:#fff;cursor:pointer}';
+
 function htmlFeuilleComposition(source){
   /* source : { grille:[{q, o, bonnes}], reponses:{}, note, duree, date, sujet, concours }
      Sans source, on imprime la composition qui vient d'être corrigée. */
@@ -4146,45 +4187,7 @@ function htmlFeuilleComposition(source){
 
   const html = '<!doctype html><html lang="fr"><head><meta charset="utf-8">' +
 '<title>Feuille corrigée — ' + E(S.util.nom || 'Candidat') + '</title>' +
-'<style>' +
-'@page{size:A4;margin:14mm}*{box-sizing:border-box}' +
-'body{font-family:Georgia,"Times New Roman",serif;color:#111;margin:0;line-height:1.45}' +
-'.tete{display:flex;align-items:center;gap:14px;border-bottom:3px double #111;padding-bottom:12px;flex-wrap:wrap}' +
-'body{max-width:190mm;margin:0 auto;padding:0 10px}@media print{body{padding:0}}' +
-'.marque .n{font-size:19px;font-weight:bold;letter-spacing:.04em}.marque .d{font-size:11px;color:#555;font-style:italic}' +
-'.sceau{width:52px;height:52px;border-radius:13px;background:#EDE4D3;border:1px solid #C9BEA9;display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:7px;flex:0 0 auto}' +
-'.sceau i{border-radius:50%;background:#FBFAF7;border:1px solid #C9BEA9}.sceau i:nth-child(2),.sceau i:nth-child(3){background:#1C1C1C;border-color:#1C1C1C}' +
-'h1{font-size:15px;letter-spacing:.2em;text-transform:uppercase;margin:16px 0 10px;border-bottom:1px solid #111;padding-bottom:5px;break-after:avoid}' +
-'.ident{display:flex;gap:6px;flex-wrap:wrap}.ident div{flex:1 1 90px;border:1px solid #bbb;padding:3px 7px}' +
-'.ident b{display:block;font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:#666;font-weight:normal}.ident span{font-size:12px}' +
-'.resultat{display:flex;gap:10px;align-items:stretch;margin-top:8px}.note{border:2px solid #111;padding:6px 12px;text-align:center;min-width:110px}' +
-'.note .n{font-size:28px;font-weight:bold;line-height:1}.note .l{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#555;margin-top:5px}' +
-'.rec{flex:1;border-collapse:collapse;font-size:11.5px}.rec td{border:1px solid #bbb;padding:2px 8px}.rec td:last-child{text-align:right;font-weight:bold;width:70px}' +
-'ol.recos{margin:6px 0 0 18px;font-size:13px}ol.recos li{margin-bottom:5px}' +
-'.saut-page{break-before:page;page-break-before:always}' +
-'.q{break-inside:avoid;margin:0 0 9px;font-size:12.5px}.q ol{margin:3px 0 0 22px;padding:0}.q li{margin:1px 0}' +
-'.q li.bonne{color:#0E7A54;font-weight:bold}.q li.mauvaise{color:#B4231C;text-decoration:line-through}' +
-'.etat{font-family:Helvetica,Arial,sans-serif;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;border:1px solid #999;padding:0 4px;margin-left:4px}' +
-'.etat.juste{color:#0E7A54;border-color:#0E7A54}.etat.fausse{color:#B4231C;border-color:#B4231C}.etat.blanche{color:#777}' +
-'.grille{display:grid;grid-template-columns:repeat(5,1fr);gap:3px 12px;font-family:Helvetica,Arial,sans-serif}' +
-'.ligne{display:flex;align-items:center;gap:3px;font-size:11px;break-inside:avoid}.no{width:20px;text-align:right;color:#666;font-size:10px}' +
-'.b{width:17px;height:17px;line-height:16px;text-align:center;border:1px solid #ccc;border-radius:50%;font-size:10px;color:#bbb}' +
-'.b.juste{background:#0E7A54;border-color:#0E7A54;color:#fff;font-weight:bold}.b.attendue{border:2px solid #0E7A54;color:#0E7A54;font-weight:bold}' +
-'.b.faute{background:#fff;border:2px solid #B4231C;color:#B4231C;font-weight:bold;text-decoration:line-through}' +
-'.legende{display:flex;gap:16px;font-size:11px;margin:8px 0 0;font-family:Helvetica,Arial,sans-serif;color:#444;flex-wrap:wrap}' +
-'.legende span{display:flex;align-items:center;gap:5px}.legende i{width:14px;height:14px;border-radius:50%;display:inline-block}' +
-'.pied{margin-top:20px;border-top:2px solid #111;padding-top:8px;font-size:12px;color:#111;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-family:Helvetica,Arial,sans-serif}' +
-'.pied b{font-size:13px}' +
-'.site{margin-left:auto;display:flex;align-items:center;gap:10px;text-align:right}' +
-'.site .adr{font-family:Helvetica,Arial,sans-serif;font-weight:bold;font-size:15px;color:#000;letter-spacing:.01em}' +
-'.site .sc{font-size:10.5px;color:#333;font-family:Helvetica,Arial,sans-serif}' +
-'.site svg{display:block;border:1px solid #ccc}' +
-'.filigrane{position:fixed;top:50%;left:50%;width:120mm;height:120mm;transform:translate(-50%,-50%) rotate(-12deg);opacity:.045;z-index:-1;pointer-events:none;display:grid;grid-template-columns:1fr 1fr;gap:9mm;padding:12mm;border-radius:28mm;background:#1C1C1C}' +
-'.filigrane i{border-radius:50%;background:#fff}.filigrane i:nth-child(2),.filigrane i:nth-child(3){background:#1C1C1C;border:4mm solid #fff}' +
-'.filigrane b{position:absolute;bottom:-16mm;left:0;right:0;text-align:center;font:bold 13mm Helvetica,Arial,sans-serif;color:#1C1C1C;white-space:nowrap}' +
-'table.mats{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:6px}table.mats td{border:1px solid #bbb;padding:4px 8px}table.mats td.n{text-align:right;width:90px;font-weight:bold}' +
-'@media print{.noimp{display:none}}.noimp{text-align:center;margin:20px 0}' +
-'.noimp button{font:inherit;padding:11px 22px;border:1px solid #111;background:#111;color:#fff;cursor:pointer}' +
+'<style>' + CSS_FEUILLE +
 '</style></head><body>' +
 '<div class="filigrane" aria-hidden="true"><i></i><i></i><i></i><i></i><b>MON CONCOURS</b></div>' +
 '<div class="tete"><div class="sceau"><i></i><i></i><i></i><i></i></div>' +
@@ -6522,6 +6525,35 @@ async function chargerCorrectionNat(id){
   }catch(e){ S.corrNat = { id, charge:true, ok:false, erreur:true }; }
   if(S.ecran === 'correctionnat') rendre();
 }
+/* Synthèse de la correction générale : même contenu à l'écran et dans le PDF */
+function syntheseCorrNat(corr, c){
+  const qs = (corr && corr.questions) || [];
+  const groupes = {};
+  qs.forEach((q, i) => {
+    const nom = q.matiere || 'Culture générale';
+    const g = groupes[nom] || (groupes[nom] = { nom, n:0, somme:0, avec:0 });
+    g.n++;
+    if(typeof q.reussite === 'number'){ g.somme += q.reussite; g.avec++; }
+  });
+  const mats = Object.values(groupes).map(g => ({ nom:g.nom, n:g.n, pct:g.avec ? Math.round(g.somme / g.avec) : null }));
+  const mesures = mats.filter(m => m.pct !== null).sort((a, b) => a.pct - b.pct);
+  const recos = [];
+  if(mesures.length > 1){
+    const bas = mesures[0], haut = mesures[mesures.length - 1];
+    recos.push('La matière la moins réussie est ' + bas.nom + ' (' + bas.pct + ' % de réussite en moyenne). Reprenez son cours avant la prochaine composition.');
+    if(haut.pct - bas.pct >= 10) recos.push(haut.nom + ' a été la mieux réussie (' + haut.pct + ' %). Gardez ce niveau avec un peu de révision chaque semaine.');
+  }
+  const ratees = qs.map((q, i) => ({ no:i + 1, p:q.reussite })).filter(x => typeof x.p === 'number').sort((a, b) => a.p - b.p).slice(0, 3);
+  if(ratees.length && ratees[0].p < 60)
+    recos.push('Les questions les plus ratées sont les n° ' + ratees.map(x => x.no).join(', ') + '. Lisez leur explication ci-dessus et refaites-les dans « Mes erreurs ».');
+  if(c && c.moyenne !== null && c.moyenne !== undefined && c.sur)
+    recos.push('La moyenne de la composition était de ' + String(c.moyenne).replace('.', ',') + ' sur ' + c.sur + '. Pour être admis, visez la note du dernier admis, pas seulement la moyenne.');
+  recos.push('Chaque jour, reprenez vos erreurs dans « Mes erreurs » : une question revient jusqu\'à trois bonnes réponses d\'affilée.');
+  recos.push('Refaites un sujet complet en 40 minutes, sans interruption, comme le jour du concours.');
+  return { mats, recos };
+}
+function lettresBonnes(q){ return (q.bonnes || []).map(k => 'ABCDEFGH'[k] || (k + 1)).join(', '); }
+
 function ecranCorrectionNat(){
   const c = S.corrNat;
   const tete = `<button class="retourhaut" data-gagnants="${E(c ? c.id : '')}">Retour aux résultats</button>`;
@@ -6535,20 +6567,36 @@ function ecranCorrectionNat(){
     return;
   }
   const L = 'ABCDEFGH';
+  const cl = S.classementEp && S.classementEp.id === c.id ? S.classementEp : null;
+  const syn = syntheseCorrNat(c, cl);
+  const nq = (c.questions || []).length;
+  const grille = (c.questions || []).map((q, i) => `<div class="cg-l"><span class="cg-no">${i + 1}</span>${(q.options || []).map((_, k) =>
+    `<span class="cg-b${(q.bonnes || []).includes(k) ? ' on' : ''}">${L[k] || k + 1}</span>`).join('')}</div>`).join('');
   const qs = (c.questions || []).map((q, i) => {
     const bonnes = q.bonnes || [];
     return `<div class="carte cn-corr">
       <div class="libelle" style="margin-bottom:6px"><span>Question ${i + 1}${q.matiere ? ' · ' + E(q.matiere) : ''}</span>${q.reussite !== null && q.reussite !== undefined ? `<span class="num">${q.reussite} % de réussite</span>` : ''}</div>
       <p style="font-weight:600;margin-bottom:10px">${E(q.enonce)}</p>
       ${(q.options || []).map((o, k) => `<div class="opt${bonnes.includes(k) ? ' juste' : ''}" style="cursor:default"><span class="lettre">${L[k] || k + 1}</span><span>${E(o)}</span></div>`).join('')}
-      ${q.explication ? `<p class="sous" style="margin-top:8px">${E(q.explication)}</p>` : ''}
+      ${q.explication ? `<p class="sous" style="margin-top:8px"><b>Pourquoi ?</b> ${E(q.explication)}</p>` : ''}
     </div>`;
   }).join('');
+  const mats = syn.mats.length ? `<div class="libelle" style="margin-top:22px">Résultats par matière</div><div class="carte cg-mats">${syn.mats.map(m =>
+    `<div class="cg-m"><span>${E(m.nom)}</span><span class="num">${m.n} question${m.n > 1 ? 's' : ''}</span><b class="num">${m.pct === null ? '—' : m.pct + ' %'}</b></div>`).join('')}</div>` : '';
   vue().innerHTML = `<div class="pad">${tete}
-    <div class="eyebrow">Composition nationale · corrigé</div>
+    <div class="cg-tete"><span class="cg-sceau"><i></i><i></i><i></i><i></i></span>
+      <div><b>MON CONCOURS</b><span>Préparation aux concours directs du Burkina Faso</span></div></div>
+    <div class="eyebrow">Composition nationale · correction générale</div>
     <h1 class="titre">Corrigé de l'épreuve</h1>
-    <p class="sous" style="margin:6px 0 14px">${(c.questions || []).length} question${(c.questions || []).length > 1 ? 's' : ''} · ${nombreFr(c.participants || 0)} candidat${(c.participants||0)>1?'s':''}. Le pourcentage indique la part des candidats qui ont trouvé la bonne réponse.</p>
-    ${qs}</div>`;
+    <p class="sous" style="margin:6px 0 14px">${nq} question${nq > 1 ? 's' : ''} · ${nombreFr(c.participants || 0)} candidat${(c.participants||0)>1?'s':''}. Les réponses attendues sont en vert. Le pourcentage indique la part des candidats qui ont trouvé.</p>
+    <div class="libelle">Feuille de réponses</div>
+    <div class="carte"><div class="cg-grille">${grille}</div><p class="sous" style="margin:10px 0 0;font-size:12px"><span class="cg-b on" style="display:inline-grid;width:16px;height:16px;font-size:9px">✓</span> Réponse attendue</p></div>
+    <div class="libelle" style="margin-top:22px">Le sujet corrigé</div>
+    ${qs}
+    ${mats}
+    <div class="libelle" style="margin-top:22px">Recommandations</div>
+    <div class="carte"><ol class="cg-reco">${syn.recos.map(r => `<li>${E(r)}</li>`).join('')}</ol></div>
+  </div>`;
 }
 const STATUTS = { admis:'Admis', attente:'Liste d\'attente', echoue:'Non admis' };
 
@@ -6785,7 +6833,7 @@ function ecranGagnants(){
     </div>` : '<div class="carte" style="margin-top:14px"><p class="sous">Aucune copie remise pour cette composition.</p></div>'}
 
     <div class="actions-res">
-      <button class="cta" ${m && maCompo ? `data-correction-nat="${E(maCompo)}"` : `data-corr-nat="${E(c.id)}"`}>${ico('lire',16)} Voir la correction</button>
+      <button class="cta" data-corr-nat="${E(c.id)}">${ico('lire',16)} Voir la correction</button>
       <button class="cta creux" data-resultats-pdf="1">${ico('telecharger',16)} Résultats en PDF</button>
     </div>
     ${S.util.connecte ? blocDiscussionApercu(c.id) : ''}
@@ -6803,35 +6851,79 @@ function ecranGagnants(){
 function resultatsPdf(){
   const c = S.classementEp;
   if(!c || !c.termine){ toast('Les résultats ne sont pas encore publiés.'); return; }
-  return sortirDocument('Résultats composition nationale ' + (c.concours || ''), () => {
+  return sortirDocument('Correction composition nationale ' + (c.concours || ''), async () => {
+    /* le corrigé complet : déjà chargé, sinon on va le chercher */
+    let corr = S.corrNat && S.corrNat.id === c.id && S.corrNat.ok && S.corrNat.publie ? S.corrNat : null;
+    if(!corr && base){
+      try{
+        const { data } = await base.rpc('correction_epreuve', { p_epreuve: c.id });
+        if(data && data.ok && data.publie) corr = { ...data, id:c.id, charge:true };
+      }catch(e){}
+    }
+    const qs = corr ? (corr.questions || []) : [];
     const liste = c.classement || [];
     const admis = liste.filter(l => l.statut === 'admis'), attente = liste.filter(l => l.statut === 'attente');
     const podium = liste.filter(l => l.rang <= 3).slice(0, 3);
     const quand = new Date(c.debut_le).toLocaleDateString('fr-FR', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
-    const tableau = l => '<table class="res"><thead><tr><th>Rang</th><th>Nom</th><th>Note</th><th>Temps</th></tr></thead><tbody>' +
-      l.map(x => '<tr><td class="c">' + x.rang + (x.rang === 1 ? 'er' : 'e') + '</td><td>' + E(x.nom) + '</td><td class="c">' + x.score + ' / ' + x.sur + '</td><td class="c">' + mmssLong(x.duree) + '</td></tr>').join('') +
-      '</tbody></table>';
-    const css = '.chiffres{display:flex;gap:8px;margin-top:14px}.chiffres div{flex:1;border:1px solid #bbb;padding:7px;text-align:center}.chiffres b{display:block;font-size:20px}.chiffres span{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#555}' +
-      '.felic{border:2px solid #B08A2E;background:#FBF6EA;padding:12px 16px;margin-top:16px;font-size:14px}.felic b.t{display:block;letter-spacing:.16em;text-transform:uppercase;font-size:12px;color:#8A6A1E;margin-bottom:4px}.felic ol{margin:6px 0 0 18px;padding:0}' +
-      'table.res{width:100%;border-collapse:collapse;font-size:12.5px}table.res th{font-family:Helvetica,Arial,sans-serif;font-size:10px;letter-spacing:.12em;text-transform:uppercase;text-align:left;border-bottom:2px solid #111;padding:4px 8px}' +
-      'table.res td{border-bottom:1px solid #ddd;padding:4px 8px}table.res td.c{text-align:center;white-space:nowrap}table.res tr{break-inside:avoid}.note{font-size:12px;color:#444;margin-top:14px}' +
-      '.sim{font-size:12px;letter-spacing:.06em;text-transform:none;color:#555}';
-    return docComplet('Résultats — ' + (c.concours || c.titre), css,
-      docEntete('Scannez pour rejoindre la prochaine composition') +
-      '<p class="doc-titre">Composition nationale <span class="sim">(simulation)</span></p>' +
-      '<p class="doc-st"><b>Résultats · ' + E(c.concours || c.titre) + '</b></p>' +
-      '<p class="doc-st">Épreuve du ' + quand + ' à ' + heureH(c.debut_le) + '</p>' +
-      '<div class="chiffres"><div><b>' + c.participants + '</b><span>candidats</span></div><div><b>' + c.places + '</b><span>postes</span></div>' +
-        '<div><b>' + c.admis + '</b><span>admis</span></div><div><b>' + c.attente + '</b><span>liste d\'attente</span></div><div><b>' + (c.moyenne ?? '—') + '</b><span>moyenne / ' + c.sur + '</span></div></div>' +
-      (podium.length ? '<div class="felic"><b class="t">Félicitations</b>Mon Concours félicite chaleureusement les trois premiers de cette composition :<ol>' +
-        podium.map(l => '<li><b>' + E(l.nom) + '</b>, ' + (l.rang === 1 ? 'major' : l.rang + 'e') + ' avec ' + l.score + ' / ' + l.sur + '</li>').join('') + '</ol>' +
-        (c.recompense ? '<p style="margin:6px 0 0">Récompense du major : ' + E(c.recompense) + '.</p>' : '') +
-        '<p style="margin:6px 0 0">Bravo à tous les admis. Pour les autres, la prochaine composition nationale a lieu ' + (prochaineNat() || 'bientôt') + '.</p></div>' : '') +
-      (admis.length ? '<h2>Liste des admis par ordre de mérite</h2>' + tableau(admis) : '') +
-      (attente.length ? '<h2>Liste d\'attente</h2>' + tableau(attente) : '') +
-      (c.echoues ? '<p class="note">Non admis : ' + c.echoues + ' candidat' + (c.echoues > 1 ? 's' : '') + '. Leurs noms ne sont pas publiés.</p>' : '') +
-      '<p class="note">À note égale, le candidat le plus rapide est classé devant. Composition d\'entraînement (simulation) organisée par Mon Concours ; elle ne remplace pas les résultats officiels des concours de la fonction publique.</p>' +
-      docPied());
+    const quandCourt = new Date().toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' });
+    const L = 'ABCDEFGH';
+    const syn = syntheseCorrNat(corr, c);
+    const grilleHtml = qs.map((q, i) => '<div class="ligne"><span class="no">' + (i+1) + '</span>' +
+      (q.options || []).map((_, k) => '<span class="b' + ((q.bonnes || []).includes(k) ? ' juste' : '') + '">' + (L[k] || '•') + '</span>').join('') + '</div>').join('');
+    const sujetHtml = qs.map((q, i) => {
+      const bonnes = q.bonnes || [];
+      return '<div class="q"><div class="qt"><b>' + (i+1) + '.</b> ' + E(q.enonce) +
+        (q.matiere ? ' <span class="etat blanche">' + E(q.matiere) + '</span>' : '') + '</div><ol type="a">' +
+        (q.options || []).map((o, k) => '<li class="' + (bonnes.includes(k) ? 'bonne' : '') + '">' + E(o) + (bonnes.includes(k) ? ' ✓' : '') + '</li>').join('') + '</ol>' +
+        (typeof q.reussite === 'number' ? '<div style="font:11px Helvetica,Arial,sans-serif;color:#555;margin:3px 0 0 22px">' + q.reussite + ' % des candidats ont trouvé</div>' : '') +
+        (q.explication ? '<div style="font-size:11.5px;margin:4px 0 0 22px;padding:5px 8px;border-left:3px solid #0E7A54;background:#F3F7F5"><b>Pourquoi ?</b> ' + E(q.explication) + '</div>' : '') + '</div>';
+    }).join('');
+    const tableau = l => '<table class="mats"><thead><tr><td><b>Rang</b></td><td><b>Nom</b></td><td class="n">Note</td><td class="n">Temps</td></tr></thead><tbody>' +
+      l.map(x => '<tr><td style="width:60px">' + x.rang + (x.rang === 1 ? 'er' : 'e') + '</td><td>' + E(x.nom) + '</td><td class="n">' + x.score + ' / ' + x.sur + '</td><td class="n">' + mmssLong(x.duree) + '</td></tr>').join('') + '</tbody></table>';
+    const html = '<!doctype html><html lang="fr"><head><meta charset="utf-8">' +
+'<title>Correction — ' + E(c.concours || c.titre || 'Composition nationale') + '</title>' +
+'<style>' + CSS_FEUILLE + '</style></head><body>' +
+'<div class="filigrane" aria-hidden="true"><i></i><i></i><i></i><i></i><b>MON CONCOURS</b></div>' +
+'<div class="tete"><div class="sceau"><i></i><i></i><i></i><i></i></div>' +
+  '<div class="marque"><div class="n">MON CONCOURS</div><div class="d">Préparation aux concours directs du Burkina Faso</div></div>' +
+  '<div class="site"><div><div class="adr">monconcoursbf.com</div><div class="sc">Scannez pour rejoindre la prochaine composition</div></div>' + QR_FEUILLE + '</div></div>' +
+'<h1>Correction générale</h1>' +
+'<div class="ident">' +
+  '<div><b>Épreuve</b><span>Composition nationale · ' + E(c.concours || c.titre || '') + '</span></div>' +
+  '<div><b>Date</b><span>' + E(quand) + '</span></div>' +
+  '<div><b>Candidats</b><span>' + c.participants + '</span></div>' +
+  '<div><b>Postes</b><span>' + c.places + '</span></div>' +
+'</div>' +
+'<div class="resultat">' +
+  '<div class="note"><div class="n">' + (c.moyenne ?? '—') + ' / ' + c.sur + '</div><div class="l">Moyenne</div></div>' +
+  '<table class="rec">' +
+    '<tr><td>Admis</td><td>' + c.admis + '</td></tr>' +
+    '<tr><td>Liste d\'attente</td><td>' + c.attente + '</td></tr>' +
+    '<tr><td>Non admis</td><td>' + c.echoues + '</td></tr>' +
+    (qs.length ? '<tr><td>Questions</td><td>' + qs.length + '</td></tr>' : '') +
+  '</table>' +
+'</div>' +
+(qs.length ?
+'<h1>Feuille de réponses</h1>' +
+'<div class="grille">' + grilleHtml + '</div>' +
+'<div class="legende"><span><i style="background:#0E7A54"></i> Réponse attendue</span><span><i style="border:1px solid #ccc"></i> Réponse non retenue</span></div>' +
+'<div class="saut-page"></div>' +
+'<h1>Le sujet corrigé</h1>' + sujetHtml +
+(syn.mats.length ? '<div class="bloc-fin"><h1>Résultats par matière</h1><table class="mats">' +
+  syn.mats.map(x => '<tr><td>' + E(x.nom) + '</td><td class="n">' + x.n + ' question' + (x.n > 1 ? 's' : '') + '</td><td class="n">' + (x.pct === null ? '—' : x.pct + ' %') + '</td></tr>').join('') + '</table></div>' : '') +
+'<div class="bloc-fin"><h1>Recommandations</h1><ol class="recos">' + syn.recos.map(r => '<li>' + E(r) + '</li>').join('') + '</ol></div>'
+: '<p class="note-bas" style="margin-top:14px;font-size:12px;color:#444">Le corrigé détaillé n\'est pas disponible pour le moment.</p>') +
+(podium.length ? '<h1>Félicitations</h1><p style="font-size:13px;margin:6px 0">Mon Concours félicite les trois premiers : ' +
+  podium.map(l => '<b>' + E(l.nom) + '</b> (' + (l.rang === 1 ? 'major' : l.rang + 'e') + ', ' + l.score + ' / ' + l.sur + ')').join(', ') + '.' +
+  (c.recompense ? ' Récompense du major : ' + E(c.recompense) + '.' : '') + '</p>' : '') +
+(admis.length ? '<div class="bloc-fin"><h1>Liste des admis par ordre de mérite</h1>' + tableau(admis) + '</div>' : '') +
+(attente.length ? '<div class="bloc-fin"><h1>Liste d\'attente</h1>' + tableau(attente) + '</div>' : '') +
+'<p style="font-size:11.5px;color:#444;margin-top:12px">' + (c.echoues ? 'Non admis : ' + c.echoues + ' candidat' + (c.echoues > 1 ? 's' : '') + '. Leurs noms ne sont pas publiés. ' : '') +
+  'À note égale, le candidat le plus rapide est classé devant. Composition d\'entraînement (simulation) organisée par Mon Concours ; elle ne remplace pas les résultats officiels des concours de la fonction publique.</p>' +
+'<div class="pied"><span><b>monconcoursbf.com</b> · WhatsApp <b>' + telAffiche() + '</b></span><span>Document remis le ' + quandCourt + '</span></div>' +
+'<div class="noimp"><button onclick="window.print()">Enregistrer en PDF ou imprimer</button></div>' +
+'<scr' + 'ipt>setTimeout(function(){window.print();},600);<\/scr' + 'ipt></body></html>';
+    return html;
   });
 }
 async function reagir(val){
