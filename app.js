@@ -2633,6 +2633,7 @@ function ecranAujourdhui(){
   vue().innerHTML = `
   <div class="pad">
     ${salutAccueil()}
+    ${blocEnLigne()}
     ${nationaleEnHaut() ? `<section class="nat-jour${resultatsEnVedette() && blocDerniereNationale(true) ? ' res-vedette' : ''}" aria-label="Composition nationale du jour">${resultatsEnVedette() ? blocDerniereNationale(true) + (S.epreuve && S.epreuve.etat === 'terminee' ? '' : carteEpreuve()) : carteEpreuve() + blocDerniereNationale()}</section>` : ''}
     ${blocSeanceX()}
     ${blocInscriptionVisiteur()}
@@ -6172,7 +6173,7 @@ function offreSelonUsage(){
   const compos = (S.stats && S.stats.compositions) || 0, qcm = (S.stats && S.stats.questions_resolues) || 0, err = ouvertes();
   const rang = S.classement ? S.classement.rang : null, pop = S.classement ? S.classement.population : null;
   const place = rang && pop ? ` Tu es ${nombreFr(rang)}ᵉ sur ${nombreFr(pop)}.` : '';
-  if(err >= 20 && err * 2 >= qcm / 10) return { titre:'Corriger tes erreurs, c\'est ce qui te fait progresser le plus vite', texte:`Tu as ${nombreFr(err)} erreurs à reprendre. Chacune refermée rapporte 20 points. Avec l\'abonnement, les corrections n\'ont plus de limite : tu peux toutes les reprendre.` };
+  if(err >= 20 && err * 2 >= qcm / 10) return { titre:'Corriger tes erreurs est ton meilleur atout pour progresser dans ta révision', texte:`Tu as ${nombreFr(err)} erreurs à reprendre. Chacune refermée rapporte 20 points. Avec l\'abonnement, les corrections n\'ont plus de limite : tu peux toutes les reprendre.` };
   if(compos >= 3 && compos * 25 >= qcm / 4) return { titre:`Tu as déjà fait ${compos} compositions`, texte:`${place.trim()} L\'abonnement ouvre toutes les compositions chronométrées et le classement national jusqu\'au concours.`.trim() };
   return { titre:'Tu avances bien, continue sur ta lancée', texte:`${nombreFr(qcm)} questions faites.${place} L\'abonnement ouvre toutes les questions de toutes les matières, corrigées et expliquées.` };
 }
@@ -7547,7 +7548,6 @@ function blocPlus(){
       <button data-go="qdj">${ico('question',18)}<b>Question du jour</b><span>La même pour tous</span></button>
       <button data-go="top" style="align-items:center;justify-content:center;text-align:center">${ico('trophee',18)}<b>Top 10 de la semaine</b><span>Défiez les meilleurs</span></button>
     </div>
-    ${blocEnLigne()}
     ${blocCitation()}`;
 }
 
