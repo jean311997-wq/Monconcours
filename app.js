@@ -1364,12 +1364,14 @@ function fenetreAnnonce(n){
       if(reste <= 0 || !f.isConnected){ clearInterval(cpt); if(f.isConnected) fermer(false); }
     }, 1000);
   } else if(genre === 'bilan'){
-    const lignes = String(n.message || '').split('\n').map(l => l.split('|')).filter(l => l.length === 2);
+    const toutes = String(n.message || '').split('\n').map(l => l.split('|')).filter(l => l.length === 2);
+    const sem = toutes.find(l => l[0] === 'Semaine');
+    const lignes = toutes.filter(l => l[0] !== 'Semaine');
     const place = lignes.find(l => l[0] === 'Ta place');
     f.innerHTML = `<div class="fe-carte">
       <div class="fe-marque">Mon Concours · Ta semaine</div>
       <h2 class="fe-titre">Ta semaine sur Mon Concours</h2>
-      <p class="fe-texte" style="margin-bottom:10px">Tes 7 derniers jours, en chiffres.</p>
+      <p class="fe-texte" style="margin-bottom:10px">${sem ? E(sem[1]) + '.' : 'Tes 7 derniers jours, en chiffres.'}</p>
       <div class="bilan-lignes">${lignes.map(l => `<div class="bilan-l"><span>${E(l[0])}</span><b class="num">${E(l[1])}</b></div>`).join('')}</div>
       <button class="cta" data-fe="partager-bilan">Partager mon bilan sur WhatsApp</button>
       <button class="cta creux" style="margin-top:10px" data-fe="suite-erreurs">Voir mes erreurs</button>
