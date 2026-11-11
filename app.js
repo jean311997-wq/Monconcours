@@ -2557,11 +2557,17 @@ const memeJourQue = iso => !!iso && new Date(iso).toISOString().slice(0, 10) ===
    la composition passe en haut le jour où elle a lieu (avant, pendant, après), et redescend le lendemain. */
 function nouveauVenu(){ return !S.util.connecte; }
 /* l'heure qui suit la fin d'une composition : les résultats passent devant et battent, la composition suivante se calme */
+/* Les résultats de la dernière composition restent en haut de l'accueil, qui bat comme un cœur, pendant 24 heures */
+function derniereCompoFinie(){
+  if(S.derniereNat && S.derniereNat.fin_le) return S.derniereNat;
+  const ep = S.epreuve;
+  return ep && ep.etat === 'terminee' ? ep : null;
+}
 function resultatsEnVedette(){
-  const d = S.derniereNat;
+  const d = derniereCompoFinie();
   if(!d || !d.fin_le) return false;
   const t = Date.now() - new Date(d.fin_le).getTime();
-  return t >= 0 && t < 3600000;
+  return t >= 0 && t < 86400000;
 }
 function nationaleEnHaut(){
   if(nouveauVenu()) return false;
@@ -2620,7 +2626,7 @@ function ecranAujourdhui(){
   vue().innerHTML = `
   <div class="pad">
     ${salutAccueil()}
-    ${nationaleEnHaut() ? `<section class="nat-jour${resultatsEnVedette() && blocDerniereNationale() ? ' res-vedette' : ''}" aria-label="Composition nationale du jour">${resultatsEnVedette() ? blocDerniereNationale() + carteEpreuve() : carteEpreuve() + blocDerniereNationale()}</section>` : ''}
+    ${nationaleEnHaut() ? `<section class="nat-jour${resultatsEnVedette() && blocDerniereNationale(true) ? ' res-vedette' : ''}" aria-label="Composition nationale du jour">${resultatsEnVedette() ? blocDerniereNationale(true) + (S.epreuve && S.epreuve.etat === 'terminee' ? '' : carteEpreuve()) : carteEpreuve() + blocDerniereNationale()}</section>` : ''}
     ${blocSeanceX()}
     ${blocInscriptionVisiteur()}
     ${blocPromo()}
@@ -6417,11 +6423,11 @@ function boutonsReactions(l){
   }).join('')}</div>`;
 }
 /* ---------- l'entrée « dernière composition nationale » : visible par tous ---------- */
-function blocDerniereNationale(){
-  const d = S.derniereNat;
+function blocDerniereNationale(force){
+  const d = derniereCompoFinie();
   if(!d) return '';
-  /* la carte juste au-dessus propose déjà ces résultats quand c'est la même épreuve */
-  if(S.epreuve && S.epreuve.id === d.id && S.epreuve.etat === 'terminee') return '';
+  /* la carte juste au-dessus propose déjà ces résultats quand c'est la même épreuve, sauf quand ils sont mis en vedette */
+  if(!force && S.epreuve && S.epreuve.id === d.id && S.epreuve.etat === 'terminee') return '';
   return `<button class="derniere-nat" data-gagnants="${E(d.id)}">
     <span class="dn-ic">${ico('trophee',22)}</span>
     <span class="dn-txt"><small>Dernière composition nationale</small><b>Voir les résultats et le classement</b><span>${E(d.concours || 'Composition nationale')} · ${E(jourFr(d.debut_le))}</span></span>
