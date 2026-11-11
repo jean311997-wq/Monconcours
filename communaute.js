@@ -92,19 +92,27 @@ function carteHtml(p){
 }
 
 /* ---------------------------------------------------------------- une publication */
+/* Ce qui donne envie de répondre : la question du jour, et les messages restés sans réponse. */
+function appelHtml(p, o){
+  if(o || p.moi) return '';
+  if(p.type === 'question') return `<div class="cm-appel"><button class="cta" data-cm-comm="${E(p.id)}">${p.comms ? 'Donner aussi ma réponse (' + nb(p.comms) + ' déjà)' : 'Soyez le premier à répondre'}</button></div>`;
+  if(!p.admin && !p.comms && ['texte', 'photo', 'progres'].includes(p.type)) return `<div class="cm-appel soft"><span>Personne n'a encore répondu. Votre avis peut l'aider.</span><button data-cm-comm="${E(p.id)}">Répondre</button></div>`;
+  return '';
+}
 function postHtml(p, focus){
   const o = C.ouvert[p.id];
   const url = p.image ? urlImage(p.image) : '';
-  return `<article class="cm-post${p.admin ? ' adm' : ''}${p.epingle ? ' epingle' : ''}${p.cache ? ' cache' : ''}${focus ? ' focus' : ''}${p.type === 'motivation' ? ' mot' : ''}" id="cm-p-${E(p.id)}">
+  return `<article class="cm-post${p.admin ? ' adm' : ''}${p.cache ? ' cache' : ''}${focus ? ' focus' : ''}${p.type === 'motivation' ? ' mot' : ''}${p.type === 'question' ? ' qj' : ''}" id="cm-p-${E(p.id)}">
     <header class="cm-ent">
       ${avatar(p.nom, p.teinte, p.admin, false, couleurSig(p))}
       <div class="cm-qui"><span class="cm-nom"><b${couleurSig(p) ? ` style="color:${couleurSig(p)}"` : ''}>${E(nomAffiche(p))}</b>${p.admin ? badgeAdmin(couleurSig(p)) : ''}</span>
-        <small>${p.epingle ? `<span class="cm-epingle">${ico('epingle', 11)} Épinglé</span>` : ''}${!p.admin && p.concours ? E(p.concours) + ' · ' : ''}${relatif(p.cree_le)}</small></div>
+        <small>${!p.admin && p.concours ? E(p.concours) + ' · ' : ''}${relatif(p.cree_le)}</small></div>
       ${p.moi || p.gerer ? `<button class="cm-suppr" data-cm-suppr="${E(p.id)}" aria-label="Supprimer cette publication">${ico('corbeille', 16)}</button>` : ''}
     </header>
-    ${p.texte ? `<p class="cm-texte">${texteHtml(p.texte)}</p>` : ''}
+    ${p.type === 'question' ? '<span class="cm-qj-t">Question du jour</span>' : ''}${p.texte ? `<p class="cm-texte">${texteHtml(p.texte)}</p>` : ''}
     ${url ? `<button class="cm-photo" data-cm-photo="${E(url)}" aria-label="Agrandir la photo"><img src="${E(url)}" alt="Photo partagée par ${E(nomAffiche(p))}" loading="lazy" decoding="async"></button>` : ''}
     ${carteHtml(p)}
+    ${appelHtml(p, o)}
     <footer class="cm-pied">
       <button class="cm-act cm-coeur${p.aime ? ' on' : ''}" data-cm-coeur="${E(p.id)}" aria-pressed="${!!p.aime}" aria-label="${p.aime ? 'Retirer mon cœur' : 'Aimer cette publication'}">${ico('coeur', 19)}<span class="${p.coeurs ? 'num' : ''}">${p.coeurs ? nb(p.coeurs) : "J'aime"}</span></button>
       <button class="cm-act cm-bulle${o ? ' on' : ''}" data-cm-comm="${E(p.id)}" aria-expanded="${!!o}" aria-label="Commentaires">${ico('bulle', 19)}<span class="${p.comms ? 'num' : ''}">${p.comms ? nb(p.comms) : 'Commenter'}</span></button>
@@ -136,7 +144,7 @@ function commsHtml(p){
   const sortie = [];
   const marche = (k, prof) => (enfants[k] || []).forEach(c => { sortie.push(comHtml(p, c, prof)); marche(c.id, Math.min(prof + 1, 2)); });
   marche('', 0);
-  return `${sortie.join('') || '<p class="cm-vide">Pas encore de commentaire. Soyez le premier.</p>'}${saisieHtml(p, o)}`;
+  return `${sortie.join('') || '<p class="cm-vide">Personne n\'a encore répondu. Votre réponse peut aider quelqu\'un.</p>'}${saisieHtml(p, o)}`;
 }
 function comHtml(p, c, prof){
   return `<div class="cm-com p${prof}" id="cm-c-${E(c.id)}">
@@ -421,7 +429,8 @@ function compoHtml(){
   const c = C.compo;
   if(C.blocage) return `<div class="cm-blocage">${E(C.blocage)}</div>`;
   if(!c.ouvert){
-    return `<button class="cm-compo-f" data-cm-compo-ouvrir="1">${avatar(S.util.nom, 150, false)}<span>${c.texte.trim() || c.blob || c.carte ? 'Reprendre mon message…' : 'Écrire à la communauté…'}</span><span class="cm-compo-ic" aria-hidden="true">${ico('photo', 20)}</span></button>`;
+    return `<button class="cm-compo-f" data-cm-compo-ouvrir="1">${avatar(S.util.nom, 150, false)}<span>${c.texte.trim() || c.blob || c.carte ? 'Reprendre mon message…' : 'Écrire à la communauté…'}</span><span class="cm-compo-ic" aria-hidden="true">${ico('photo', 20)}</span></button>
+      <div class="cm-amorces" role="group" aria-label="Idées de message"><button data-cm-amorce="question">Poser une question</button><button data-cm-amorce="score">Partager mon score</button><button data-cm-amorce="conseil">Donner un conseil</button></div>`;
   }
   const n = c.texte.length, vide = !c.texte.trim() && !c.blob && !c.carte;
   return `<div class="cm-compo-o">
@@ -738,6 +747,12 @@ const ACTIONS = {
   cmFiltre: filtrer,
   cmPlus: () => chargerFil(true),
   cmReessayer: () => { C.erreur = ''; C.charge = false; dessinerFil(); chargerFil(false); },
+  cmAmorce: k => {
+    const t = { question: 'Ma question : ', score: 'Mon dernier score : ', conseil: 'Mon conseil du jour : ' }[k];
+    if(!t) return;
+    if(!C.compo.texte.trim()) C.compo.texte = t;
+    C.compo.ouvert = true; majCompo(true);
+  },
   cmCompoOuvrir: () => { C.compo.ouvert = true; majCompo(true); },
   cmCompoFermer: () => { C.compo.ouvert = false; majCompo(); },       // le brouillon reste là
   cmPhotoChoisir: () => { const f = document.getElementById('cm-fichier'); if(f) f.click(); },

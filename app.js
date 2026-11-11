@@ -5445,7 +5445,7 @@ function recompenses(){
    première visite, pour que ceux qui n'y vont pas ne paient rien.
    Ici : la tuile de « Mon compte », le compteur et l'accès.
    ===================================================================== */
-const COMM_VERSION = 5;
+const COMM_VERSION = 6;
 const LIEN_UUID = /^[0-9a-f-]{36}$/i;
 /* « Plus de 700 candidats » : arrondi à la centaine inférieure, donc toujours vrai */
 function candidatsCommunaute(){

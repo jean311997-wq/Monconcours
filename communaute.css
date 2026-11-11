@@ -232,3 +232,16 @@ body.sans-anim .cm-post,body.sans-anim .cm-regles,body.sans-anim .cm-compo-o,bod
 
 .cm-vues{margin-left:auto;display:inline-flex;align-items:center;gap:6px;padding:0 10px;font-size:13px;font-weight:600;color:var(--craie2);opacity:.85}
 .cm-vues svg{flex:none}
+
+/* question du jour, appels à répondre, amorces */
+.cm-post.qj{border-color:var(--or-bord);background:linear-gradient(180deg,var(--or-fond) 0,var(--ardoise) 70px)}
+.cm-qj-t{display:inline-block;margin-top:10px;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600;color:var(--or);background:var(--or-fond);border:1px solid var(--or-bord)}
+.cm-post.qj .cm-texte{margin-top:8px;font-family:var(--d);font-weight:700;font-size:18px;line-height:1.4;letter-spacing:-.01em}
+.cm-appel{margin-top:12px}
+.cm-appel .cta{width:100%}
+.cm-appel.soft{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px;color:var(--craie2)}
+.cm-appel.soft button{flex:none;padding:7px 13px;border-radius:999px;border:1px solid var(--trait);color:var(--craie);font-size:13px;font-weight:600;min-height:36px}
+.cm-appel.soft button:hover{border-color:var(--survol)}
+.cm-amorces{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.cm-amorces button{padding:7px 12px;border-radius:999px;border:1px solid var(--trait);font-size:13px;color:var(--craie2);min-height:36px}
+.cm-amorces button:hover{border-color:var(--survol);color:var(--craie)}
