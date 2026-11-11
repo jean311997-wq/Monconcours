@@ -2046,12 +2046,19 @@ function brancherBase(){
        et reprend dès que le service revient. Seules une déconnexion voulue et une
        session réellement refusée par le serveur l'effacent. */
     const surAuth = url => String(url).includes('/auth/v1/');
+    /* maintenance.js écoute ces signaux : trois échecs rapprochés, puis une vérification, déclenchent le mode « QCM en attendant » */
+    const signaler = ok => { try{ if(window.mcPanne) window.mcPanne(ok); }catch(e){} };
     const fetchSurveille = async (url, opts) => {
       try{
         const r = await fetch(url, opts);
         if(surAuth(url) && r.status >= 500) S.authPanneJusqua = Date.now() + 120000;
+        if(!surAuth(url)) signaler(r.status < 500);
         return r;
-      }catch(e){ if(surAuth(url)) S.authPanneJusqua = Date.now() + 120000; throw e; }
+      }catch(e){
+        if(surAuth(url)) S.authPanneJusqua = Date.now() + 120000;
+        else if(!(e && e.name === 'AbortError') && navigator.onLine !== false) signaler(false);
+        throw e;
+      }
     };
     const stockage = {
       getItem: k => { try{ return localStorage.getItem(k); }catch(e){ return null; } },
