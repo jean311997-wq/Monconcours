@@ -3030,12 +3030,80 @@ function avantagesListe(){
   <p class="sous" style="margin:14px 0 0;text-align:center;font-size:12.5px">${CONTACT.paiementDirect ? 'Orange Money, Moov Money ou Wave.<br>Validation souvent en quelques minutes.' : (paiementParPartenaire() ? 'Votre conseiller ' + E(S.regleP.nom) + ' vous guide sur WhatsApp.<br>Activation dès que votre paiement est vérifié.' : 'Un conseiller vous guide sur WhatsApp.<br>Activation souvent en quelques minutes.')}</p>`;
 }
 function offreC(point, cleConseiller, alternatives, sansEntete){
-  return (sansEntete ? '' : enteteBilan()) + blocConseiller(cleConseiller, point) +
-    carteFormule('annuelle') + carteFormule('mensuelle') + (alternatives || '') + avantagesListe();
+  return (sansEntete ? '' : enteteBilan()) + (point === 'abonnement' ? tableauAvantages() : '') + choixOffre(point) + (alternatives || '');
 }
-function offreDeuxPrix(){
-  return offreC('blocage', 'mensuelle', `<button class="lien-mini" style="margin-top:12px" data-proche="mensuelle">${ico('partage',13)} Un proche paie pour moi</button>`);
+function offreDeuxPrix(sansEntete){
+  return offreC('blocage', 'mensuelle', `<button class="lien-mini of-proche" style="margin-top:12px" data-proche="mensuelle">${ico('partage',13)} Un proche paie pour moi</button>`, !!sansEntete);
 }
+/* ---- Offre unique : deux choix, un seul bouton, et une feuille de trois étapes avant WhatsApp ---- */
+const libelleFormule = k => (FORMULES[k] ? FORMULES[k].n.replace('Abonnement ', '') : '');
+function tableauAvantages(){
+  const l = (a, g, p) => `<div class="tb-l"><span>${a}</span><span>${g}</span><span class="ok">${p}</span></div>`;
+  return `<div class="tb"><div class="tb-l tb-h"><span></span><span>Gratuit</span><span>Abonné</span></div>
+    ${l('Questions par matière', '15', 'Toutes')}${l('Corrections', '5 / jour', 'Sans limite')}${l('Compositions chronométrées', compoOffertes(), 'Sans limite')}${l('Composition nationale', 'Oui', 'Oui')}</div>`;
+}
+function choixOffre(point){
+  const an = FORMULES.annuelle, mo = FORMULES.mensuelle, douze = formulesBase().mensuelle.montant * 12;
+  const ancien = an.ancien || (douze > an.montant ? fmtFcfa(douze) : '');
+  const mois = Math.round(an.montant / Math.max(1, formulesBase().mensuelle.montant));
+  const rass = CONTACT.paiementDirect ? 'Orange Money, Moov Money ou Wave.<br>Validation souvent en quelques minutes.'
+    : (paiementParPartenaire() ? 'Votre conseiller ' + E(S.regleP.nom) + ' vous guide sur WhatsApp.<br>Activation dès que votre paiement est vérifié.'
+      : 'Orange Money, Moov Money ou Wave.<br>Ton accès s\'ouvre dès que le paiement est vérifié.');
+  return `<div class="offre-choix" data-offre-point="${E(point || 'abonnement')}">
+    <div class="of-liste" role="radiogroup" aria-label="Formule">
+      <button type="button" class="of on" role="radio" aria-checked="true" data-offre-f="annuelle">
+        <span class="of-ruban">Le plus choisi</span><i class="of-rad" aria-hidden="true"></i>
+        <span class="of-n"><b>Année</b><small>Toute la saison 2027${mois > 1 ? ', le prix de ' + mois + ' mois' : ''}</small></span>
+        <span class="of-p"><b>${E(an.prix.replace(' FCFA', ' F'))}</b>${ancien ? `<s>${E(ancien.replace(' FCFA', ' F'))}</s>` : ''}</span></button>
+      <button type="button" class="of" role="radio" aria-checked="false" data-offre-f="mensuelle">
+        <i class="of-rad" aria-hidden="true"></i><span class="of-n"><b>Mois</b><small>30 jours</small></span>
+        <span class="of-p"><b>${E(mo.prix.replace(' FCFA', ' F'))}</b></span></button>
+    </div>
+    <button type="button" class="cta vert of-go" data-offre-go="1">${logoReseau('whatsapp')}<span class="of-go-t">Continuer avec l'Année</span><small>Un conseiller t'aide à payer sur WhatsApp</small></button>
+    <p class="of-rass">${rass}</p>
+    ${CONTACT.paiementDirect ? `<button type="button" class="lien-mini" data-pass="annuelle" data-offre-direct="1">Payer moi-même</button>` : ''}
+  </div>`;
+}
+function fermerFeuillePay(){ const d = document.getElementById('feuille-pay'); if(d) d.remove(); }
+function ouvrirFeuillePay(k, point){
+  const f = FORMULES[k] || FORMULES.annuelle; k = f.cle;
+  fermerFeuillePay();
+  pister('PAYWALL_CLICKED', { point: point || 'blocage', formule: k });
+  const d = document.createElement('div'); d.id = 'feuille-pay'; d.className = 'fp-fond';
+  d.innerHTML = `<div class="fp" role="dialog" aria-modal="true" aria-label="Comment payer"><i class="fp-poignee" aria-hidden="true"></i>
+    <h2>${E(libelleFormule(k))}, ${E(f.prix.replace(' FCFA', ' F'))} : voici comment ça se passe</h2>
+    <ol class="fp-etapes">
+      <li><b>Le message est déjà écrit.</b><span>Tu l'envoies au conseiller sur WhatsApp.</span></li>
+      <li><b>Il te donne le numéro où payer.</b><span>Orange Money, Moov Money ou Wave.</span></li>
+      <li><b>Tu envoies la capture du paiement.</b><span>Ton accès s'ouvre dès qu'elle est vérifiée, et tu reprends là où tu t'es arrêté.</span></li>
+    </ol>
+    <a class="cta vert" href="https://wa.me/226${numeroConseiller()}?text=${encodeURIComponent(messageConseiller(k))}" target="_blank" rel="noopener" data-conseiller-wa="${E(point || 'blocage')}" data-conseiller-formule="${E(k)}" data-fp-ok="1">${logoReseau('whatsapp')} Ouvrir WhatsApp</a>
+    <p class="fp-note">Tu ne paies rien dans l'application. Personne ne te demandera ton code secret.</p>
+    <button type="button" class="lien" data-fp-fermer="1">Plus tard</button></div>`;
+  document.body.appendChild(d);
+}
+document.addEventListener('click', ev => {
+  const t = ev.target; if(!t || !t.closest) return;
+  const f = t.closest('[data-offre-f]');
+  if(f){
+    const bloc = f.closest('.offre-choix'); if(!bloc) return;
+    const k = f.dataset.offreF; if(!FORMULES[k]) return;
+    S.choixFormule = k;
+    bloc.querySelectorAll('[data-offre-f]').forEach(b => { const on = b === f; b.classList.toggle('on', on); b.setAttribute('aria-checked', on ? 'true' : 'false'); });
+    const tx = bloc.querySelector('.of-go-t'); if(tx) tx.textContent = k === 'annuelle' ? 'Continuer avec l\'Année' : 'Continuer avec le Mois';
+    const dir = bloc.querySelector('[data-offre-direct]'); if(dir) dir.dataset.pass = k;
+    pister('SUBSCRIPTION_PLAN_SELECTED', { formule: k });
+    return;
+  }
+  const go = t.closest('[data-offre-go]');
+  if(go){
+    const bloc = go.closest('.offre-choix'); const on = bloc && bloc.querySelector('[data-offre-f].on');
+    return ouvrirFeuillePay(on ? on.dataset.offreF : 'annuelle', bloc ? bloc.dataset.offrePoint : 'blocage');
+  }
+  if(t.closest('[data-fp-fermer]') || (t.classList && t.classList.contains('fp-fond'))) return fermerFeuillePay();
+  if(t.closest('[data-fp-ok]')) setTimeout(fermerFeuillePay, 500);
+});
+document.addEventListener('keydown', ev => { if(ev.key === 'Escape') fermerFeuillePay(); });
 /* Ce qui est payant : un seul passage. Un visiteur crée d'abord son compte ;
    un compte sans abonnement arrive directement sur les abonnements, avec la raison. */
 function exigerAbonnement(raison, origine){
@@ -4579,14 +4647,16 @@ function ecranQcm(){
     ${c && !c.ok ? (() => {
       const offre = c.quota && peutProposer(1);
       return `
-      <div class="retour mal">
+      <div class="${c.quota ? 'mur-fini' : 'retour mal'}">
         ${c.quota
           ? (c.motif === 'matiere'
-              ? `<b>Abonnement gratuit terminé en ${E(c.matiere || m.nom)}.</b>Vos 15 questions gratuites dans cette matière sont faites. Pour la continuer, faites l'abonnement. Les autres matières restent ouvertes.`
-              : `<b>Vous avez atteint votre limite gratuite du jour.</b>Vos 5 corrections du jour sont faites : elles reviennent demain. Pour continuer maintenant, faites l'abonnement.`)
+              ? `<i class="mf-coche" aria-hidden="true">✓</i><div><h2>Tes 15 questions offertes en ${E(c.matiere || m.nom)} sont faites</h2><p>Tu es lancé, ne t'arrête pas là. Les autres matières restent ouvertes.</p></div>`
+              : `<i class="mf-coche" aria-hidden="true">✓</i><div><h2>Tes 5 corrections du jour sont faites</h2><p>Elles reviennent demain matin. Ou continue maintenant, sans attendre.</p></div>`)
           : `<b>${c.connexion ? 'Compte nécessaire' : 'Correction indisponible'}</b>${E(c.message || '')}`}
       </div>
-      ${offre ? `<div style="margin-top:12px">${offreDeuxPrix()}</div>` : ''}
+      ${c.quota && c.motif === 'matiere' && total > 15 ? `<div class="mur-reste"><b>Et ${nombreFr(total - 15)} autres questions, corrigées et expliquées</b><span>Elles s'ouvrent toutes avec l'abonnement</span></div>` : ''}
+      ${c.quota && c.motif !== 'matiere' && ouvertes() > 0 ? `<div class="mur-atout"><b>Corriger tes erreurs est ton meilleur atout pour progresser dans ta révision</b><span><em class="num">${nombreFr(ouvertes())}</em> ${ouvertes() > 1 ? 'erreurs attendent' : 'erreur attend'} leur correction</span></div>` : ''}
+      ${offre ? `<div style="margin-top:12px">${offreDeuxPrix(!!c.quota)}</div>` : ''}
       ${c.quota ? (c.motif === 'matiere' ? `<button class="cta creux" style="margin-top:9px" data-go="revisions">Choisir une autre matière</button>` : `<button class="cta creux" style="margin-top:9px" data-demain="1">À demain</button>`) : ''}
       ${c.connexion ? `<button class="cta" style="margin-top:12px" data-modal="inscription">Créer mon compte gratuit</button>` : ''}
       ${c.reseau ? `<button class="cta" style="margin-top:12px" data-qcm-relancer="1">Réessayer</button>` : ''}
@@ -4648,13 +4718,14 @@ function blocPoint2(){
   const moy = cs.length ? Math.round(cs.slice(0, 3).reduce((a, c) => a + c.score / c.sur * 50, 0) / Math.min(3, cs.length)) : null;
   const rest = S.sujetsRestants && S.sujetsRestants.ok ? S.sujetsRestants.restants : null;
   const offre = peutProposer(2);
+  const tu = (v, l) => `<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+  const rg = S.classement && S.classement.rang && S.classement.population ? S.classement : null;
+  const tuiles = [moy !== null ? tu(moy + '/50', 'ta moyenne') : '', rg ? tu(nombreFr(rg.rang) + 'ᵉ', 'sur ' + nombreFr(rg.population) + ' candidats') : '',
+    rest !== null && rest > 0 ? tu(rest > 10 ? '10+' : rest, rest > 1 ? 'sujets t\'attendent' : 'sujet t\'attend') : ''].join('');
   return `
-    <div class="carte" style="text-align:left;margin:0 0 14px">
-      ${moy !== null ? `<p class="sous" style="margin:0 0 6px">Ta moyenne sur tes compositions : <b>${moy}/50</b>.</p>` : ''}
-      ${rest !== null && rest > 0 ? `<p class="sous" style="margin:0 0 6px">${rest > 10 ? 'De <b>nombreux autres sujets</b> t\'attendent.' : 'Il te reste <b>' + rest + ' sujet' + (rest > 1 ? 's' : '') + '</b> à composer.'}</p>` : ''}
-    </div>
-    ${offre ? `<p class="sous" style="margin:0 0 6px"><b>Pour continuer à composer sans limite, choisissez votre abonnement.</b></p>${offreDeuxPrix()}` : ''}
-    <p class="sous" style="margin:12px 0 0;font-size:12.5px">La composition nationale reste gratuite.</p>`;
+    ${tuiles ? `<div class="av-stats" style="margin:0 0 6px">${tuiles}</div>` : ''}
+    <p class="sous" style="margin:8px 0 0;font-size:12.5px">La composition nationale reste gratuite pour tous.</p>
+    ${offre ? offreDeuxPrix(true) : ''}`;
 }
 function ecranCompoAttente(){
   const etat = S.compoEtat;
@@ -6229,12 +6300,11 @@ function ecranPourToi(){
       return `<button class="opt ${k}" ${rep !== undefined ? 'disabled' : ''} data-fil-rep="${i}"><span class="lettre">${'ABCD'[i] || '•'}</span>${E(o)}</button>`;
     }).join('')}
 
-    ${c && !c.ok && c.quota ? `<div class="retour mal">${c.motif === 'matiere'
-        ? `<b>Abonnement gratuit terminé en ${E(c.matiere || q.matiere || 'cette matière')}.</b>Vos 15 questions gratuites dans cette matière sont faites. Pour la continuer, faites l'abonnement.`
-        : `<b>Vous avez atteint votre limite gratuite du jour.</b>Vos 5 corrections du jour sont faites : elles reviennent demain. Pour continuer maintenant, faites l'abonnement.`}</div>
-      ${(() => { const o = offreSelonUsage(); return `<div class="carte" style="margin-top:12px"><b>${E(o.titre)}</b><p class="sous" style="margin-top:6px">${E(o.texte)}</p></div>`; })()}
-      <button class="cta" style="margin-top:12px" data-go="abonnement">Voir les abonnements</button>
-      ${boutonConseillerAbo()}
+    ${c && !c.ok && c.quota ? `<div class="mur-fini">${c.motif === 'matiere'
+        ? `<i class="mf-coche" aria-hidden="true">✓</i><div><h2>Tes 15 questions offertes en ${E(c.matiere || q.matiere || 'cette matière')} sont faites</h2><p>Tu es lancé, ne t'arrête pas là.</p></div>`
+        : `<i class="mf-coche" aria-hidden="true">✓</i><div><h2>Tes 5 corrections du jour sont faites</h2><p>Elles reviennent demain matin. Ou continue maintenant, sans attendre.</p></div>`}</div>
+      ${(() => { const o = offreSelonUsage(); return `<div class="mur-atout"><b>${E(o.titre)}</b><span>${E(o.texte)}</span></div>`; })()}
+      ${offreDeuxPrix(true)}
       ${c.motif === 'matiere' ? `<button class="cta creux" style="margin-top:9px" data-fil-suiv="1">Question suivante →</button>` : `<button class="cta creux" style="margin-top:9px" data-demain="1">À demain</button>`}` : ''}
     ${c && !c.ok && !c.quota ? `<div class="retour mal"><b>Correction indisponible</b>${E(c.message || '')}</div>
       <button class="cta" style="margin-top:12px" data-fil-suiv="1">Question suivante →</button>` : ''}
