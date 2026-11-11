@@ -6584,10 +6584,11 @@ function ecranCorrectionNat(){
     `<div class="cg-m"><span>${E(m.nom)}</span><span class="num">${m.n} question${m.n > 1 ? 's' : ''}</span><b class="num">${m.pct === null ? '—' : m.pct + ' %'}</b></div>`).join('')}</div>` : '';
   vue().innerHTML = `<div class="pad">${tete}
     <div class="cg-tete"><span class="cg-sceau"><i></i><i></i><i></i><i></i></span>
-      <div><b>MON CONCOURS</b><span>Préparation aux concours directs du Burkina Faso</span></div></div>
-    <div class="eyebrow">Composition nationale · correction générale</div>
-    <h1 class="titre">Corrigé de l'épreuve</h1>
-    <p class="sous" style="margin:6px 0 14px">${nq} question${nq > 1 ? 's' : ''} · ${nombreFr(c.participants || 0)} candidat${(c.participants||0)>1?'s':''}. Les réponses attendues sont en vert. Le pourcentage indique la part des candidats qui ont trouvé.</p>
+      <div><b>MON CONCOURS</b><span>Concours directs du Burkina Faso</span></div></div>
+    <h1 class="titre" style="margin:0 0 4px">Correction générale</h1>
+    <p class="cg-sous">${cl ? 'Composition nationale · ' + E(cl.concours || cl.titre || '') + (cl.debut_le ? ' · ' + E(jourFr(cl.debut_le)) : '') : 'Composition nationale'}</p>
+    <div class="cg-stats"><div><b class="num">${nq}</b><span>question${nq > 1 ? 's' : ''}</span></div><div><b class="num">${nombreFr(c.participants || 0)}</b><span>candidat${(c.participants||0)>1?'s':''}</span></div>${cl && cl.moyenne !== null && cl.moyenne !== undefined ? `<div><b class="num">${String(cl.moyenne).replace('.', ',')}/${cl.sur}</b><span>moyenne</span></div>` : ''}</div>
+    <p class="sous" style="margin:12px 0 16px">Les réponses attendues sont en vert. Le pourcentage indique la part des candidats qui ont trouvé.</p>
     <div class="libelle">Feuille de réponses</div>
     <div class="carte"><div class="cg-grille">${grille}</div><p class="sous" style="margin:10px 0 0;font-size:12px"><span class="cg-b on" style="display:inline-grid;width:16px;height:16px;font-size:9px">✓</span> Réponse attendue</p></div>
     <div class="libelle" style="margin-top:22px">Le sujet corrigé</div>
