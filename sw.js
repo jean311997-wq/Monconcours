@@ -3,7 +3,7 @@
    Un candidat en 2G ne doit pas repayer le chargement à chaque visite,
    et un candidat sans réseau doit pouvoir relire ses cours.
    ===================================================================== */
-const VERSION = 'mc-v144';
+const VERSION = 'mc-v145';
 const COQUE   = VERSION + '-coque';   // les fichiers de l'application
 const DONNEES = VERSION + '-donnees'; // les réponses de la base
 
@@ -69,7 +69,7 @@ self.addEventListener('fetch', e => {
   /* 2. La page elle-même (index.html, admin) et le service worker : le
         réseau d'abord pour rester à jour, mais pas plus de 3 secondes ;
         au-delà, la dernière version connue s'affiche tout de suite. */
-  if(url.origin === self.location.origin && (req.mode === 'navigate' || /\/(index\.html)?$|admin\.html|admin\.js|admin\.css|sw\.js/.test(url.pathname))){
+  if(url.origin === self.location.origin && (req.mode === 'navigate' || /\/(index\.html)?$|admin\.html|admin[-a-z0-9]*\.js|admin\.css|sw\.js/.test(url.pathname))){
     e.respondWith(new Promise(resoudre => {
       let fini = false;
       const secours = () => caches.match(req, { ignoreSearch: req.mode === 'navigate' })
