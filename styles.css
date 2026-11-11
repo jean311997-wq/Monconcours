@@ -2227,3 +2227,6 @@ body:not([data-theme="clair"]) .fp{background:var(--ardoise)}
 .fp .cta{display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none}
 .fp-note{margin:10px 0 0;text-align:center;font-size:12.5px;color:var(--craie2)}
 .fp .lien{display:block;margin:10px auto 0}
+.of:first-child{padding-top:20px}
+.tb-l span:nth-child(2){color:var(--craie2)}
+.tb-l{grid-template-columns:1fr 70px 92px}

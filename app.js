@@ -3039,13 +3039,13 @@ function offreDeuxPrix(sansEntete){
 const libelleFormule = k => (FORMULES[k] ? FORMULES[k].n.replace('Abonnement ', '') : '');
 function tableauAvantages(){
   const l = (a, g, p) => `<div class="tb-l"><span>${a}</span><span>${g}</span><span class="ok">${p}</span></div>`;
-  return `<div class="tb"><div class="tb-l tb-h"><span></span><span>Gratuit</span><span>Abonné</span></div>
-    ${l('Questions par matière', '15', 'Toutes')}${l('Corrections', '5 / jour', 'Sans limite')}${l('Compositions chronométrées', compoOffertes(), 'Sans limite')}${l('Composition nationale', 'Oui', 'Oui')}</div>`;
+  const L = 'Limité', I = 'Illimité';
+  return `<div class="tb"><div class="tb-l tb-h"><span></span><span>Gratuit</span><span>Abonnement</span></div>
+    ${l('Questions de toutes les matières', L, I)}${l('Corrections des QCM', L, I)}${l('Compositions chronométrées', L, I)}${l('Mes erreurs, chaque jour', L, I)}${l('Feuille corrigée détaillée en PDF', L, I)}${l('Cours et questions sans connexion', L, I)}${l('Composition nationale', 'Oui', 'Oui')}</div>`;
 }
 function choixOffre(point){
   const an = FORMULES.annuelle, mo = FORMULES.mensuelle, douze = formulesBase().mensuelle.montant * 12;
   const ancien = an.ancien || (douze > an.montant ? fmtFcfa(douze) : '');
-  const mois = Math.round(an.montant / Math.max(1, formulesBase().mensuelle.montant));
   const rass = CONTACT.paiementDirect ? 'Orange Money, Moov Money ou Wave.<br>Validation souvent en quelques minutes.'
     : (paiementParPartenaire() ? 'Votre conseiller ' + E(S.regleP.nom) + ' vous guide sur WhatsApp.<br>Activation dès que votre paiement est vérifié.'
       : 'Orange Money, Moov Money ou Wave.<br>Ton accès s\'ouvre dès que le paiement est vérifié.');
@@ -3053,7 +3053,7 @@ function choixOffre(point){
     <div class="of-liste" role="radiogroup" aria-label="Formule">
       <button type="button" class="of on" role="radio" aria-checked="true" data-offre-f="annuelle">
         <span class="of-ruban">Le plus choisi</span><i class="of-rad" aria-hidden="true"></i>
-        <span class="of-n"><b>Année</b><small>Toute la saison 2027${mois > 1 ? ', le prix de ' + mois + ' mois' : ''}</small></span>
+        <span class="of-n"><b>Année</b><small>12 mois</small></span>
         <span class="of-p"><b>${E(an.prix.replace(' FCFA', ' F'))}</b>${ancien ? `<s>${E(ancien.replace(' FCFA', ' F'))}</s>` : ''}</span></button>
       <button type="button" class="of" role="radio" aria-checked="false" data-offre-f="mensuelle">
         <i class="of-rad" aria-hidden="true"></i><span class="of-n"><b>Mois</b><small>30 jours</small></span>
