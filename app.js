@@ -6893,8 +6893,49 @@ function swMur(w, c){
 /* la bulle d'entrée sur l'accueil */
 function bulleSwipe(){
   const hNav = ((document.getElementById('nav') || {}).offsetHeight) || 64;
-  return `<button class="sw-bulle" style="--nav-h:${hNav}px" data-swipe="1" aria-label="Ouvrir le mode Swipe"><b>SWIPE</b><i>LIVE</i></button>`;
+  const pos = lireReglages().bulleSwipe;   // place choisie par le candidat (appui long puis glisser)
+  const ici = pos && pos.x >= 0 && pos.y >= 0 ? `left:${Math.round(pos.x * 1000) / 10}vw;top:${Math.round(pos.y * 1000) / 10}vh;bottom:auto;` : '';
+  return `<button class="sw-bulle" style="--nav-h:${hNav}px;${ici}" data-swipe="1" aria-label="Ouvrir le mode Swipe (appui long pour la déplacer)"><b>SWIPE</b><i>LIVE</i></button>`;
 }
+/* appui long sur la bulle : elle se décolle et suit le doigt ; relâchée, elle reste à sa nouvelle place */
+(function(){
+  let b = null, minuterie = null, x0 = 0, y0 = 0, dx = 0, dy = 0, deplace = false, bloquerClic = false;
+  const fin = () => { clearTimeout(minuterie); minuterie = null; };
+  document.addEventListener('pointerdown', e => {
+    const c = e.target.closest && e.target.closest('.sw-bulle');
+    if(!c) return;
+    b = c; deplace = false; x0 = e.clientX; y0 = e.clientY;
+    const r = c.getBoundingClientRect(); dx = e.clientX - r.left; dy = e.clientY - r.top;
+    minuterie = setTimeout(() => {
+      deplace = true; c.classList.add('sw-bulle-prise');
+      if(navigator.vibrate) try{ navigator.vibrate(15); }catch(er){}
+    }, 380);
+  });
+  document.addEventListener('pointermove', e => {
+    if(!b) return;
+    if(!deplace){ if(Math.abs(e.clientX - x0) + Math.abs(e.clientY - y0) > 12){ fin(); b = null; } return; }
+    e.preventDefault();
+    const W = window.innerWidth, H = window.innerHeight, t = b.offsetWidth || 62;
+    const x = Math.min(Math.max(4, e.clientX - dx), W - t - 4), y = Math.min(Math.max(4, e.clientY - dy), H - t - 4);
+    b.style.left = x + 'px'; b.style.top = y + 'px'; b.style.bottom = 'auto';
+  }, { passive:false });
+  const lacher = () => {
+    fin();
+    if(b && deplace){
+      b.classList.remove('sw-bulle-prise');
+      const r = b.getBoundingClientRect();
+      ecrireReglage('bulleSwipe', { x: r.left / window.innerWidth, y: r.top / window.innerHeight });
+      bloquerClic = true; setTimeout(() => { bloquerClic = false; }, 400);
+      pister('SWIPE_BULLE_DEPLACEE');
+    }
+    b = null; deplace = false;
+  };
+  document.addEventListener('pointerup', lacher);
+  document.addEventListener('pointercancel', lacher);
+  /* le doigt qui vient de déplacer la bulle ne doit pas l'ouvrir */
+  document.addEventListener('click', e => { if(bloquerClic && e.target.closest && e.target.closest('.sw-bulle')){ e.stopPropagation(); e.preventDefault(); bloquerClic = false; } }, true);
+  document.addEventListener('contextmenu', e => { if(e.target.closest && e.target.closest('.sw-bulle')) e.preventDefault(); });
+})();
 document.addEventListener('click', ev => {
   const t = ev.target.closest('[data-swipe],[data-sw-entrer],[data-sw-rep],[data-sw-suiv],[data-sw-quitter],[data-sw-palier],[data-sw-jouer],[data-sw-serie],[data-sw-reessayer],[data-sw-mode],[data-sw-mat],[data-sw-niv],[data-sw-rouvrir]');
   if(!t) return;

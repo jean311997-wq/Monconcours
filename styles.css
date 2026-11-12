@@ -2496,3 +2496,7 @@ body.swipe-on .fab-canal,body.swipe-on .sw-bulle{display:none!important}
 .sw-page.sw-rep .sw-opt{padding:12px 13px;margin-bottom:8px}
 .sw-page.sw-rep .sw-glisse{margin-top:8px}
 .sw-page.sw-rep .sw-bas{padding-top:4px}
+
+/* bulle Swipe déplaçable : appui long */
+.sw-bulle{touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.sw-bulle.sw-bulle-prise{animation:none;transform:scale(1.12);box-shadow:0 14px 30px rgba(20,80,59,.5),0 0 0 8px rgba(47,194,133,.22);transition:transform .15s}
