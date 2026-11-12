@@ -2463,3 +2463,22 @@ body.swipe-on .fab-canal,body.swipe-on .sw-bulle{display:none!important}
 .sw-tb-mini .sw-tb3{margin-top:6px;font-size:13px}
 .sw-source{display:block;margin:6px 0 0;font-size:12.5px;line-height:1.35;color:rgba(238,243,240,.55)}
 .sw-tb.sw-tb-mini{width:100%;box-sizing:border-box}
+/* Mode Swipe : même disposition dans tous les onglets, écran bien occupé */
+.sw-page > *{width:100%;box-sizing:border-box}
+.sw-page .sw-haut,.sw-page .sw-onglets,.sw-page .sw-tb,.sw-page .sw-q,.sw-page .sw-bas,.sw-page .sw-glisse,.sw-page .sw-puces{max-width:560px;align-self:center}
+.sw-page .sw-q{flex:1 1 auto;display:flex;flex-direction:column;justify-content:center;margin-top:8px;padding-bottom:4px}
+.sw-page .sw-corps{width:100%}
+.sw-page .sw-bas{margin-top:auto;padding-top:10px;text-align:center}
+.sw-opt{padding:16px 13px;font-size:16.5px;margin-bottom:11px}
+.sw-enonce{margin:12px 0 16px}
+.sw-rail{width:44px;gap:10px}
+.sw-r1>span{width:36px;height:36px}
+.sw-r1>span svg{width:16px;height:16px}
+.sw-r1 small{font-size:10px}
+.sw-raison,.sw-source{font-size:12px;color:rgba(238,243,240,.5);margin:6px 0 0;line-height:1.35}
+/* les réponses se partagent la hauteur disponible : l'écran est occupé, même disposition partout */
+.sw-page .sw-q{justify-content:flex-start}
+.sw-page .sw-corps{flex:1 1 auto;align-items:stretch;min-height:0}
+.sw-page .sw-opts{display:flex;flex-direction:column}
+.sw-page .sw-opt{flex:1 1 0;min-height:56px;max-height:104px;margin-bottom:10px}
+.sw-page .sw-rail{justify-content:flex-start}
