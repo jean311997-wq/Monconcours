@@ -84,6 +84,8 @@ function testDejaFait(){ return !!(lireMemoire() || {}).testFait; }
 /* =====================================================================
    ÉTAT
    ===================================================================== */
+/* Parcours actifs : A (normal), B, E1 (Élite 1), E2 (Élite 2). X, C, D ne reçoivent plus personne ; les anciens comptes les gardent. */
+var PARCOURS_CONNUS = ['A','B','C','D','X','E1','E2'];
 const S = {
   ecran:'engagement', phase:0, parcours:null,
   testRep:{}, testChrono:120, testTimer:null, testCorrige:false, testNote:null,
@@ -353,12 +355,12 @@ window.addEventListener('beforeunload', e => {
 (function reprendreReglages(){
   const r = lireReglages();
   if(r.theme === 'sombre' || r.theme === 'clair') S.theme = r.theme;
-  if(['A','B','C','D','X'].includes(r.parcours)) S.parcours = r.parcours;
-  /* Lien d'aperçu : ?apercu=xx1 montre le parcours XX1, ?apercu=actuel le parcours habituel */
+  if(PARCOURS_CONNUS.includes(r.parcours)) S.parcours = r.parcours;
+  /* Lien d'aperçu : ?apercu=normal | b | e1 | e2 (et l'ancien xx1) montre ce parcours sur ce téléphone */
   try{
-    const ap = new URLSearchParams(location.search).get('apercu');
-    if(ap === 'xx1'){ S.parcours = 'X'; ecrireReglage('parcours', 'X'); ecrireReglage('apercuX', true); }
-    else if(ap === 'actuel'){ S.parcours = 'B'; ecrireReglage('parcours', 'B'); ecrireReglage('apercuX', false); }
+    const ap = (new URLSearchParams(location.search).get('apercu') || '').toLowerCase();
+    const P = { xx1:'X', actuel:'B', normal:'A', a:'A', b:'B', e1:'E1', e2:'E2', elite1:'E1', elite2:'E2' }[ap];
+    if(P){ S.parcours = P; ecrireReglage('parcours', P); ecrireReglage('apercuX', true); }
   }catch(e){}
   /* S.taches est un TABLEAU. Object.assign en aurait fait un objet,
      qui n'a pas de .filter : l'accueil plantait et l'écran restait noir. */
@@ -574,7 +576,7 @@ function nav(){
   r.style.display = cache ? 'none' : '';
   const app = document.querySelector('.app'); if(app) app.classList.toggle('sans-rail', cache);
   if(cache) return;
-  const OG = estXX1() ? ONGLETS_X : ONGLETS;
+  const OG = estXX1() || estE2() ? ONGLETS_X : ONGLETS;
   n.style.gridTemplateColumns = 'repeat(' + OG.length + ',1fr)';
   n.innerHTML = OG.map(o=>{
     const on = (o.id===S.ecran || (o.id==='grille'&&S.ecran==='copie')
@@ -812,7 +814,7 @@ function remettreTest(){
   if(corps){
     const s=document.createElement('div'); s.className='scan'; corps.appendChild(s);
     setTimeout(()=>{ s.remove(); pister('DIAGNOSTIC_RESULT_VIEWED', { note: S.testNote, parcours: S.parcours });
-      if((S.parcours === 'B' || S.parcours === 'C' || S.parcours === 'X') && !S.util.connecte){ pister('RESULT_LOCKED'); aller('verrou'); }
+      if((S.parcours === 'B' || S.parcours === 'C' || S.parcours === 'X' || estElite()) && !S.util.connecte){ pister('RESULT_LOCKED'); aller('verrou'); }
       else if(S.parcours === 'D' && !S.util.connecte){ pister('RESULT_LOCKED'); aller('verrou_d'); }
       else aller('resultat'); }, 1600);
   }
@@ -933,9 +935,10 @@ function ecranResultat(){
       </ol>
     </div>
 
-    ${S.parcours === 'B' || S.parcours === 'C' ? feuilleTestCorrigee() : ''}
+    ${S.parcours === 'B' || S.parcours === 'C' || estElite() ? feuilleTestCorrigee() : ''}
     ${S.parcours === 'C' ? blocPlanPaiement(faibles) : ''}
-    <button class="cta" style="margin-top:18px" data-entrer="1" data-fautes="${n < 10 ? 1 : 0}">${n < 10 ? 'Reprendre mes fautes maintenant' : (S.parcours === 'B' || S.parcours === 'C' ? 'Continuer dans l\'application' : 'Entrer dans l\'application')}<small>${n < 10 ? (10 - n) + ' faute' + (10 - n > 1 ? 's' : '') + ' dans « Mes erreurs »' : 'Actualité · révisions · composition · erreurs'}</small></button>
+    ${S.parcours === 'E1' ? blocPlanRattrapage(faibles) : ''}
+    <button class="cta" style="margin-top:18px" data-entrer="1" data-fautes="${n < 10 ? 1 : 0}">${n < 10 ? 'Reprendre mes fautes maintenant' : (S.parcours === 'B' || S.parcours === 'C' || estElite() ? 'Continuer dans l\'application' : 'Entrer dans l\'application')}<small>${n < 10 ? (10 - n) + ' faute' + (10 - n > 1 ? 's' : '') + ' dans « Mes erreurs »' : 'Actualité · révisions · composition · erreurs'}</small></button>
   </div>`;
   /* Parcours D : proposer le paiement après 3 secondes, avec bouton "Plus tard" */
   if(S.parcours === 'D'){
@@ -1565,6 +1568,7 @@ function ouvrirDansChrome(){
 }
 /* Première ouverture de l'application installée : un seul écran pour les notifications, une fois. */
 function inviterNotifsPremiereOuverture(essai){
+  if(eliteJour0()) return;
   if(!estInstallee() || lireReglages().notifsOuverture || !pushPossible() || Notification.permission !== 'default') return;
   const v = document.getElementById('voile');
   if(!S.util.connecte || S.rappel || S.ecran === 'compte' || S.modal || !v || !v.hidden || enComposition() || document.getElementById('invitation')){
@@ -2656,6 +2660,7 @@ function ecranAujourdhui(){
     ${blocEnLigne()}
     ${nationaleEnHaut() ? `<section class="nat-jour${resultatsEnVedette() && blocDerniereNationale(true) ? ' res-vedette' : ''}" aria-label="Composition nationale du jour">${resultatsEnVedette() ? blocDerniereNationale(true) + (S.epreuve && S.epreuve.etat === 'terminee' ? '' : carteEpreuve()) : carteEpreuve() + blocDerniereNationale()}</section>` : ''}
     ${blocSeanceX()}
+    ${estE2() && S.util.connecte ? tachesElite2() : ''}
     ${blocInscriptionVisiteur()}
     ${blocPromo()}
     ${blocFinEssai()}
@@ -2689,7 +2694,7 @@ function ecranAujourdhui(){
       ${ACTU.length > 3 ? `<button class="voir-tout" data-go="actualite"><span>Voir les ${ACTU.length} informations</span><b aria-hidden="true">→</b></button>` : ''}
     </div>
     </div>
-    <div>
+    ${estE2() && S.util.connecte ? '' : `<div>
     <div class="bloc">
       <div class="libelle">Vos tâches du jour<span class="num">${f}/3</span></div>
       <div class="carte">
@@ -2716,7 +2721,7 @@ function ecranAujourdhui(){
         </button>
       </div>
     </div>
-    </div>
+    </div>`}
     </div>
 
     ${nationaleEnHaut() ? '' : carteEpreuve() + blocDerniereNationale()}
@@ -7178,6 +7183,7 @@ function etatRappel(){
 }
 /* Le bandeau de l'accueil : discret, masquable sept jours */
 function blocBandeauRappel(){
+  if(eliteJour0()) return '';
   if(S.gratuit && !S.util.connecte) return '';
   if(etatRappel() !== 'possible') return '';
   const masque = lireReglages().bandeauRappel;
@@ -9188,11 +9194,12 @@ document.addEventListener('click', ev=>{
         ecrireMemoire({ nom:f.nom.trim(), tel:tel, niveauProfil:S.niveauProfil });
         pister('ACCOUNT_CREATED', { niveau: S.niveau });
         noterParcoursCompte();
-        if(!estXX1()) setTimeout(() => invitationNotifsApresInscription(), 7000);
+        ecrireReglage('compteLe', Date.now());
+        if(!estXX1() && !estElite()) setTimeout(() => invitationNotifsApresInscription(), 7000);
         S.modal = null; chargerProgression();
         if(paiementObligatoire()){ chargerAbonnement(); S.choixFormule = S.choixFormule || 'annuelle'; return aller('abonnement'); }
         if(S.defi && S.defi.etat === 'connexion') ouvrirDefi(S.defi.id);
-        else if(S.ecran === 'verrou' && S.testNote !== null){ if(estXX1()) lancerRepriseX(); else aller('resultat'); }
+        else if(S.ecran === 'verrou' && S.testNote !== null){ if(estXX1() || estE2()) lancerRepriseX(); else aller('resultat'); }
         else if(S.ecran === 'verrou_d' && S.testNote !== null){ S.verrouDEtape = 2; aller('verrou_d'); }
         else aller('aujourdhui');
       });
@@ -9232,7 +9239,7 @@ document.addEventListener('click', ev=>{
       await reprendreSession();
       await chargerProgression();
       if(S.defi && S.defi.etat === 'connexion') ouvrirDefi(S.defi.id);
-      else if(S.ecran === 'verrou' && S.testNote !== null){ if(estXX1()) lancerRepriseX(); else aller('resultat'); }
+      else if(S.ecran === 'verrou' && S.testNote !== null){ if(estXX1() || estE2()) lancerRepriseX(); else aller('resultat'); }
       else if(S.ecran === 'verrou_d' && S.testNote !== null){ S.verrouDEtape = 2; aller('verrou_d'); }
       else aller('aujourdhui');
     })();
@@ -9652,6 +9659,7 @@ planifierInvitations();
 /* Juste après la création du compte, quand l'envie est la plus forte : la demande d'autorisation des notifications.
    C'est ce qui permet à Mon Concours d'apparaître par-dessus Facebook ou WhatsApp. */
 function invitationNotifsApresInscription(){
+  if(eliteJour0()) return;
   if(!notifsAEncourager() || !peutInviter() || !invitationPossible('notifs', 60000)) return;
   fenetreInvitation({ cle:'notifs', icone:'cloche', titre:'Être prévenu à temps',
     texte:'Autorisez les notifications : Mon Concours s\'affiche même quand vous êtes sur Facebook ou WhatsApp, pour votre rappel du soir, vos résultats et la composition nationale.',
@@ -9672,6 +9680,60 @@ function invitationNotifsApresInscription(){
   };
   setTimeout(() => tente(0), 40000);
 })();
+
+
+/* =====================================================================
+   PARCOURS ÉLITE (12 novembre 2026)
+   Élite 1 : les meilleures pièces des anciens parcours. Note cachée jusqu'à l'inscription,
+     feuille corrigée juste après, « Reprendre mes fautes maintenant », plan de rattrapage sans prix,
+     notifications et installation proposées seulement à partir du 2e jour, après une séance réussie.
+   Élite 2 : construit sur ce que les candidats font vraiment (base du 12 novembre).
+     Le premier jour, on pratique tout de suite : reprise des fautes du test, puis « encore 5 »,
+     et la prochaine composition nationale. L'accueil met la séance, les erreurs et la composition
+     avant l'actualité. Les prix n'apparaissent qu'aux limites, dans les deux parcours.
+   ===================================================================== */
+function estElite(){ return S.parcours === 'E1' || S.parcours === 'E2'; }
+function estE2(){ return S.parcours === 'E2'; }
+/* jour 0 = jour de création du compte (ou pas encore de compte) */
+function eliteJour0(){
+  if(!estElite()) return false;
+  const t = lireReglages().compteLe;
+  return !t || new Date(t).toDateString() === new Date().toDateString();
+}
+/* Élite 1 : le plan de rattrapage, sans aucun prix */
+function blocPlanRattrapage(faibles){
+  const nf = fautesDuTest().length;
+  const mat = faibles.length ? E(faibles[0]) : 'les matières du concours';
+  const ep = S.epreuve && S.epreuve.etat === 'a_venir' ? S.epreuve : null;
+  return `<div class="bonne-nouvelle plan-elite" style="margin-top:18px">
+    <h2>Ton plan pour les prochains jours</h2>
+    <ol class="actions-diag">
+      <li><b>Aujourd'hui : ${nf ? 'tes ' + nf + ' faute' + (nf > 1 ? 's' : '') + ' du test' : 'ta première séance'}.</b> ${nf ? 'Une par une, avec l\'explication. Elles sont déjà dans « Mes erreurs ».' : 'Cinq questions de ton niveau, environ 2 minutes.'}</li>
+      <li><b>Les trois jours suivants : 10 questions par jour en ${mat}.</b> C'est là que tu as perdu le plus de points. Dix minutes suffisent.</li>
+      <li><b>${ep ? E(dateLongue(ep.debut_le)) + ' à ' + heureH(ep.debut_le) : 'Samedi soir'} : la composition nationale.</b> 50 questions en 40 minutes, avec ton rang parmi tous les candidats.</li>
+    </ol>
+  </div>`;
+}
+/* Élite 2 : ce qui suit la reprise des fautes, le premier jour */
+function suiteElite2(depuis){
+  const ep = S.epreuve && (S.epreuve.etat === 'a_venir' || S.epreuve.etat === 'en_cours') ? S.epreuve : null;
+  return (ep ? `<div class="bloc"><div class="libelle">Ton prochain rendez-vous</div>${carteEpreuve()}</div>` : '') + lignesSuiteX(depuis);
+}
+/* Élite 2 : les tâches du jour, dans l'ordre où les candidats travaillent vraiment */
+function tachesElite2(){
+  const fait = seanceXFaite(), dues = S.cahier.filter(e => e.suite < 3 && joursRestants(e) === 0).length, ep = S.epreuve;
+  const nat = ep && ep.etat === 'a_venir' ? (ep.inscrit ? 'Inscrit · ' + E(jourCourtNat(ep.debut_le)) + ' à ' + heureH(ep.debut_le) : E(jourCourtNat(ep.debut_le)) + ' à ' + heureH(ep.debut_le) + ' · inscription gratuite')
+    : ep && ep.etat === 'en_cours' ? 'En cours : entrez en salle' : 'Une épreuve chronométrée sur la feuille de réponses';
+  const ligne = (ok, num, attr, titre, texte, duree) => `<button class="etape ${ok ? 'fait' : 'actif'}" ${attr}>
+      <div class="puce">${ok ? '✓' : num}</div>
+      <div><h3>${titre}</h3><p>${texte}</p><span class="dur">${duree}</span></div>
+      <span class="fl-tache" aria-hidden="true">→</span></button>`;
+  return `<div class="bloc taches-e2"><div class="libelle">Ta journée</div><div class="carte">
+    ${ligne(fait, 1, 'data-xseance="accueil"', 'Ma séance', fait ? 'Faite aujourd\'hui. Tu peux en refaire une.' : 'Tes erreurs d\'abord, puis des questions de ton niveau.', '2 min')}
+    ${ligne(!dues, 2, 'data-cahierfreq="1"', 'Mes erreurs du jour', dues ? dues + ' question' + (dues > 1 ? 's' : '') + ' à revoir aujourd\'hui.' : 'Rien à revoir aujourd\'hui.', '5 min')}
+    ${ligne(!!(ep && ep.inscrit), 3, ep && ep.etat === 'en_cours' ? `data-rejoindre="${E(ep.id)}"` : (ep && ep.etat === 'a_venir' && !ep.inscrit ? `data-inscrire-nat="${E(ep.id)}"` : 'data-go="grille"'), 'La composition', nat, '40 min')}
+  </div></div>`;
+}
 
 /* =====================================================================
    PARCOURS XX1 — groupe de test, par lots de 100 nouveaux visiteurs.
@@ -9760,6 +9822,7 @@ function ecranRepriseX(){
 
 /* les invitations arrivent après la récompense, jamais avant */
 function lignesSuiteX(depuis){
+  if(eliteJour0()) return '';
   const l = [];
   if(etatRappel() === 'possible') l.push(`<button class="etape actif" data-xnotifs="${depuis}">
       <div class="puce">${ico('cloche', 15)}</div>
@@ -9778,7 +9841,7 @@ function ecranBravoX(){
   if(!x.vu){ x.vu = true; pister('XX1_BRAVO_VU', { justes: j, fautes: k }); }
   vue().innerHTML = `
   <div class="pad" style="padding-top:22px">
-    <div class="pastille-etape">Jour 1 · fait</div>
+    <div class="pastille-etape">${estE2() ? 'Ta note au test : ' + S.testNote + '/10 · jour 1 fait' : 'Jour 1 · fait'}</div>
     <div class="x-bravo">
       <div class="xb-serie">${ico('flamme', 26)}<span><b class="num">${s}</b> jour${s > 1 ? 's' : ''} de suite</span></div>
       <h1 class="titre" style="font-size:25px;margin:12px 0 6px">${!k ? 'Aucune faute au test' : (j === k ? 'Toutes tes fautes sont reprises' : j + ' faute' + (j > 1 ? 's' : '') + ' reprise' + (j > 1 ? 's' : '') + ' juste' + (j > 1 ? 's' : '') + ' sur ' + k)}</h1>
@@ -9791,7 +9854,7 @@ function ecranBravoX(){
       <div class="stat"><div class="v num">${j}/${k}</div><div class="l">Fautes reprises justes</div></div>
     </div>
     <button class="cta" style="margin-top:16px" data-xseance="bravo">Continuer : ma séance du jour<small>5 questions choisies pour toi · environ 2 min</small></button>
-    ${lignesSuiteX('bravo')}
+    ${estE2() ? suiteElite2('bravo') : lignesSuiteX('bravo')}
     <button class="lien" style="display:block;margin:14px auto 0" data-go="resultat">Revoir ma note et ma feuille corrigée</button>
     <button class="lien" style="display:block;margin:6px auto 0" data-go="aujourdhui">Aller à l'accueil</button>
   </div>`;
@@ -9821,8 +9884,8 @@ function finSeanceX(f, tete){
     </div>
     ${(f.fautes || []).length ? `<div class="bloc"><div class="libelle">À retenir avant de partir</div>
       ${f.fautes.slice(0, 3).map(x => `<div class="err" style="margin-bottom:8px"><div class="q" style="font-size:13.5px">${E(x.q)}</div><div class="ligne">Bonne réponse : <b>${E(x.bon)}</b></div></div>`).join('')}</div>` : ''}
-    ${lignesSuiteX('seance')}
-    ${payant ? '' : `<div class="carte xs-offre">
+    ${estE2() ? suiteElite2('seance') : lignesSuiteX('seance')}
+    ${payant || estElite() ? '' : `<div class="carte xs-offre">
       <h3>Tu veux aller plus loin aujourd'hui ?</h3>
       <p class="sous">Avec l'abonnement : corrections sans limite, compositions chronométrées avec ton classement, et la feuille corrigée de tes erreurs en PDF.</p>
       <button class="cta creux" style="margin-top:10px" data-go="abonnement">Voir l'abonnement</button>
@@ -9955,13 +10018,13 @@ ouvrirLienDirect();
 setTimeout(inviterNotifsPremiereOuverture, 9000);
 rendre();
 
-/* Deux parcours en alternance, par blocs de 20 nouveaux visiteurs (le serveur compte) */
+/* Les parcours actifs tournent par blocs de 50 nouveaux visiteurs : normal, B, Élite 1, Élite 2 (le serveur compte) */
 async function assignerParcours(){
   if(S.parcours){ pister('PARCOURS_ASSIGNE', { parcours: S.parcours, deja: true }); return; }
   if(testDejaFait() || S.util.connecte || !base) return;
   try{
     const { data } = await base.rpc('attribuer_parcours');
-    if(['A','B','C','D','X'].includes(data)){
+    if(PARCOURS_CONNUS.includes(data)){
       S.parcours = data; ecrireReglage('parcours', data);
       pister('PARCOURS_ASSIGNE', { parcours: data });
     }
