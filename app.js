@@ -935,6 +935,7 @@ function ecranResultat(){
       </ol>
     </div>
 
+    ${S.util.connecte ? lignesSuiteX('resultat') : ''}
     ${S.parcours === 'B' || S.parcours === 'C' || estElite() ? feuilleTestCorrigee() : ''}
     ${S.parcours === 'C' ? blocPlanPaiement(faibles) : ''}
     ${S.parcours === 'E1' ? blocPlanRattrapage(faibles) : ''}
@@ -1568,7 +1569,6 @@ function ouvrirDansChrome(){
 }
 /* Première ouverture de l'application installée : un seul écran pour les notifications, une fois. */
 function inviterNotifsPremiereOuverture(essai){
-  if(eliteJour0()) return;
   if(!estInstallee() || lireReglages().notifsOuverture || !pushPossible() || Notification.permission !== 'default') return;
   const v = document.getElementById('voile');
   if(!S.util.connecte || S.rappel || S.ecran === 'compte' || S.modal || !v || !v.hidden || enComposition() || document.getElementById('invitation')){
@@ -7183,7 +7183,6 @@ function etatRappel(){
 }
 /* Le bandeau de l'accueil : discret, masquable sept jours */
 function blocBandeauRappel(){
-  if(eliteJour0()) return '';
   if(S.gratuit && !S.util.connecte) return '';
   /* on attend de savoir si le rappel est déjà actif : sinon le bandeau s'affiche puis disparaît une seconde après */
   if(!S.rappelCharge || etatRappel() !== 'possible') return '';
@@ -9196,7 +9195,7 @@ document.addEventListener('click', ev=>{
         pister('ACCOUNT_CREATED', { niveau: S.niveau });
         noterParcoursCompte();
         ecrireReglage('compteLe', Date.now());
-        if(!estXX1() && !estElite()) setTimeout(() => invitationNotifsApresInscription(), 7000);
+        if(!estXX1() && !estE2()) setTimeout(() => invitationNotifsApresInscription(), 7000);
         S.modal = null; chargerProgression();
         if(paiementObligatoire()){ chargerAbonnement(); S.choixFormule = S.choixFormule || 'annuelle'; return aller('abonnement'); }
         if(S.defi && S.defi.etat === 'connexion') ouvrirDefi(S.defi.id);
@@ -9660,7 +9659,6 @@ planifierInvitations();
 /* Juste après la création du compte, quand l'envie est la plus forte : la demande d'autorisation des notifications.
    C'est ce qui permet à Mon Concours d'apparaître par-dessus Facebook ou WhatsApp. */
 function invitationNotifsApresInscription(){
-  if(eliteJour0()) return;
   if(!notifsAEncourager() || !peutInviter() || !invitationPossible('notifs', 60000)) return;
   fenetreInvitation({ cle:'notifs', icone:'cloche', titre:'Être prévenu à temps',
     texte:'Autorisez les notifications : Mon Concours s\'affiche même quand vous êtes sur Facebook ou WhatsApp, pour votre rappel du soir, vos résultats et la composition nationale.',
@@ -9686,8 +9684,9 @@ function invitationNotifsApresInscription(){
 /* =====================================================================
    PARCOURS ÉLITE (12 novembre 2026)
    Élite 1 : les meilleures pièces des anciens parcours. Note cachée jusqu'à l'inscription,
-     feuille corrigée juste après, « Reprendre mes fautes maintenant », plan de rattrapage sans prix,
-     notifications et installation proposées seulement à partir du 2e jour, après une séance réussie.
+     feuille corrigée juste après, « Reprendre mes fautes maintenant », plan de rattrapage sans prix.
+   Notifications et application : proposées à tout le monde dès le premier jour (décision du 12 novembre),
+     à chaque moment de réussite (note du test, fautes reprises, séance finie, inscription à la nationale).
    Élite 2 : construit sur ce que les candidats font vraiment (base du 12 novembre).
      Le premier jour, on pratique tout de suite : reprise des fautes du test, puis « encore 5 »,
      et la prochaine composition nationale. L'accueil met la séance, les erreurs et la composition
@@ -9695,12 +9694,6 @@ function invitationNotifsApresInscription(){
    ===================================================================== */
 function estElite(){ return S.parcours === 'E1' || S.parcours === 'E2'; }
 function estE2(){ return S.parcours === 'E2'; }
-/* jour 0 = jour de création du compte (ou pas encore de compte) */
-function eliteJour0(){
-  if(!estElite()) return false;
-  const t = lireReglages().compteLe;
-  return !t || new Date(t).toDateString() === new Date().toDateString();
-}
 /* Élite 1 : le plan de rattrapage, sans aucun prix */
 function blocPlanRattrapage(faibles){
   const nf = fautesDuTest().length;
@@ -9823,7 +9816,6 @@ function ecranRepriseX(){
 
 /* les invitations arrivent après la récompense, jamais avant */
 function lignesSuiteX(depuis){
-  if(eliteJour0()) return '';
   const l = [];
   if(etatRappel() === 'possible') l.push(`<button class="etape actif" data-xnotifs="${depuis}">
       <div class="puce">${ico('cloche', 15)}</div>
@@ -9833,7 +9825,7 @@ function lignesSuiteX(depuis){
       <div class="puce">${ico('telecharger', 15)}</div>
       <div><h3>Mettre Mon Concours sur mon écran d'accueil</h3><p>Il s'ouvre comme une application, même avec peu de réseau.</p></div>
       <span class="fl-tache" aria-hidden="true">→</span></button>`);
-  return l.length ? `<div class="bloc"><div class="libelle">Pour que demain soit facile</div><div class="carte">${l.join('')}</div></div>` : '';
+  return l.length ? `<div class="bloc"><div class="libelle">Pour ne rien rater</div><div class="carte">${l.join('')}</div></div>` : '';
 }
 
 function ecranBravoX(){
