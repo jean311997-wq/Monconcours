@@ -1,3 +1,6 @@
+-- La table public.actualite_questions et les 77 questions d'actualité (articles des 4 dernières semaines) ont été
+-- ajoutées par les migrations « swipe_questions_actualite » et « swipe_questions_actualite_lot2 ».
+-- L'onglet Actualité tourne sur les 28 derniers jours et ne s'arrête jamais : non vues d'abord, puis les plus anciennement vues.
 -- Mode Swipe : onglets Aléatoire / Mes erreurs / Actualité / Mes cours.
 -- Aléatoire reste swipe_lot. Les autres passent par swipe_lot_choix (même forme de réponse,
 -- mêmes filtres : questions publiées, au moins 2 options, hors questions gardées).
@@ -20,6 +23,7 @@ begin
            row_number() over (order by
              case when p_mode = 'erreurs' then e.revoir_le end asc nulls last,
              case when v.derniere is null then 0 else 1 end,
+             case when p_mode = 'actu' then v.derniere end asc nulls first,
              case when p_mode = 'actu' then ac.publie_le end desc nulls last, random()) k
       from public.questions q
       join public.matieres m on m.id = q.matiere_id
@@ -34,10 +38,10 @@ begin
        and not public.question_gardee(q.id)
        and case p_mode
              when 'erreurs' then e.id is not null and not e.acquise
-             when 'actu'    then aq.question_id is not null and ac.statut = 'publie'
+             when 'actu'    then aq.question_id is not null and ac.statut = 'publie' and ac.publie_le >= now() - interval '28 days'
              when 'cours'   then m.nom = p_matiere
              else false end
-       and (p_mode = 'erreurs' or v.derniere is null or v.derniere < now() - interval '1 day')
+       and (p_mode in ('erreurs', 'actu') or v.derniere is null or v.derniere < now() - interval '1 day')
      order by k limit v_n) x;
 
   return coalesce((
