@@ -2431,3 +2431,5 @@ body.swipe-on .fab-canal,body.swipe-on .sw-bulle{display:none!important}
 .sw-secoue{animation:swSecoue .35s}
 @keyframes swSecoue{20%{transform:translateX(-6px)}50%{transform:translateX(5px)}80%{transform:translateX(-3px)}}
 @media (prefers-reduced-motion:reduce){.sw-page.sw-entre,.sw-glisse .sw-fleche,.sw-secoue{animation:none}}
+.sw-pts-lot i.s{background:#4A5A53}
+.sw-glisse.discret{color:rgba(238,243,240,.4);margin-top:8px}

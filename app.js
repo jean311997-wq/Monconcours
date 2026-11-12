@@ -6639,7 +6639,7 @@ function swHaut(w){
 }
 function swPoints(w){
   return `<div class="sw-pts-lot">${w.lot.map((x, k) => {
-    const r = k < w.idx ? (x._ok ? 'ok' : 'ko') : (k === w.idx ? (w.c && w.c.ok ? (w.c.correcte ? 'ok' : 'ko') : 'f') : '');
+    const r = k < w.idx ? (x._saut ? 's' : (x._ok ? 'ok' : 'ko')) : (k === w.idx ? (w.c && w.c.ok ? (w.c.correcte ? 'ok' : 'ko') : 'f') : '');
     return `<i class="${r}"></i>`; }).join('')}</div>`;
 }
 function ecranSwipe(){
@@ -6722,7 +6722,7 @@ function swJeu(w){
     ${fini && w.gain ? `<div class="sw-gain" aria-hidden="true">+${w.gain}${w.serie >= 3 ? '<small>combo ×2</small>' : ''}</div>` : ''}
     ${fini && w.nouveauRecord && w.serie >= 5 ? `<p class="sw-record">${ico('flamme',14)} Nouveau record : ${w.serie} d'affilée</p>` : ''}
   </div>
-  ${fini ? `<div class="sw-glisse"><span class="sw-fleche">⌃</span>Glisse vers le haut<button data-sw-suiv="1">Suivante</button></div>` : ''}
+  ${fini ? `<div class="sw-glisse"><span class="sw-fleche">⌃</span>Glisse vers le haut<button data-sw-suiv="1">Suivante</button></div>` : (rep === undefined ? `<div class="sw-glisse discret"><span class="sw-fleche">⌃</span>Glisse pour passer cette question</div>` : '')}
   <div class="sw-bas">${swPoints(w)}<span>Série ${w.lotNum} · question ${w.idx + 1} sur ${w.lot.length}</span></div>
   ${fini ? swApercu(w) : ''}`;
 }
@@ -6749,10 +6749,19 @@ function swPasser(action){
     const v = document.querySelector('.sw'); if(v) v.scrollTop = 0;
   }, 230);
 }
+function swPasserQuestion(){
+  const w = S.sw; if(!w || w.phase !== 'jeu' || w.rep !== undefined) return;
+  const q = w.lot[w.idx]; if(q){ q._saut = true; w.avant.passees = (w.avant.passees || 0) + 1; }
+  swSuivante(true);
+}
 function swPeutPasser(){
   const w = S.sw; if(!w) return null;
   if(w.phase === 'entree') return w.lot && w.lot.length ? swEntrer : null;
-  if(w.phase === 'jeu') return w.c && w.c.ok ? () => swSuivante() : null;
+  if(w.phase === 'jeu'){
+    if(w.c && w.c.ok) return () => swSuivante();
+    if(w.rep === undefined) return swPasserQuestion;      // pas de réponse : la question est passée, rien ne change
+    return null;                                          // correction en cours : on attend
+  }
   if(w.phase === 'palier') return swApresPalier;
   if(w.phase === 'bilan') return w.suivant ? swSerieSuivante : null;
   return null;
@@ -6782,10 +6791,10 @@ function swBilan(w){
   const faible = mats.slice().sort((x, y) => (x[1].j / x[1].n) - (y[1].j / y[1].n) || y[1].n - x[1].n)[0];
   const min = Math.max(1, Math.round((Date.now() - a.t) / 60000));
   const passes = a.rang && rang ? a.rang - rang : 0;
-  const texte = 'J\'ai fait ' + a.justes + ' sur ' + w.lot.length + ' en mode Swipe sur Mon Concours. Ma note estimée : ' + swFr(note) + '/20. Tu fais mieux ? ' + CONTACT.site;
+  const texte = 'J\'ai fait ' + a.justes + ' sur ' + (w.lot.length - (a.passees || 0)) + ' en mode Swipe sur Mon Concours. Ma note estimée : ' + swFr(note) + '/20. Tu fais mieux ? ' + CONTACT.site;
   return `<div class="sw-bilan">
     <div class="sw-eyebrow">Série ${w.lotNum} terminée</div>
-    <h1>${a.justes} sur ${w.lot.length}</h1>
+    <h1>${a.justes} sur ${w.lot.length - (a.passees || 0)}</h1>${a.passees ? `<p class="sw-petit" style="margin:-10px 0 14px">${a.passees} question${a.passees > 1 ? 's passées' : ' passée'}</p>` : ''}
     <div class="sw-carte-note">
       <div class="sw-tb1"><span>Ma note estimée</span>${rang ? '<span>Mon rang</span>' : ''}</div>
       <div class="sw-avap"><b>${swFr(a.note)} → <span class="${note >= a.note ? 'sw-v' : 'sw-r'}">${swFr(note)}</span></b>${rang && a.rang ? `<b>${nombreFr(a.rang)}ᵉ → <span class="${rang <= a.rang ? 'sw-v' : 'sw-r'}">${nombreFr(rang)}ᵉ</span></b>` : ''}</div>
