@@ -1,0 +1,2 @@
+-- Admin : nombre de candidats en ligne dans le mode Swipe (3 dernières minutes), affiché dans le tableau de bord.
+-- Voir public.admin_swipe_en_ligne() appliquée en base (lecteurs de l'équipe seulement).

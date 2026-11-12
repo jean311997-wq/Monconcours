@@ -3136,6 +3136,10 @@ async function vueTableau(){
   const z = document.getElementById('zone-tableau');
   if(!z || A.vue !== 'tableau') return;
 
+  db.rpc('admin_swipe_en_ligne').then(r => {
+    const el = document.getElementById('cpt-swipe-ligne'); if(!el) return;
+    el.textContent = (r.error || !r.data ? '—' : nombre(r.data.en_ligne)) + ' dans le mode Swipe';
+  }).catch(() => {});
   const croiss = t.croissance || [], heures = t.heures || [], zones = (t.zones || []).filter(x => x.ecran);
   const totalMin = zones.reduce((a, x) => a + Number(x.minutes || 0), 0) || 1;
   const maxZ = Math.max(1, ...zones.map(x => Number(x.minutes || 0)));
@@ -3147,7 +3151,7 @@ async function vueTableau(){
   z.innerHTML = `
     <div class="compteurs six">
       <div class="compteur en-ligne cliquable" data-vers="direct"><div class="v num"><i class="pouls"></i>${nombre(t.en_ligne)}</div><div class="l">En ligne maintenant</div>
-        <div class="d">${nombre(t.en_ligne_comptes)} connecté${t.en_ligne_comptes > 1 ? 's' : ''} · ${nombre(t.en_composition)} en composition</div></div>
+        <div class="d">${nombre(t.en_ligne_comptes)} connecté${t.en_ligne_comptes > 1 ? 's' : ''} · ${nombre(t.en_composition)} en composition · <b class="vert-txt" id="cpt-swipe-ligne">… dans le mode Swipe</b></div></div>
       <div class="compteur cliquable" data-vers="direct"><div class="v num">${nombre(t.actifs_jour)}</div><div class="l">Actifs aujourd'hui</div>
         <div class="d">${nombre(t.visiteurs_jour)} visiteurs en tout</div></div>
       <div class="compteur cliquable" data-vers="candidats"><div class="v num">${nombre(t.inscrits)}</div><div class="l">Inscrits au total</div>

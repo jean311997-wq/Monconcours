@@ -544,3 +544,68 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:rgba(79,194,14
 
 /* carte « État de la base » : sur téléphone, seule la première ligne reste visible, le détail au toucher */
 @media (max-width:700px){#carte-sante .sante-detail{display:none!important}#carte-sante.ouverte .sante-detail{display:flex!important}#carte-sante{cursor:pointer}}
+
+/* ---------- menu : rubriques de pilotage en vert ---------- */
+.menu button.vert{color:var(--vert-texte);font-weight:600}
+.menu button.vert:hover{color:#7FE0B0}
+.menu button.vert.on{color:#fff}
+.vert-txt{color:var(--vert-texte)}
+/* la pastille reste bien visible à côté d'un libellé vert : or sur fond sombre, jamais confondue */
+.menu button .pastille{background:var(--or);color:#1a1405;box-shadow:0 0 0 2px var(--encre);font-weight:800}
+
+/* ---------- mode clair ---------- */
+html[data-theme="clair"]{
+  --encre:#F3F6F4; --ardoise:#FFFFFF; --ardoise2:#E4EBE7; --trait:#CAD6CF;
+  --craie:#15221C; --craie2:#52645A; --papier:#EFE9DA;
+  --vert-fond:#E3F3EB; --vert-bord:#9BD3B8; --vert-texte:#0B7A52;
+  --rouge-fond:#FBE9E7; --rouge-bord:#E6A9A2; --rouge-texte:#B23A2E;
+  --ambre-fond:#FBF3DC; --ambre-bord:#E2CB86; --ambre-texte:#8A6A10;
+  --surf1:#FFFFFF; --surf2:#EEF3F0; --liseré:rgba(20,40,30,.12);
+  --ombre:0 1px 2px rgba(20,40,30,.06),0 8px 22px -14px rgba(20,40,30,.25);
+  color-scheme:light;
+}
+html[data-theme="clair"] body{background:#F3F6F4;color:var(--craie)}
+html[data-theme="clair"] ::selection{background:rgba(19,128,90,.25)}
+html[data-theme="clair"] ::-webkit-scrollbar-thumb{background:#B9C8C0}
+html[data-theme="clair"] .tete{background:rgba(255,255,255,.85)}
+html[data-theme="clair"] .rech-rapide input{background:#fff;color:var(--craie);border-color:var(--trait)}
+html[data-theme="clair"] .rech-rapide input:focus{background:#fff}
+html[data-theme="clair"] .menu{background:rgba(255,255,255,.7)}
+html[data-theme="clair"] .menu button:hover{background:rgba(20,40,30,.06)}
+html[data-theme="clair"] .menu button.on{background:linear-gradient(90deg,rgba(19,128,90,.18),rgba(19,128,90,.05));color:#0A5C3E;box-shadow:0 0 0 1px rgba(19,128,90,.28) inset}
+html[data-theme="clair"] .menu button.vert.on{color:#0A5C3E}
+html[data-theme="clair"] .menu button.vert:hover{color:#08583B}
+html[data-theme="clair"] .menu-groupe{color:#6A7C72}
+html[data-theme="clair"] .menu button .pastille{box-shadow:0 0 0 2px #fff}
+html[data-theme="clair"] h2.titre{background:none;-webkit-text-fill-color:var(--craie);color:var(--craie)}
+html[data-theme="clair"] .sous{color:#52645A}
+html[data-theme="clair"] .libelle{color:#24352D}
+html[data-theme="clair"] .libelle>span:last-child,html[data-theme="clair"] .libelle>small{color:#6A7C72}
+html[data-theme="clair"] input,html[data-theme="clair"] select,html[data-theme="clair"] textarea{background:#fff;color:var(--craie);border-color:var(--trait)}
+html[data-theme="clair"] .portail{background:#F3F6F4}
+html[data-theme="clair"] button.mini:hover{background:var(--ardoise2)}
+html[data-theme="clair"] table th{color:#52645A}
+html[data-theme="clair"] td,html[data-theme="clair"] th{border-color:var(--trait)}
+html[data-theme="clair"] #carte-sante{background:#fff!important;color:var(--craie)!important}
+html[data-theme="clair"] .compteur .v{color:var(--craie)}
+
+/* bouton du thème dans l'en-tête */
+#btn-theme{font-weight:600;white-space:nowrap}
+.menu button.vert.on{color:#8CE6BB}
+html[data-theme="clair"] .menu button.vert.on{color:#0A5C3E}
+html[data-theme="clair"] button.mini,html[data-theme="clair"] button.mini.on{background:#fff;color:var(--craie);border:1px solid var(--trait)}
+html[data-theme="clair"] button.mini.on{background:var(--vert-fond);border-color:var(--vert-bord);color:var(--vert-texte)}
+html[data-theme="clair"] button.lien,html[data-theme="clair"] .tete button.lien{color:var(--craie2)}
+html[data-theme="clair"] button.lien:hover{color:var(--craie)}
+html[data-theme="clair"] .qui{color:var(--craie2)}
+/* mode clair : chiffres, étiquettes et tuiles lisibles sur fond blanc */
+html[data-theme="clair"] .compteur .v{background:none;-webkit-text-fill-color:var(--craie);color:var(--craie)}
+html[data-theme="clair"] .compteur .l{color:#24352D}
+html[data-theme="clair"] .compteur .d{color:#52645A}
+html[data-theme="clair"] .compteur::after{background:none}
+html[data-theme="clair"] .compteur.en-ligne{background:linear-gradient(160deg,#E3F3EB,#D3EBDF);border-color:var(--vert-bord);box-shadow:var(--ombre)}
+html[data-theme="clair"] .compteur.en-ligne .v{background:none;-webkit-text-fill-color:#0A5C3E;color:#0A5C3E}
+html[data-theme="clair"] .compteur.alerte-c{background:var(--rouge-fond)}
+html[data-theme="clair"] .compteur.alerte-c .v{-webkit-text-fill-color:var(--rouge-texte)}
+html[data-theme="clair"] .compteur.cliquable:hover,html[data-theme="clair"] .compteur.choisi{background:var(--vert-fond)}
+html[data-theme="clair"] .vert-txt{color:#0A5C3E}

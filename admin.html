@@ -7,7 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="admin.css?v=25">
+<link rel="stylesheet" href="admin.css?v=28">
+<script src="admin-theme.js?v=1"></script>
 <link rel="manifest" href="/admin.webmanifest?v=1">
 <meta name="theme-color" content="#0C1512">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -76,17 +77,17 @@
   <div class="corps">
     <nav class="menu" id="menu" aria-label="Sections">
       <span class="menu-groupe">Pilotage</span>
-      <button data-vue="swipe">Mode Swipe</button>
-      <button data-vue="priorites" class="on">Priorités <i class="pastille" id="pastille-prio" hidden></i></button>
-      <button data-vue="relances_paiement">Relance de paiement</button>
-      <button data-vue="tableau">Tableau de bord</button>
+      <button data-vue="swipe" class="vert">Mode Swipe</button>
+      <button data-vue="priorites" class="vert on">Priorités <i class="pastille" id="pastille-prio" hidden></i></button>
+      <button data-vue="relances_paiement" class="vert">Relance de paiement</button>
+      <button data-vue="tableau" class="vert">Tableau de bord</button>
       <button data-vue="paiements">Paiements</button>
-      <button data-vue="avis">Avis des candidats <i class="pastille" id="pastille-avis" hidden></i></button>
+      <button data-vue="avis" class="vert">Avis des candidats <i class="pastille" id="pastille-avis" hidden></i></button>
       <button data-vue="direct">En direct et historique</button>
-      <button data-vue="analytique">Analytique (courbes)</button>
+      <button data-vue="analytique" class="vert">Analytique (courbes)</button>
       <button data-vue="retention">Rétention J1, J2…</button>
       <button data-vue="compositions">Compositions en direct</button>
-      <button data-vue="conseil">Le conseil des dix</button>
+      <button data-vue="conseil" class="vert">Le conseil des dix</button>
       <button data-vue="analyse">Entrée et compositions</button>
       <button data-vue="comportement">Écrans et boutons</button>
       <button data-vue="pedagogie">Questions difficiles</button>
@@ -94,7 +95,7 @@
       <span class="menu-groupe">Candidats</span>
       <button data-vue="recherche">Chercher un candidat</button>
       <button data-vue="candidats">Candidats</button>
-      <button data-vue="assiduite">Assiduité</button>
+      <button data-vue="assiduite" class="vert">Assiduité</button>
       <button data-vue="diffuser">Diffuser un message</button>
       <button data-vue="bannissement">Bannissement</button>
       <button data-vue="signalements">Signalements</button>
