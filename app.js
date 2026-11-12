@@ -2687,7 +2687,6 @@ function ecranAujourdhui(){
     ${salutAccueil()}
     ${blocEnLigne()}
     ${candidatNeuf() ? blocAvisAccueil() : ''}
-    ${blocSwipeAccueil()}
     ${nationaleEnHaut() ? `<section class="nat-jour${resultatsEnVedette() && blocDerniereNationale(true) ? ' res-vedette' : ''}" aria-label="Composition nationale du jour">${resultatsEnVedette() ? blocDerniereNationale(true) + (S.epreuve && S.epreuve.etat === 'terminee' ? '' : carteEpreuve()) : carteEpreuve() + blocDerniereNationale()}</section>` : ''}
     ${blocSeanceX()}
     ${estE2() && S.util.connecte ? tachesElite2() : ''}
@@ -6604,7 +6603,7 @@ function swLancerCompte(){
     if(!S.sw || S.ecran !== 'swipe' || S.sw.phase !== 'bilan'){ return swArreterCompte(); }
     if(!S.sw.suivant){ return; }       // la série suivante n'est pas encore arrivée : on attend
     S.sw.compte--;
-    if(S.sw.compte <= 0){ swArreterCompte(); swSerieSuivante(); }
+    if(S.sw.compte <= 0){ swArreterCompte(); swPasser(swSerieSuivante); }
     else { const b = document.getElementById('sw-compte'); if(b) b.textContent = S.sw.compte; }
   }, 1000);
 }
@@ -6653,7 +6652,9 @@ function ecranSwipe(){
   else if(w.phase === 'recompense') h = swRecompense(w);
   else if(w.phase === 'bilan') h = swBilan(w);
   else h = swJeu(w);
-  vue().innerHTML = `<div class="sw sw-${w.phase}">${h}</div>`;
+  const mur = w.phase === 'mur' && w.c ? swMur(w, w.c) : '';
+  vue().innerHTML = `<div class="sw sw-${w.phase}"><div class="sw-page${w.entre ? ' sw-entre' : ''}">${h}</div>${mur}</div>`;
+  w.entre = false;
 }
 function swEntree(w, e){
   const premiere = !swLire('vu', 0);
@@ -6696,7 +6697,6 @@ function swJeu(w){
   const retour = !fini ? '' : (c.correcte
     ? `<div class="sw-retour ok"><b>${revanche ? 'Revanche gagnée.' : 'Juste.'}${trouvent !== null && trouvent < 70 ? ` ${100 - trouvent} % se trompent ici. Pas toi.` : ''}</b>${c.explication ? `<span>${E(c.explication)}</span>` : ''}</div>`
     : `<div class="sw-retour ko"><b>C'était ${E('ABCD'[bon] || '')}${q.options && q.options[bon] ? ' : ' + E(q.options[bon]) : ''}.</b>${c.explication ? `<span>${E(c.explication)}</span>` : ''}<em>Elle revient dans « Mes erreurs » jusqu'à ce qu'elle soit acquise.</em></div>`);
-  const mur = w.phase === 'mur' ? swMur(w, c) : '';
   return `${swHaut(w)}${swTableau(w)}
   <div class="sw-q${q.annale ? ' annale' : ''}">
     ${q.annale ? `<div class="sw-annale"><span>Tombée au concours${q.annee ? ' ' + q.annee : ''}</span><b>compte double</b></div>` : ''}
@@ -6722,9 +6722,40 @@ function swJeu(w){
     ${fini && w.gain ? `<div class="sw-gain" aria-hidden="true">+${w.gain}${w.serie >= 3 ? '<small>combo ×2</small>' : ''}</div>` : ''}
     ${fini && w.nouveauRecord && w.serie >= 5 ? `<p class="sw-record">${ico('flamme',14)} Nouveau record : ${w.serie} d'affilée</p>` : ''}
   </div>
-  ${fini ? `<div class="sw-glisse"><span>⌃</span>Glisse pour la suivante<button data-sw-suiv="1">Suivante</button></div>` : ''}
+  ${fini ? `<div class="sw-glisse"><span class="sw-fleche">⌃</span>Glisse vers le haut<button data-sw-suiv="1">Suivante</button></div>` : ''}
   <div class="sw-bas">${swPoints(w)}<span>Série ${w.lotNum} · question ${w.idx + 1} sur ${w.lot.length}</span></div>
-  ${mur}`;
+  ${fini ? swApercu(w) : ''}`;
+}
+/* la suivante dépasse en bas de l'écran, comme la vidéo suivante sur TikTok */
+function swApercu(w){
+  const n = w.lot[w.idx + 1];
+  if(!n) return `<div class="sw-apercu"><span>Ensuite</span><b>Ton bilan de la série ${w.lotNum}</b></div>`;
+  return `<div class="sw-apercu${n.annale ? ' annale' : ''}"><span>Suivante · ${E(n.annale ? 'tombée au concours' : (n.contexte === 'erreurs' ? 'revanche' : (n.matiere || '')))}</span><b>${E(n.enonce)}</b></div>`;
+}
+/* passage animé : la page part vers le haut, la suivante monte depuis le bas */
+const swMouvementReduit = () => { try{ return matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(e){ return false; } };
+let swEnPassage = false;
+function swPasser(action){
+  if(swEnPassage) return;
+  const p = document.querySelector('.sw-page');
+  if(!p || swMouvementReduit()){ action(); return; }
+  swEnPassage = true;
+  p.style.transition = 'transform .24s cubic-bezier(.4,0,.9,.6), opacity .24s';
+  p.style.transform = 'translateY(-105%)'; p.style.opacity = '.2';
+  setTimeout(() => {
+    swEnPassage = false;
+    if(S.sw) S.sw.entre = true;
+    action();
+    const v = document.querySelector('.sw'); if(v) v.scrollTop = 0;
+  }, 230);
+}
+function swPeutPasser(){
+  const w = S.sw; if(!w) return null;
+  if(w.phase === 'entree') return w.lot && w.lot.length ? swEntrer : null;
+  if(w.phase === 'jeu') return w.c && w.c.ok ? () => swSuivante() : null;
+  if(w.phase === 'palier') return swApresPalier;
+  if(w.phase === 'bilan') return w.suivant ? swSerieSuivante : null;
+  return null;
 }
 function swPalier(w){
   return `<div class="sw-fete">${Array.from({ length: 18 }, (_, k) => `<i style="left:${(k * 53) % 92 + 4}%;top:${(k * 37) % 40 + 6}%;background:${['#2FC285','#E9B04A','#EF5A5F','#EEF3F0'][k % 4]};transform:rotate(${k * 41}deg)"></i>`).join('')}</div>
@@ -6785,23 +6816,7 @@ function swMur(w, c){
   </div>`;
 }
 
-/* carte d'entrée sur l'accueil, et la bulle */
-function blocSwipeAccueil(){
-  if(!S.util.connecte) return '';
-  swEtatCharger(false).then(e => { if(e && !S._swCarteVue && S.ecran === 'aujourdhui'){ S._swCarteVue = true; rendre(); } });
-  const e = S.swEtat;
-  const note = e ? +e.note : null;
-  const live = e && (e.en_ligne || 0) >= 3 ? `${nombreFr(e.en_ligne)} en ce moment` : (e && e.aujourdhui ? `${nombreFr(e.aujourdhui)} aujourd'hui` : '');
-  const semaine = e && e.note_semaine !== null && e.note_semaine !== undefined ? Math.round((note - e.note_semaine) * 10) / 10 : null;
-  return `<section class="sw-carte-accueil" aria-label="Mode Swipe">
-    <div class="sca-1"><span class="sca-logo">${ico('swipe',18)}</span><b>Mode Swipe</b>${live ? `<span class="sca-live"><i></i>${E(live)}</span>` : ''}</div>
-    ${e ? `<div class="sca-2"><span>Ma note estimée</span><div><b>${swFr(note)}</b><small>/20</small>${semaine ? `<i class="sw-var ${semaine > 0 ? 'up' : 'dn'}">${semaine > 0 ? '+' : '−'}${swFr(Math.abs(semaine))} en 7 jours</i>` : ''}</div>
-      <div class="sw-barre"><i style="width:${Math.max(3, note / 20 * 100)}%"></i><u style="left:${Math.min(97, (+e.barre || 13) / 20 * 100)}%"></u><em style="left:${Math.min(97, (+e.barre || 13) / 20 * 100)}%">la barre ${swFr(+e.barre || 13)}</em></div></div>`
-      : `<p class="sca-chapeau">Une question, tu réponds, tu glisses. Ta note estimée bouge à chaque réponse.</p>`}
-    <div class="sca-3"><button class="sw-cta" data-swipe="1">${e && e.n > 0 ? 'Reprendre' : 'Entrer'}</button>
-      ${e && e.serie_jours ? `<span><b>${ico('flamme',13)} ${nombreFr(e.serie_jours)} jour${e.serie_jours > 1 ? 's' : ''}</b>${e.joue_aujourdhui ? 'ta série tient aujourd\'hui' : 'ta série s\'éteint à minuit'}</span>` : '<span>Commence ta série de jours aujourd\'hui</span>'}</div>
-  </section>`;
-}
+/* la bulle d'entrée sur l'accueil */
 function bulleSwipe(){
   const hNav = ((document.getElementById('nav') || {}).offsetHeight) || 64;
   return `<button class="sw-bulle" style="--nav-h:${hNav}px" data-swipe="1" aria-label="Ouvrir le mode Swipe"><b>SWIPE</b><i>LIVE</i></button>`;
@@ -6811,27 +6826,50 @@ document.addEventListener('click', ev => {
   if(!t) return;
   const d = t.dataset;
   if(d.swipe) return lancerSwipe();
-  if(d.swEntrer) return swEntrer();
+  if(d.swEntrer) return swPasser(swEntrer);
   if(d.swRep !== undefined) return swRepondre(+d.swRep);
-  if(d.swSuiv) return swSuivante();
+  if(d.swSuiv) return swPasser(() => swSuivante());
   if(d.swQuitter) return swQuitter();
-  if(d.swPalier) return swApresPalier();
-  if(d.swJouer){ S.sw.phase = 'jeu'; return swSuivante(true); }
-  if(d.swSerie) return swSerieSuivante();
+  if(d.swPalier) return swPasser(swApresPalier);
+  if(d.swJouer) return swPasser(() => { S.sw.phase = 'jeu'; swSuivante(true); });
+  if(d.swSerie) return swPasser(swSerieSuivante);
   if(d.swReessayer){ const w = S.sw; if(w){ w.rep = undefined; w.c = null; ecranSwipe(); } }
 });
-/* glisser vers le haut : question suivante */
+/* glisser vers le haut : la page suit le doigt, puis part ; sinon elle revient en place */
 (function(){
-  let y0 = null, x0 = null;
-  document.addEventListener('touchstart', e => { if(S.ecran !== 'swipe' || !e.touches[0]) return; y0 = e.touches[0].clientY; x0 = e.touches[0].clientX; }, { passive:true });
-  document.addEventListener('touchend', e => {
-    if(S.ecran !== 'swipe' || y0 === null || !e.changedTouches[0]) return;
-    const dy = y0 - e.changedTouches[0].clientY, dx = Math.abs(e.changedTouches[0].clientX - x0); y0 = null;
-    const w = S.sw; if(!w || dy < 70 || dx > 60) return;
-    const v = document.querySelector('.sw'); const enBas = !v || v.scrollTop + v.clientHeight >= v.scrollHeight - 6;
-    if(!enBas) return;
-    if(w.phase === 'entree') return swEntrer();
-    if(w.phase === 'jeu' && w.c && w.c.ok) swSuivante();
+  let y0 = null, x0 = null, dy = 0, tire = false, enBas = false, action = null;
+  const page = () => document.querySelector('.sw-page');
+  document.addEventListener('touchstart', e => {
+    if(S.ecran !== 'swipe' || !e.touches[0] || swEnPassage || (S.sw && S.sw.phase === 'mur')) return;
+    if(e.target.closest && e.target.closest('.sw-feuille')) return;
+    const v = document.querySelector('.sw');
+    y0 = e.touches[0].clientY; x0 = e.touches[0].clientX; dy = 0; tire = false;
+    enBas = !v || v.scrollTop + v.clientHeight >= v.scrollHeight - 6;
+    action = swPeutPasser();
+  }, { passive:true });
+  document.addEventListener('touchmove', e => {
+    if(y0 === null || S.ecran !== 'swipe' || !e.touches[0]) return;
+    const d = e.touches[0].clientY - y0, dx = Math.abs(e.touches[0].clientX - x0);
+    if(!tire && (d > -8 || dx > Math.abs(d) || !enBas)) return;
+    tire = true; dy = Math.min(0, d);
+    if(e.cancelable) e.preventDefault();
+    const p = page(); if(!p) return;
+    /* tant que la question n'a pas de réponse, la page résiste */
+    const t = action ? dy : Math.max(-46, dy * 0.25);
+    p.style.transition = 'none'; p.style.transform = 'translateY(' + t + 'px)';
+    p.style.opacity = action ? String(Math.max(.35, 1 + t / 900)) : '1';
+  }, { passive:false });
+  document.addEventListener('touchend', () => {
+    if(y0 === null) return;
+    y0 = null;
+    const p = page();
+    if(!tire || !p) return;
+    if(action && dy < -70){ swPasser(action); return; }
+    p.style.transition = 'transform .28s cubic-bezier(.2,.9,.3,1.2), opacity .2s';
+    p.style.transform = 'translateY(0)'; p.style.opacity = '1';
+    if(!action && S.sw && S.sw.phase === 'jeu' && dy < -30){
+      const o = document.querySelector('.sw-opts'); if(o){ o.classList.remove('sw-secoue'); void o.offsetWidth; o.classList.add('sw-secoue'); }
+    }
   }, { passive:true });
 })();
 
