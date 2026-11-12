@@ -571,7 +571,7 @@ const ONGLETS = [
 ];
 function nav(){
   const n = $('#nav'), r = $('#rail');
-  const cache = ['engagement','testIntro','test','resultat','verrou','verrou_d','seance','inscription','connexion','paiement','xreprise','xbravo'].concat(bloqueParPartenaire() ? ['abonnement'] : []).includes(S.ecran);
+  const cache = ['engagement','testIntro','test','resultat','verrou','verrou_d','seance','inscription','connexion','paiement','xreprise','xbravo','swipe'].concat(bloqueParPartenaire() ? ['abonnement'] : []).includes(S.ecran);
   n.style.display = cache ? 'none' : 'grid';
   r.style.display = cache ? 'none' : '';
   const app = document.querySelector('.app'); if(app) app.classList.toggle('sans-rail', cache);
@@ -2687,6 +2687,7 @@ function ecranAujourdhui(){
     ${salutAccueil()}
     ${blocEnLigne()}
     ${candidatNeuf() ? blocAvisAccueil() : ''}
+    ${blocSwipeAccueil()}
     ${nationaleEnHaut() ? `<section class="nat-jour${resultatsEnVedette() && blocDerniereNationale(true) ? ' res-vedette' : ''}" aria-label="Composition nationale du jour">${resultatsEnVedette() ? blocDerniereNationale(true) + (S.epreuve && S.epreuve.etat === 'terminee' ? '' : carteEpreuve()) : carteEpreuve() + blocDerniereNationale()}</section>` : ''}
     ${blocSeanceX()}
     ${estE2() && S.util.connecte ? tachesElite2() : ''}
@@ -2756,6 +2757,7 @@ function ecranAujourdhui(){
     ${nationaleEnHaut() ? '' : carteEpreuve() + blocDerniereNationale()}
     ${candidatNeuf() ? '' : blocAvisAccueil()}
     ${blocPlus()}
+    ${bulleSwipe()}
   </div>`;
 }
 
@@ -2826,6 +2828,7 @@ function ico(n, t){
     compte:'<circle cx="12" cy="8" r="4"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/>',
     telecharger:'<path d="M12 4v10m0 0l-4-4m4 4l4-4"/><path d="M5 19h14"/>',
     lire:'<path d="M4 5h6a2 2 0 0 1 2 2v12a2 2 0 0 0-2-2H4z"/><path d="M20 5h-6a2 2 0 0 0-2 2v12a2 2 0 0 1 2-2h6z"/>',
+    swipe:'<rect x="6" y="7" width="12" height="14" rx="2.5"/><path d="M8.5 4h7"/><path d="M12 17v-6M9.5 13.5L12 11l2.5 2.5"/>',
     cible:'<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/>',
     duel:'<path d="M4 4l10 10M20 4L10 14"/><path d="M6 20l3-3M18 20l-3-3"/>',
     trophee:'<path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3"/><path d="M10 19h4M12 14v5"/>',
@@ -6467,6 +6470,371 @@ async function repondreFil(i){
   if(S.ecran === 'pourtoi') ecranPourToi();
 }
 
+/* ======================================================================
+   MODE SWIPE (12 novembre 2026)
+   Une question plein écran, on répond, on glisse, la suivante tombe.
+   Ce qui fait revenir : la note estimée qui bouge à chaque réponse, le rang
+   parmi les candidats, la barre (la note des 20 % les mieux placés), la série
+   de bonnes réponses, la série de jours, les questions tombées au concours.
+   Léger : une lecture à l'entrée (swipe_etat), un lot de 10 questions à la
+   fois (swipe_lot, préchargé), chaque réponse corrigée par corriger_question
+   comme dans « Pour toi » (mêmes quotas, même blocus). Le rang se calcule ici,
+   sur le téléphone, avec l'histogramme des notes envoyé à l'entrée.
+   ====================================================================== */
+const SW_LOT = 10;
+const swNote = (c, n) => Math.round(200 * (c + 6) / (n + 12)) / 10;
+const swFr = (x, d) => (Math.round(x * 10) / 10).toLocaleString('fr-FR', { minimumFractionDigits: d === undefined ? 1 : d, maximumFractionDigits: 1 });
+function swCle(k){ return 'sw-' + k + '-' + ((S.util && S.util.tel) || 'x'); }
+function swLire(k, def){ try{ const v = localStorage.getItem(swCle(k)); return v === null ? def : JSON.parse(v); }catch(e){ return def; } }
+function swEcrire(k, v){ try{ localStorage.setItem(swCle(k), JSON.stringify(v)); }catch(e){} }
+/* rang : 1 + candidats dont la note dépasse la mienne (histogramme de 201 cases, 0,0 à 20,0) */
+function swRang(e, note){
+  if(!e || !Array.isArray(e.histo) || (e.total || 0) < 30) return null;
+  const k = Math.round(note * 10); let au = 0;
+  for(let i = k + 1; i < e.histo.length; i++) au += e.histo[i] || 0;
+  return au + 1;
+}
+function swEtatCharger(force){
+  if(!base || !S.util.connecte) return Promise.resolve(null);
+  if(!force && S.swEtat && Date.now() - S.swEtat.t < 10 * 60000) return Promise.resolve(S.swEtat);
+  return base.rpc('swipe_etat').then(({ data }) => {
+    if(data && data.ok){ S.swEtat = Object.assign({}, data, { t: Date.now() }); return S.swEtat; }
+    return null;
+  }, () => null);
+}
+function swLotCharger(){
+  if(!base) return Promise.resolve([]);
+  return base.rpc('swipe_lot', { p_niveau: niveauCand(), p_nombre: SW_LOT })
+    .then(({ data }) => Array.isArray(data) ? data : [], () => []);
+}
+function swPrecharger(){
+  const w = S.sw; if(!w || w.suivant || w.chargeSuivant) return;
+  w.chargeSuivant = true;
+  swLotCharger().then(l => { w.chargeSuivant = false; if(l.length) w.suivant = l; });
+}
+/* entrée dans le mode */
+function lancerSwipe(){
+  if(!S.util.connecte){ S.modal = 'inscription'; S.erreur = ''; return surcouche(); }
+  swArreterCompte();
+  S.sw = { phase:'entree', lot:null, idx:0, rep:undefined, c:null, serie:0, pts:0, n:0, cc:0,
+    record: swLire('record', 0), lotNum: 0, debut: Date.now() };
+  aller('swipe');
+  pister('SWIPE_OPENED');
+  swEtatCharger(true).then(e => {
+    const w = S.sw; if(!w) return;
+    if(e){ w.n = +e.n || 0; w.cc = +e.c || 0; }
+    if(S.ecran === 'swipe') ecranSwipe();
+  });
+  swLotCharger().then(l => { const w = S.sw; if(!w) return; w.lot = l; w.lotErreur = !l.length; if(S.ecran === 'swipe' && w.phase === 'entree') ecranSwipe(); });
+}
+function swCommencerLot(liste){
+  const w = S.sw;
+  w.lot = liste; w.idx = 0; w.rep = undefined; w.c = null; w.lotNum++;
+  const note = swNote(w.cc, w.n);
+  w.avant = { note, rang: swRang(S.swEtat, note), t: Date.now(), justes: 0, mat: {} };
+  w.phase = 'jeu'; w.t0 = Date.now();
+}
+function swEntrer(){
+  const w = S.sw; if(!w || !w.lot || !w.lot.length) return;
+  swEcrire('vu', 1);
+  swCommencerLot(w.lot);
+  ecranSwipe();
+}
+function swArreterCompte(){ if(S.swCompte){ clearInterval(S.swCompte); S.swCompte = null; } }
+function swQuitter(){ swArreterCompte(); S.swEtat = null; aller('aujourdhui'); }
+
+/* une réponse */
+async function swRepondre(i){
+  const w = S.sw; if(!w || w.phase !== 'jeu' || w.rep !== undefined) return;
+  const q = w.lot[w.idx];
+  w.rep = i; w.c = null; ecranSwipe();
+  const r = await corrigerAuServeur(q.id, [i], q.contexte === 'erreurs' ? 'erreurs' : 'revision', Date.now() - (w.t0 || Date.now()));
+  if(!S.sw || S.sw !== w) return;
+  w.c = r;
+  if(r && r.ok){
+    const poids = q.annale ? 2 : 1;
+    const noteAvant = swNote(w.cc, w.n), rangAvant = swRang(S.swEtat, noteAvant);
+    w.n += poids; if(r.correcte) w.cc += poids;
+    const noteApres = swNote(w.cc, w.n), rangApres = swRang(S.swEtat, noteApres);
+    w.delta = Math.round((noteApres - noteAvant) * 10) / 10;
+    w.passes = rangAvant && rangApres ? rangAvant - rangApres : 0;
+    const m = q.matiere || 'Autre'; w.avant.mat[m] = w.avant.mat[m] || { j:0, n:0 }; w.avant.mat[m].n++;
+    if(r.correcte){
+      w.serie++; w.avant.justes++; w.avant.mat[m].j++;
+      w.gain = 5 * (w.serie >= 3 ? 2 : 1) * (q.annale ? 2 : 1); w.pts += w.gain;
+      sonJuste();
+      if(w.serie > w.record){ w.record = w.serie; swEcrire('record', w.record); w.nouveauRecord = true; }
+    } else { w.serie = 0; w.gain = 0; sonFaux(); }
+    compterReponse();
+    if(w.idx >= w.lot.length - 4) swPrecharger();
+  } else if(r && r.quota){
+    if(r.motif === 'matiere'){ toast('Tes 15 questions offertes en ' + (r.matiere || q.matiere || 'cette matière') + ' sont faites.'); w.rep = undefined; w.c = null; return swSuivante(true); }
+    w.phase = 'mur';
+    pister('PAYWALL_VIEWED', { point: 'swipe', motif: r.motif || 'jour' });
+  }
+  if(S.ecran === 'swipe') ecranSwipe();
+}
+function swSuivante(sansPalier){
+  const w = S.sw; if(!w) return;
+  if(w.phase === 'jeu' && w.rep === undefined && !sansPalier) return;
+  if(w.phase === 'jeu' && !sansPalier && w.c && w.c.ok && w.c.correcte && w.serie > 0 && w.serie % 10 === 0 && !w.palierVu){
+    w.palierVu = true; w.phase = 'palier'; return ecranSwipe();
+  }
+  w.palierVu = false;
+  w.idx++; w.rep = undefined; w.c = null; w.gain = 0; w.t0 = Date.now(); w.nouveauRecord = false;
+  if(w.idx >= w.lot.length){ w.phase = 'bilan'; pister('SWIPE_LOT_DONE', { justes: w.avant.justes, n: w.lot.length }); swPrecharger(); ecranSwipe(); return swLancerCompte(); }
+  w.phase = 'jeu';
+  ecranSwipe();
+  const v = document.querySelector('.sw'); if(v) v.scrollTop = 0;
+}
+/* après un palier de 10 : une question tombée au concours, si le lot en garde une */
+function swApresPalier(){
+  const w = S.sw;
+  const j = w.lot.findIndex((x, k) => k > w.idx && x.annale);
+  if(j > 0 && !w.recompenseVue){
+    const [x] = w.lot.splice(j, 1); w.lot.splice(w.idx + 1, 0, x);
+    w.recompenseVue = true; w.phase = 'recompense'; return ecranSwipe();
+  }
+  w.phase = 'jeu'; swSuivante(true);
+}
+function swLancerCompte(){
+  swArreterCompte();
+  const w = S.sw; w.compte = 3;
+  S.swCompte = setInterval(() => {
+    if(!S.sw || S.ecran !== 'swipe' || S.sw.phase !== 'bilan'){ return swArreterCompte(); }
+    if(!S.sw.suivant){ return; }       // la série suivante n'est pas encore arrivée : on attend
+    S.sw.compte--;
+    if(S.sw.compte <= 0){ swArreterCompte(); swSerieSuivante(); }
+    else { const b = document.getElementById('sw-compte'); if(b) b.textContent = S.sw.compte; }
+  }, 1000);
+}
+function swSerieSuivante(){
+  const w = S.sw; if(!w) return;
+  swArreterCompte();
+  if(!w.suivant){ w.phase = 'bilan'; swPrecharger(); return ecranSwipe(); }
+  const l = w.suivant; w.suivant = null; w.recompenseVue = false;
+  swCommencerLot(l); ecranSwipe();
+}
+
+/* ---------- dessin ---------- */
+function swTableau(w){
+  const e = S.swEtat || {};
+  const note = swNote(w.cc, w.n), rang = swRang(e, note), barre = +e.barre || 13;
+  const pos = Math.max(3, Math.min(100, note / 20 * 100)), seuil = Math.min(97, barre / 20 * 100);
+  const manque = Math.round((barre - note) * 10) / 10;
+  let l3 = manque > 0 ? `Plus que <b>${swFr(manque)} point${manque >= 2 ? 's' : ''}</b> pour la zone des 20 % les mieux placés` : `<b class="sw-v">Tu es dans la zone des 20 % les mieux placés.</b>`;
+  if(w.c && w.c.ok && w.passes > 0) l3 = `<b class="sw-v">Tu passes devant ${nombreFr(w.passes)} candidat${w.passes > 1 ? 's' : ''}.</b> ` + (manque > 0 ? `Plus que <b>${swFr(manque)}</b>` : '');
+  if(w.c && w.c.ok && w.passes < 0) l3 = `<b class="sw-r">${nombreFr(-w.passes)} candidat${w.passes < -1 ? 's repassent' : ' repasse'} devant toi.</b> Reprends-les à la suivante.`;
+  const d = w.c && w.c.ok ? w.delta : null;
+  return `<div class="sw-tb">
+    <div class="sw-tb1"><span>Ma note estimée</span>${rang ? `<span>rang <b>${nombreFr(rang)}ᵉ</b> / ${nombreFr(e.total)}</span>` : ''}</div>
+    <div class="sw-tb2"><b class="sw-note">${swFr(note)}</b><small>/20</small>${d !== null && d !== 0 ? `<i class="sw-var ${d > 0 ? 'up' : 'dn'}">${d > 0 ? '+' : '−'}${swFr(Math.abs(d))}</i>` : ''}</div>
+    <div class="sw-barre"><i style="width:${pos}%"></i><u style="left:${seuil}%"></u><em style="left:${seuil}%">la barre ${swFr(barre)}</em></div>
+    <div class="sw-tb3">${l3}</div></div>`;
+}
+function swHaut(w){
+  return `<div class="sw-haut"><button class="sw-x" data-sw-quitter="1" aria-label="Quitter le mode Swipe">✕</button>
+    <span class="sw-serie${w.serie >= 3 ? ' chaud' : ''}">${ico('flamme',14)} ${w.serie ? 'Série ' + w.serie : 'Série'}</span>
+    ${w.serie >= 3 ? '<span class="sw-combo">×2</span>' : ''}
+    <span class="sw-pts">+${nombreFr(w.pts)} pts</span></div>`;
+}
+function swPoints(w){
+  return `<div class="sw-pts-lot">${w.lot.map((x, k) => {
+    const r = k < w.idx ? (x._ok ? 'ok' : 'ko') : (k === w.idx ? (w.c && w.c.ok ? (w.c.correcte ? 'ok' : 'ko') : 'f') : '');
+    return `<i class="${r}"></i>`; }).join('')}</div>`;
+}
+function ecranSwipe(){
+  const w = S.sw;
+  if(!w) return lancerSwipe();
+  const e = S.swEtat || {};
+  let h = '';
+  if(w.phase === 'entree') h = swEntree(w, e);
+  else if(w.phase === 'palier') h = swPalier(w);
+  else if(w.phase === 'recompense') h = swRecompense(w);
+  else if(w.phase === 'bilan') h = swBilan(w);
+  else h = swJeu(w);
+  vue().innerHTML = `<div class="sw sw-${w.phase}">${h}</div>`;
+}
+function swEntree(w, e){
+  const premiere = !swLire('vu', 0);
+  const note = swNote(w.cc, w.n), rang = swRang(e, note);
+  const live = (e.en_ligne || 0) >= 3 ? `${nombreFr(e.en_ligne)} candidats répondent en ce moment` : (e.aujourdhui ? `${nombreFr(e.aujourdhui)} candidats ont révisé aujourd'hui` : '');
+  const minuit = (() => { const d = new Date(), m = new Date(d); m.setHours(24, 0, 0, 0); const mn = Math.floor((m - d) / 60000); return Math.floor(mn / 60) + ' h ' + String(mn % 60).padStart(2, '0') + ' min'; })();
+  const prete = w.lot && w.lot.length;
+  const semaine = e.note_semaine !== null && e.note_semaine !== undefined ? Math.round((note - e.note_semaine) * 10) / 10 : null;
+  return `<button class="sw-x sw-x-seul" data-sw-quitter="1" aria-label="Quitter">✕</button>
+  <div class="sw-entree">
+    ${live ? `<div class="sw-live"><i></i>${E(live)}</div>` : ''}
+    <h1>Mode<br>Swipe</h1>
+    <p class="sw-chapeau">Une question. Tu réponds, tu glisses, la suivante tombe. À chaque réponse, ta note estimée bouge.</p>
+    ${S.swEtat ? `<div class="sw-carte-note">
+      <div class="sw-tb1"><span>Ma note estimée</span>${rang ? `<span>rang <b>${nombreFr(rang)}ᵉ</b> / ${nombreFr(e.total)}</span>` : ''}</div>
+      <div class="sw-tb2"><b class="sw-note">${swFr(note)}</b><small>/20</small>${semaine ? `<i class="sw-var ${semaine > 0 ? 'up' : 'dn'}">${semaine > 0 ? '+' : '−'}${swFr(Math.abs(semaine))} en 7 jours</i>` : ''}</div>
+      <div class="sw-barre"><i style="width:${Math.max(3, note / 20 * 100)}%"></i><u style="left:${Math.min(97, (+e.barre || 13) / 20 * 100)}%"></u><em style="left:${Math.min(97, (+e.barre || 13) / 20 * 100)}%">la barre ${swFr(+e.barre || 13)}</em></div>
+    </div>` : `<div class="sw-carte-note sw-attente"><div class="squelette"></div></div>`}
+    <div class="sw-tuiles">
+      <div><b>${ico('flamme',16)} ${nombreFr(e.serie_jours || 0)} jour${(e.serie_jours || 0) > 1 ? 's' : ''}</b><span>ta série en cours</span></div>
+      <div><b>${nombreFr(w.record || 0)}</b><span>ton record d'affilée</span></div></div>
+    ${e.serie_jours > 0 && e.joue_aujourdhui === false ? `<div class="sw-minuit">${ico('flamme',15)}<span>Ta série de ${nombreFr(e.serie_jours)} jour${e.serie_jours > 1 ? 's' : ''} s'éteint à minuit. Il te reste <b>${minuit}</b>. Une bonne réponse suffit pour la garder.</span></div>` : ''}
+    ${premiere ? `<ol class="sw-etapes"><li><b>1</b>Touche ta réponse, la correction tombe tout de suite.</li><li><b>2</b>Glisse vers le haut pour la question suivante.</li><li><b>3</b>Enchaîne les bonnes réponses : ta série monte, ta note aussi.</li></ol>` : ''}
+    <button class="sw-cta" data-sw-entrer="1" ${prete ? '' : 'disabled'}>${prete ? 'Entrer · ta 1re question est prête' : (w.lotErreur ? 'Pas de question pour le moment' : 'On prépare tes questions…')}</button>
+    ${w.lotErreur ? `<p class="sw-petit">Vérifie ta connexion, puis réessaie.</p>` : ''}
+  </div>`;
+}
+function swJeu(w){
+  const q = w.lot[w.idx]; if(!q) return '';
+  const c = w.c, rep = w.rep, fini = c && c.ok;
+  const rp = Array.isArray(q.repartition) ? q.repartition.slice(0, (q.options || []).length) : null;
+  const nRep = (q.repondants || 0) + (fini ? 1 : 0);
+  const pct = k => { if(!rp || nRep < 10) return null; const v = (rp[k] || 0) + (fini && k === rep ? 1 : 0); return Math.round(100 * v / nRep); };
+  const bon = fini ? (c.bonnes || [])[0] : null;
+  const trouvent = fini && bon !== undefined && bon !== null ? pct(bon) : null;
+  const revanche = q.contexte === 'erreurs';
+  if(fini) q._ok = !!c.correcte;
+  let tag = `<span class="sw-tag">${E(q.matiere || '')}</span>`;
+  if(revanche) tag = `<span class="sw-tag rev">Revanche</span><span class="sw-tag">${E(q.matiere || '')}</span>`;
+  const retour = !fini ? '' : (c.correcte
+    ? `<div class="sw-retour ok"><b>${revanche ? 'Revanche gagnée.' : 'Juste.'}${trouvent !== null && trouvent < 70 ? ` ${100 - trouvent} % se trompent ici. Pas toi.` : ''}</b>${c.explication ? `<span>${E(c.explication)}</span>` : ''}</div>`
+    : `<div class="sw-retour ko"><b>C'était ${E('ABCD'[bon] || '')}${q.options && q.options[bon] ? ' : ' + E(q.options[bon]) : ''}.</b>${c.explication ? `<span>${E(c.explication)}</span>` : ''}<em>Elle revient dans « Mes erreurs » jusqu'à ce qu'elle soit acquise.</em></div>`);
+  const mur = w.phase === 'mur' ? swMur(w, c) : '';
+  return `${swHaut(w)}${swTableau(w)}
+  <div class="sw-q${q.annale ? ' annale' : ''}">
+    ${q.annale ? `<div class="sw-annale"><span>Tombée au concours${q.annee ? ' ' + q.annee : ''}</span><b>compte double</b></div>` : ''}
+    <div class="sw-tags">${tag}</div>
+    ${revanche && q.raison ? `<p class="sw-raison">${E(q.raison)}</p>` : ''}
+    <div class="sw-enonce">${E(q.enonce)}</div>
+    <div class="sw-corps"><div class="sw-opts">
+    ${(q.options || []).map((o, k) => {
+      let cl = '';
+      if(fini){ if((c.bonnes || []).includes(k)) cl = 'ok'; else if(k === rep) cl = 'ko'; }
+      else if(k === rep) cl = 'choisi';
+      const p = fini ? pct(k) : null;
+      return `<button class="sw-opt ${cl}" ${rep !== undefined ? 'disabled' : ''} data-sw-rep="${k}">${p !== null ? `<i class="sw-jauge" style="width:${p}%"></i>` : ''}<b>${cl === 'ok' ? '✓' : cl === 'ko' ? '✕' : 'ABCD'[k]}</b><span>${E(o)}</span>${p !== null ? `<small>${p} %</small>` : ''}</button>`;
+    }).join('')}</div>
+    <div class="sw-rail">
+      <div class="sw-r1"><span>${ico('groupe',18)}</span><small>${trouvent !== null ? trouvent + ' %<br>trouvent' : (q.repondants >= 10 ? nombreFr(q.repondants) + '<br>réponses' : 'Nouvelle')}</small></div>
+      <button class="sw-r1" data-partage-question="${E(q.id)}"><span>${logoReseau('whatsapp')}</span><small>Défier</small></button>
+      <button class="sw-r1" data-signaler="${E(q.id)}"><span>${ico('drapeau',17)}</span><small>Signaler</small></button>
+    </div></div>
+    ${rep !== undefined && !c ? `<p class="sw-petit">Correction…</p>` : ''}
+    ${c && !c.ok && !c.quota ? `<div class="sw-retour ko"><b>Correction indisponible</b><span>${E(c.message || '')}</span></div><button class="sw-cta creux" data-sw-reessayer="1">Réessayer</button>` : ''}
+    ${retour}
+    ${fini && w.gain ? `<div class="sw-gain" aria-hidden="true">+${w.gain}${w.serie >= 3 ? '<small>combo ×2</small>' : ''}</div>` : ''}
+    ${fini && w.nouveauRecord && w.serie >= 5 ? `<p class="sw-record">${ico('flamme',14)} Nouveau record : ${w.serie} d'affilée</p>` : ''}
+  </div>
+  ${fini ? `<div class="sw-glisse"><span>⌃</span>Glisse pour la suivante<button data-sw-suiv="1">Suivante</button></div>` : ''}
+  <div class="sw-bas">${swPoints(w)}<span>Série ${w.lotNum} · question ${w.idx + 1} sur ${w.lot.length}</span></div>
+  ${mur}`;
+}
+function swPalier(w){
+  return `<div class="sw-fete">${Array.from({ length: 18 }, (_, k) => `<i style="left:${(k * 53) % 92 + 4}%;top:${(k * 37) % 40 + 6}%;background:${['#2FC285','#E9B04A','#EF5A5F','#EEF3F0'][k % 4]};transform:rotate(${k * 41}deg)"></i>`).join('')}</div>
+  <div class="sw-centre">
+    <div class="sw-medaille">${ico('flamme',54)}</div>
+    <h1>${w.serie} d'affilée</h1>
+    <p>${w.serie >= w.record ? 'C\'est ton record.' : `Ton record : ${w.record}. Plus que ${w.record - w.serie + 1} pour le battre.`}</p>
+    <button class="sw-cta" data-sw-palier="1">Continuer</button>
+  </div>`;
+}
+function swRecompense(w){
+  const q = w.lot[w.idx + 1] || {};
+  return `<div class="sw-centre">
+    <div class="sw-eyebrow">Ta récompense du palier ${w.serie}</div>
+    <div class="sw-rare"><span>Rare · vrai concours</span><h2>Une question tombée au concours${q.annee ? ' ' + q.annee : ''}</h2><p>Réponds juste et elle compte <b>double</b> dans ta note.</p></div>
+    <button class="sw-cta" data-sw-jouer="1">La jouer maintenant</button>
+  </div>`;
+}
+function swBilan(w){
+  const a = w.avant, e = S.swEtat || {};
+  const note = swNote(w.cc, w.n), rang = swRang(e, note);
+  const mats = Object.entries(a.mat).filter(([, v]) => v.n >= 1);
+  const fort = mats.slice().sort((x, y) => (y[1].j / y[1].n) - (x[1].j / x[1].n) || y[1].n - x[1].n)[0];
+  const faible = mats.slice().sort((x, y) => (x[1].j / x[1].n) - (y[1].j / y[1].n) || y[1].n - x[1].n)[0];
+  const min = Math.max(1, Math.round((Date.now() - a.t) / 60000));
+  const passes = a.rang && rang ? a.rang - rang : 0;
+  const texte = 'J\'ai fait ' + a.justes + ' sur ' + w.lot.length + ' en mode Swipe sur Mon Concours. Ma note estimée : ' + swFr(note) + '/20. Tu fais mieux ? ' + CONTACT.site;
+  return `<div class="sw-bilan">
+    <div class="sw-eyebrow">Série ${w.lotNum} terminée</div>
+    <h1>${a.justes} sur ${w.lot.length}</h1>
+    <div class="sw-carte-note">
+      <div class="sw-tb1"><span>Ma note estimée</span>${rang ? '<span>Mon rang</span>' : ''}</div>
+      <div class="sw-avap"><b>${swFr(a.note)} → <span class="${note >= a.note ? 'sw-v' : 'sw-r'}">${swFr(note)}</span></b>${rang && a.rang ? `<b>${nombreFr(a.rang)}ᵉ → <span class="${rang <= a.rang ? 'sw-v' : 'sw-r'}">${nombreFr(rang)}ᵉ</span></b>` : ''}</div>
+      <div class="sw-barre"><i style="width:${Math.max(3, note / 20 * 100)}%"></i><u style="left:${Math.min(97, (+e.barre || 13) / 20 * 100)}%"></u><em style="left:${Math.min(97, (+e.barre || 13) / 20 * 100)}%">la barre ${swFr(+e.barre || 13)}</em></div>
+      ${passes > 0 ? `<p>Tu as dépassé <b>${nombreFr(passes)} candidat${passes > 1 ? 's' : ''}</b> en ${min} minute${min > 1 ? 's' : ''}.</p>` : (passes < 0 ? `<p>${nombreFr(-passes)} candidat${passes < -1 ? 's sont passés' : ' est passé'} devant toi. La série suivante sert à les reprendre.</p>` : '')}
+    </div>
+    ${fort && faible && fort[0] !== faible[0] ? `<div class="sw-duo"><div><span>Ton point fort</span><b class="sw-v">${E(fort[0])}</b></div><div><span>À travailler</span><b class="sw-o">${E(faible[0])}</b></div></div>` : ''}
+    <div class="sw-suite">
+      <div class="sw-rond"><svg viewBox="0 0 96 96" width="88" height="88"><circle cx="48" cy="48" r="42" fill="none" stroke="#1E2A25" stroke-width="6"/><circle class="sw-anneau" cx="48" cy="48" r="42" fill="none" stroke="#2FC285" stroke-width="6" stroke-linecap="round" stroke-dasharray="264" transform="rotate(-90 48 48)"/></svg><b id="sw-compte">${w.suivant ? (w.compte || 3) : '…'}</b></div>
+      <p><b>La série ${w.lotNum + 1} démarre</b>${faible && faible[1].j < faible[1].n ? `<span>Elle reprend tes points faibles</span>` : ''}</p>
+      <button class="sw-cta" data-sw-serie="1">Continuer maintenant</button>
+    </div>
+    <div class="sw-deux"><a class="sw-cta creux" href="https://wa.me/?text=${encodeURIComponent(texte)}" target="_blank" rel="noopener">${logoReseau('whatsapp')} Partager</a><button class="sw-cta creux" data-sw-quitter="1">Pause</button></div>
+  </div>`;
+}
+function swMur(w, c){
+  const e = S.swEtat || {}, note = swNote(w.cc, w.n), barre = +e.barre || 13, manque = Math.round((barre - note) * 10) / 10;
+  const faites = (w.avant && w.avant.justes) || 0;
+  const titre = manque > 0 && manque <= 1.5 ? `Tu es à ${swFr(manque)} point de la barre`
+    : (w.serie >= 3 ? `${w.serie} d'affilée. Ne casse pas ta série maintenant.` : 'Ta prochaine question est déjà chargée');
+  return `<div class="sw-voile"></div><div class="sw-feuille" role="dialog" aria-label="Continuer le mode Swipe">
+    <i class="sw-poignee"></i>
+    ${w.serie >= 3 ? `<div class="sw-mur-serie">${ico('flamme',15)} Série de ${w.serie} en cours</div>` : ''}
+    <h2>${E(titre)}</h2>
+    <p>${c.motif === 'habitue' ? 'Ta séance gratuite du jour est faite.' : 'Tes questions gratuites du jour sont faites.'} La suivante t'attend. Avec l'abonnement, le mode Swipe ne s'arrête jamais, dans toutes les matières.${(e.en_ligne || 0) >= 3 ? ` ${nombreFr(e.en_ligne)} candidats continuent en ce moment.` : ''}</p>
+    ${offreDeuxPrix(true)}
+    <button class="sw-demain" data-sw-quitter="1">Reprendre demain</button>
+  </div>`;
+}
+
+/* carte d'entrée sur l'accueil, et la bulle */
+function blocSwipeAccueil(){
+  if(!S.util.connecte) return '';
+  swEtatCharger(false).then(e => { if(e && !S._swCarteVue && S.ecran === 'aujourdhui'){ S._swCarteVue = true; rendre(); } });
+  const e = S.swEtat;
+  const note = e ? +e.note : null;
+  const live = e && (e.en_ligne || 0) >= 3 ? `${nombreFr(e.en_ligne)} en ce moment` : (e && e.aujourdhui ? `${nombreFr(e.aujourdhui)} aujourd'hui` : '');
+  const semaine = e && e.note_semaine !== null && e.note_semaine !== undefined ? Math.round((note - e.note_semaine) * 10) / 10 : null;
+  return `<section class="sw-carte-accueil" aria-label="Mode Swipe">
+    <div class="sca-1"><span class="sca-logo">${ico('swipe',18)}</span><b>Mode Swipe</b>${live ? `<span class="sca-live"><i></i>${E(live)}</span>` : ''}</div>
+    ${e ? `<div class="sca-2"><span>Ma note estimée</span><div><b>${swFr(note)}</b><small>/20</small>${semaine ? `<i class="sw-var ${semaine > 0 ? 'up' : 'dn'}">${semaine > 0 ? '+' : '−'}${swFr(Math.abs(semaine))} en 7 jours</i>` : ''}</div>
+      <div class="sw-barre"><i style="width:${Math.max(3, note / 20 * 100)}%"></i><u style="left:${Math.min(97, (+e.barre || 13) / 20 * 100)}%"></u><em style="left:${Math.min(97, (+e.barre || 13) / 20 * 100)}%">la barre ${swFr(+e.barre || 13)}</em></div></div>`
+      : `<p class="sca-chapeau">Une question, tu réponds, tu glisses. Ta note estimée bouge à chaque réponse.</p>`}
+    <div class="sca-3"><button class="sw-cta" data-swipe="1">${e && e.n > 0 ? 'Reprendre' : 'Entrer'}</button>
+      ${e && e.serie_jours ? `<span><b>${ico('flamme',13)} ${nombreFr(e.serie_jours)} jour${e.serie_jours > 1 ? 's' : ''}</b>${e.joue_aujourdhui ? 'ta série tient aujourd\'hui' : 'ta série s\'éteint à minuit'}</span>` : '<span>Commence ta série de jours aujourd\'hui</span>'}</div>
+  </section>`;
+}
+function bulleSwipe(){
+  const hNav = ((document.getElementById('nav') || {}).offsetHeight) || 64;
+  return `<button class="sw-bulle" style="--nav-h:${hNav}px" data-swipe="1" aria-label="Ouvrir le mode Swipe"><b>SWIPE</b><i>LIVE</i></button>`;
+}
+document.addEventListener('click', ev => {
+  const t = ev.target.closest('[data-swipe],[data-sw-entrer],[data-sw-rep],[data-sw-suiv],[data-sw-quitter],[data-sw-palier],[data-sw-jouer],[data-sw-serie],[data-sw-reessayer]');
+  if(!t) return;
+  const d = t.dataset;
+  if(d.swipe) return lancerSwipe();
+  if(d.swEntrer) return swEntrer();
+  if(d.swRep !== undefined) return swRepondre(+d.swRep);
+  if(d.swSuiv) return swSuivante();
+  if(d.swQuitter) return swQuitter();
+  if(d.swPalier) return swApresPalier();
+  if(d.swJouer){ S.sw.phase = 'jeu'; return swSuivante(true); }
+  if(d.swSerie) return swSerieSuivante();
+  if(d.swReessayer){ const w = S.sw; if(w){ w.rep = undefined; w.c = null; ecranSwipe(); } }
+});
+/* glisser vers le haut : question suivante */
+(function(){
+  let y0 = null, x0 = null;
+  document.addEventListener('touchstart', e => { if(S.ecran !== 'swipe' || !e.touches[0]) return; y0 = e.touches[0].clientY; x0 = e.touches[0].clientX; }, { passive:true });
+  document.addEventListener('touchend', e => {
+    if(S.ecran !== 'swipe' || y0 === null || !e.changedTouches[0]) return;
+    const dy = y0 - e.changedTouches[0].clientY, dx = Math.abs(e.changedTouches[0].clientX - x0); y0 = null;
+    const w = S.sw; if(!w || dy < 70 || dx > 60) return;
+    const v = document.querySelector('.sw'); const enBas = !v || v.scrollTop + v.clientHeight >= v.scrollHeight - 6;
+    if(!enBas) return;
+    if(w.phase === 'entree') return swEntrer();
+    if(w.phase === 'jeu' && w.c && w.c.ok) swSuivante();
+  }, { passive:true });
+})();
+
 /* ---------- question du jour ---------- */
 async function chargerQdj(){
   if(!base) return;
@@ -7588,7 +7956,7 @@ document.addEventListener('click', ev => {
   if(d.notifsLien){ pister('INSTALL_LINK_NOTIFS'); fermerFenetreRappel(); return activerRappel(18, 0); }
   if(d.reagir) return reagir(d.reagir);
   if(d.partageQuestion){
-    const q = ((S.fil && S.fil.liste) || []).find(x => x.id === d.partageQuestion);
+    const q = ((S.fil && S.fil.liste) || []).concat((S.sw && S.sw.lot) || []).find(x => x.id === d.partageQuestion);
     const qb = (S.banque || []).flatMap(m => m.questions).find(x => x.id === d.partageQuestion);
     return partagerQuestion(d.partageQuestion, q ? q.enonce : (qb ? qb.q : ''));
   }
@@ -8759,7 +9127,7 @@ function htmlCahier(){
 }
 
 /* ---------- mode concentration et plein écran ---------- */
-function appliquerConcentration(){ document.body.classList.toggle('concentration', !!S.concentration && ['qcm','pourtoi','reprise','defi','notion'].includes(S.ecran)); }
+function appliquerConcentration(){ document.body.classList.toggle('swipe-on', S.ecran === 'swipe'); document.body.classList.toggle('concentration', !!S.concentration && ['qcm','pourtoi','reprise','defi','notion'].includes(S.ecran)); }
 /* Plein écran automatique à l'entrée en composition (silencieux si le téléphone le refuse) */
 function pleinEcranAuto(){
   try{
@@ -8777,7 +9145,7 @@ function basculerPleinEcran(){
 document.addEventListener('fullscreenchange', () => { if(S.ecran === 'grille' && !S.corrige) ecranGrille(); });
 
 /* ---------- tirer vers le bas pour actualiser, comme sur les autres applications ---------- */
-const SANS_ACTUALISER = ['grille','qcm','test','testIntro','engagement','reprise','pourtoi','defi','lecteur','resultat','verrou','verrou_d','paiement','inscription','connexion','proposer','lecture'];
+const SANS_ACTUALISER = ['swipe','grille','qcm','test','testIntro','engagement','reprise','pourtoi','defi','lecteur','resultat','verrou','verrou_d','paiement','inscription','connexion','proposer','lecture'];
 async function actualiserTout(){
   const tout = [];
   const lance = f => { try{ const r = f(); if(r && r.then) tout.push(r.catch(() => {})); }catch(e){} };
@@ -8936,7 +9304,7 @@ document.addEventListener('click', ev => {
 /* =====================================================================
    RENDU + ÉVÉNEMENTS
    ===================================================================== */
-const SANS_TETE = ['test','grille','engagement','testIntro','resultat','verrou','verrou_d'];
+const SANS_TETE = ['swipe','test','grille','engagement','testIntro','resultat','verrou','verrou_d'];
 /* raccourci caché vers l'administration : cinq touchers rapides sur le logo */
 let touchesLogo = [];
 document.addEventListener('click', ev => {
@@ -8997,7 +9365,7 @@ function annoncer(){
   const n = {aujourdhui:'Actualité', actualite:'Actualité du matin', revisions:'Mes cours',
     qcm:'Question', grille:'Composition', copie:'Copie corrigée', cahier:'Mon cahier', compte:'Mon compte',
     inscription:'Création de compte', connexion:'Connexion', abonnement:'Abonnements', paiement:'Paiement',
-    test:'Test de niveau', resultat:'Résultat', pourtoi:'Fil pour toi', qdj:'Question du jour',
+    test:'Test de niveau', resultat:'Résultat', pourtoi:'Fil pour toi', swipe:'Mode Swipe', qdj:'Question du jour',
     question:'Question partagée', gagnants:'Résultats de la composition nationale', discussion:'Discussion de la composition', notion:'Notion du jour', recherche:'Recherche de questions',
     defi:'Défi entre amis', top:'Top 10 de la semaine', proposer:'Proposer une question', parcours:'Mon parcours'}[S.ecran] || '';
   const a = document.getElementById('annonce');
@@ -9222,7 +9590,7 @@ function rendre(){
     revisions:ecranRevisions, cours:ecranCours, lecture:ecranLecture, qcm:ecranQcm,
     grille:ecranGrille, copie:ecranCopie,
     cahier:ecranCahier, lecteur:ecranLecteur, compte:ecranCompte,
-    pourtoi:ecranPourToi, qdj:ecranQdj, question:ecranQuestionPartagee, gagnants:ecranGagnants, correctionnat:ecranCorrectionNat, discussion:ecranDiscussion,
+    pourtoi:ecranPourToi, swipe:ecranSwipe, qdj:ecranQdj, question:ecranQuestionPartagee, gagnants:ecranGagnants, correctionnat:ecranCorrectionNat, discussion:ecranDiscussion,
     notion:ecranNotion, recherche:ecranRecherche, defi:ecranDefi, top:ecranTop, proposer:ecranProposer, parcours:ecranParcours, parrainage:ecranParrainage, xreprise:ecranRepriseX, xbravo:ecranBravoX, communaute:ecranCommunaute, horsligne:ecranHorsLigne, suppression:ecranSuppression}[S.ecran] || ecranAujourdhui);
 
   /* FILET — une erreur dans un seul écran ne doit plus jamais laisser
@@ -9684,7 +10052,7 @@ const DELAI_INSCRIPTION = 35000;
 /* Plus de message flottant en bas de l'écran : le salut est dans l'en-tête de l'accueil. */
 function saluerRetour(){}
 function bienvenue(){}
-const ECRANS_CALMES = ['grille','qcm','test','testIntro','engagement','reprise','pourtoi','defi','resultat','verrou','verrou_d','lecture','paiement','lecteur'];
+const ECRANS_CALMES = ['swipe','grille','qcm','test','testIntro','engagement','reprise','pourtoi','defi','resultat','verrou','verrou_d','lecture','paiement','lecteur'];
 function peutInviter(){ return !ECRANS_CALMES.includes(S.ecran) && !S.modal && !document.getElementById('invitation') && !enComposition(); }
 function fenetreInvitation(o){
   const z = document.createElement('div');
