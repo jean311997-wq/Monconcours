@@ -7185,7 +7185,8 @@ function etatRappel(){
 function blocBandeauRappel(){
   if(eliteJour0()) return '';
   if(S.gratuit && !S.util.connecte) return '';
-  if(etatRappel() !== 'possible') return '';
+  /* on attend de savoir si le rappel est déjà actif : sinon le bandeau s'affiche puis disparaît une seconde après */
+  if(!S.rappelCharge || etatRappel() !== 'possible') return '';
   const masque = lireReglages().bandeauRappel;
   if(masque && Date.now() - masque < 7 * 86400000) return '';
   return `<div class="bandeau-rappel" role="status">
