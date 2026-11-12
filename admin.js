@@ -2928,7 +2928,7 @@ async function vueSwipe(){
   const rep = d.repartition || {}, ong = d.onglets || {};
   const nomOnglet = { alea:'Aléatoire', erreurs:'Mes erreurs', actu:'Actualité', cours:'Mes cours' };
   const tuile = (v, l, s) => `<div class="carte" style="flex:1 1 150px;min-width:150px;margin:0"><div style="font-size:26px;font-weight:800;line-height:1.1">${v}</div><div style="font-size:13px;margin-top:4px">${l}</div>${s ? `<small style="color:var(--craie2)">${s}</small>` : ''}</div>`;
-  const barre = (n, tot, c) => `<div style="display:flex;align-items:center;gap:10px;margin:7px 0"><div style="width:150px;font-size:13px">${E(c[0])}</div><div style="flex:1;background:rgba(127,127,127,.18);border-radius:6px;height:12px;overflow:hidden"><div style="width:${tot ? Math.round(100 * n / tot) : 0}%;height:100%;background:${c[1]}"></div></div><div class="num" style="width:70px;text-align:right">${n} (${pc(n, tot)})</div></div>`;
+  const barre = (n, tot, c) => `<div style="display:flex;align-items:center;gap:10px;margin:7px 0"><div style="flex:0 0 min(46%,250px);font-size:13px">${E(c[0])}</div><div style="flex:1;background:rgba(127,127,127,.18);border-radius:6px;height:12px;overflow:hidden"><div style="width:${tot ? Math.round(100 * n / tot) : 0}%;height:100%;background:${c[1]}"></div></div><div class="num" style="width:70px;text-align:right">${n} (${pc(n, tot)})</div></div>`;
   $('#vue').innerHTML = `
     <h2 class="titre">Mode Swipe</h2>
     <p class="sous">Comment les candidats utilisent le Swipe. Vos comptes et celui de l'investisseur ne sont pas comptés.</p>
@@ -2937,28 +2937,28 @@ async function vueSwipe(){
     </div></div>
     <div class="bloc" style="display:flex;gap:10px;flex-wrap:wrap">
       ${tuile(d.ouvrants, 'Candidats l\'ont ouvert', d.ouvertures + ' ouvertures')}
-      ${tuile(d.finisseurs, 'Ont fini au moins une série', pc(d.finisseurs, d.ouvrants) + ' des ouvrants')}
-      ${tuile(d.series, 'Séries de 10 terminées', d.score_moyen != null ? 'score moyen ' + String(d.score_moyen).replace('.', ',') + ' / 10' : '')}
-      ${tuile(d.record_series, 'Record de séries', 'chez un seul candidat')}
+      ${tuile(d.finisseurs, 'Ont fini au moins une série (10 questions)', pc(d.finisseurs, d.ouvrants) + ' des ouvrants')}
+      ${tuile(d.series, 'Séries terminées (' + nombre(d.series * 10) + ' questions)', d.score_moyen != null ? 'en moyenne ' + String(d.score_moyen).replace('.', ',') + ' bonnes réponses sur 10' : '')}
+      ${tuile(d.record_series, 'Record de séries (' + nombre(d.record_series * 10) + ' questions)', 'chez un seul candidat')}
       ${tuile(d.murs, 'Ont atteint la limite gratuite', pc(d.murs, d.ouvrants) + ' des ouvrants')}
       ${tuile(d.payeurs, 'Ouvrants ayant payé', 'abonnement confirmé, même avant le Swipe')}
     </div>
     <div class="bloc"><div class="libelle">Combien de séries font-ils ?</div><div class="carte">
-      ${barre(rep.aucune || 0, d.ouvrants, ['Aucune (partis avant)', '#c0392b'])}
-      ${barre(rep.une || 0, d.ouvrants, ['Une série', '#c77d00'])}
-      ${barre(rep.deux_trois || 0, d.ouvrants, ['2 à 3 séries', '#2e8b57'])}
-      ${barre(rep.quatre_plus || 0, d.ouvrants, ['4 séries ou plus', '#14503B'])}
+      ${barre(rep.aucune || 0, d.ouvrants, ['Aucune série (moins de 10 questions)', '#c0392b'])}
+      ${barre(rep.une || 0, d.ouvrants, ['1 série (10 questions)', '#c77d00'])}
+      ${barre(rep.deux_trois || 0, d.ouvrants, ['2 à 3 séries (20 à 30 questions)', '#2e8b57'])}
+      ${barre(rep.quatre_plus || 0, d.ouvrants, ['4 séries ou plus (40 questions et plus)', '#14503B'])}
     </div></div>
     <div class="bloc"><div class="libelle">Par jour</div><div class="carte">
-      ${(d.par_jour || []).length ? `<table><thead><tr><th>Jour</th><th>Candidats</th><th>Séries terminées</th></tr></thead><tbody>
-        ${d.par_jour.map(x => `<tr><td>${E(dateCourte(x.jour))}</td><td class="num">${x.ouvrants}</td><td class="num">${x.series}</td></tr>`).join('')}</tbody></table>` : '<div class="vide">Aucune activité sur la période.</div>'}
+      ${(d.par_jour || []).length ? `<table><thead><tr><th>Jour</th><th>Candidats</th><th>Séries (questions)</th></tr></thead><tbody>
+        ${d.par_jour.map(x => `<tr><td>${E(dateCourte(x.jour))}</td><td class="num">${x.ouvrants}</td><td class="num">${x.series} (${nombre(x.series * 10)})</td></tr>`).join('')}</tbody></table>` : '<div class="vide">Aucune activité sur la période.</div>'}
     </div></div>
     <div class="bloc"><div class="libelle">Onglets utilisés</div><div class="carte">
       ${Object.keys(ong).length ? Object.keys(ong).map(k => `<span style="display:inline-block;margin:0 14px 4px 0"><b>${E(nomOnglet[k] || k)}</b> <span class="num">${ong[k]}</span></span>`).join('') : '<div class="vide">Personne n\'a changé d\'onglet.</div>'}
     </div></div>
     <div class="bloc"><div class="libelle">Ceux qui enchaînent le plus</div><div class="carte">
-      ${(d.meilleurs || []).length ? `<table><thead><tr><th>Candidat</th><th>Séries</th><th>Bonnes réponses</th></tr></thead><tbody>
-        ${d.meilleurs.map(m => `<tr><td><span class="cliquable" data-fiche="${E(m.user_id)}">${E(m.nom || 'Candidat')}</span></td><td class="num">${m.series}</td><td class="num">${m.justes} / ${m.series * 10}</td></tr>`).join('')}</tbody></table>` : '<div class="vide">Aucune série terminée.</div>'}
+      ${(d.meilleurs || []).length ? `<table><thead><tr><th>Candidat</th><th>Séries (questions)</th><th>Bonnes réponses</th></tr></thead><tbody>
+        ${d.meilleurs.map(m => `<tr><td><span class="cliquable" data-fiche="${E(m.user_id)}">${E(m.nom || 'Candidat')}</span></td><td class="num">${m.series} (${nombre(m.series * 10)})</td><td class="num">${m.justes} / ${m.series * 10}</td></tr>`).join('')}</tbody></table>` : '<div class="vide">Aucune série terminée.</div>'}
     </div></div>
     <div class="bloc"><div class="libelle">Avis donnés sur le Swipe</div><div class="carte">
       ${(d.avis || []).length ? d.avis.map(a => `<div style="padding:8px 0;border-bottom:1px solid var(--trait,#333)"><b>${E(a.nom || 'Candidat')}</b> <small style="color:var(--craie2)">${E(dateHeure(a.cree_le))}</small><div>${E(a.message)}</div></div>`).join('') : '<div class="vide">Aucun avis pour le moment.</div>'}
