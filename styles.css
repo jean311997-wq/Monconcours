@@ -2433,3 +2433,17 @@ body.swipe-on .fab-canal,body.swipe-on .sw-bulle{display:none!important}
 @media (prefers-reduced-motion:reduce){.sw-page.sw-entre,.sw-glisse .sw-fleche,.sw-secoue{animation:none}}
 .sw-pts-lot i.s{background:#4A5A53}
 .sw-glisse.discret{color:rgba(238,243,240,.4);margin-top:8px}
+/* Mode Swipe : onglets du haut */
+.sw-onglets{display:flex;gap:18px;max-width:560px;margin:2px auto 10px;overflow-x:auto;scrollbar-width:none;justify-content:center}
+.sw-onglets::-webkit-scrollbar,.sw-puces div::-webkit-scrollbar{display:none}
+.sw-onglets button{flex:none;background:none;border:0;padding:6px 0 8px;font:600 14.5px/1 inherit;font-family:inherit;color:rgba(238,243,240,.5);cursor:pointer;position:relative}
+.sw-onglets button.on{color:#EEF3F0}
+.sw-onglets button.on::after{content:"";position:absolute;left:18%;right:18%;bottom:0;height:2px;border-radius:2px;background:#EEF3F0}
+.sw-puces{max-width:560px;margin:0 auto 10px}
+.sw-puces div{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:2px 0}
+.sw-puces div+div{margin-top:6px}
+.sw-puces button{flex:none;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.05);color:rgba(238,243,240,.75);border-radius:999px;padding:6px 12px;font:600 12.5px/1 inherit;font-family:inherit;cursor:pointer}
+.sw-puces button.on{background:#2FC285;border-color:#2FC285;color:#06251a}
+.sw-vide{max-width:560px;margin:40px auto 0;text-align:center;color:rgba(238,243,240,.7);font-size:15px;line-height:1.5;padding:0 12px}
+.sw-entree .sw-onglets{margin-top:44px}
+.sw-bilan .sw-onglets{margin-top:6px}

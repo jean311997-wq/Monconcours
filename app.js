@@ -6501,22 +6501,32 @@ function swEtatCharger(force){
     return null;
   }, () => null);
 }
+const SW_MATIERES = ['Culture générale','Sciences de la vie et de la Terre','Mathématiques','Français','Histoire','Institutions et AES','Tests psychotechniques','Géographie','Sciences physiques','Géopolitique'];
+function swMatieresNiveau(niv){ return niv === 'licence' ? SW_MATIERES.concat(['Économie','Droit']) : SW_MATIERES; }
 function swLotCharger(){
   if(!base) return Promise.resolve([]);
-  return base.rpc('swipe_lot', { p_niveau: niveauCand(), p_nombre: SW_LOT })
-    .then(({ data }) => Array.isArray(data) ? data : [], () => []);
+  const w = S.sw || {}, mode = w.mode || 'alea';
+  const appel = mode === 'alea'
+    ? base.rpc('swipe_lot', { p_niveau: niveauCand(), p_nombre: SW_LOT })
+    : base.rpc('swipe_lot_choix', { p_mode: mode, p_niveau: mode === 'cours' ? (w.niv || niveauCand()) : niveauCand(), p_matiere: w.mat || null, p_nombre: SW_LOT });
+  return appel.then(({ data }) => Array.isArray(data) ? data : [], () => []);
 }
 function swPrecharger(){
   const w = S.sw; if(!w || w.suivant || w.chargeSuivant) return;
-  w.chargeSuivant = true;
-  swLotCharger().then(l => { w.chargeSuivant = false; if(l.length) w.suivant = l; });
+  w.chargeSuivant = true; w.suivantVide = false;
+  const cle = (w.mode || 'alea') + '|' + (w.mat || '') + '|' + (w.niv || '');
+  swLotCharger().then(l => {
+    w.chargeSuivant = false;
+    if(cle !== (w.mode || 'alea') + '|' + (w.mat || '') + '|' + (w.niv || '')) return;   // l'onglet a changé entre-temps
+    if(l.length) w.suivant = l; else w.suivantVide = true;
+  });
 }
 /* entrée dans le mode */
 function lancerSwipe(){
   if(!S.util.connecte){ S.modal = 'inscription'; S.erreur = ''; return surcouche(); }
   swArreterCompte();
   S.sw = { phase:'entree', lot:null, idx:0, rep:undefined, c:null, serie:0, pts:0, n:0, cc:0,
-    record: swLire('record', 0), lotNum: 0, debut: Date.now() };
+    record: swLire('record', 0), lotNum: 0, debut: Date.now(), mode: 'alea', mat: null, niv: niveauCand() };
   aller('swipe');
   pister('SWIPE_OPENED');
   swEtatCharger(true).then(e => {
@@ -6524,7 +6534,7 @@ function lancerSwipe(){
     if(e){ w.n = +e.n || 0; w.cc = +e.c || 0; }
     if(S.ecran === 'swipe') ecranSwipe();
   });
-  swLotCharger().then(l => { const w = S.sw; if(!w) return; w.lot = l; w.lotErreur = !l.length; if(S.ecran === 'swipe' && w.phase === 'entree') ecranSwipe(); });
+  swLotCharger().then(l => { const w = S.sw; if(!w || w.mode !== 'alea' || w.phase !== 'entree') return; w.lot = l; w.lotErreur = !l.length; if(S.ecran === 'swipe' && w.phase === 'entree') ecranSwipe(); });
 }
 function swCommencerLot(liste){
   const w = S.sw;
@@ -6532,6 +6542,44 @@ function swCommencerLot(liste){
   const note = swNote(w.cc, w.n);
   w.avant = { note, rang: swRang(S.swEtat, note), t: Date.now(), justes: 0, mat: {} };
   w.phase = 'jeu'; w.t0 = Date.now();
+}
+/* changer d'onglet : on garde la série et les points, on recharge seulement le lot */
+function swChanger(mode, mat){
+  const w = S.sw; if(!w) return;
+  if(mode === w.mode && (mode !== 'cours' || mat === undefined)) return;
+  swArreterCompte();
+  w.mode = mode; if(mode === 'cours' && mat !== undefined) w.mat = mat;
+  w.suivant = null; w.chargeSuivant = false; w.suivantVide = false; w.lot = null; w.recompenseVue = false;
+  w.tok = (w.tok || 0) + 1;
+  if(mode === 'cours' && !w.mat){ w.phase = 'vide'; w.msg = 'Choisis une matière pour commencer.'; return ecranSwipe(); }
+  w.phase = 'charge'; ecranSwipe();
+  pister('SWIPE_ONGLET', { mode });
+  const tok = w.tok;
+  swLotCharger().then(l => {
+    if(!S.sw || S.sw.tok !== tok) return;
+    if(!l.length){
+      w.phase = 'vide';
+      w.msg = mode === 'erreurs' ? 'Aucune erreur à revoir pour le moment. Continue en aléatoire, elles reviendront ici.'
+        : (mode === 'cours' ? 'Plus de question neuve dans cette matière pour le moment.' : 'Rien de nouveau ici pour le moment.');
+    } else swCommencerLot(l);
+    if(S.ecran === 'swipe') ecranSwipe();
+  });
+}
+function swChoisirNiveau(niv){
+  const w = S.sw; if(!w || w.niv === niv) return;
+  w.niv = niv; w.mat = null; w.mode = 'x'; w.chipsOuverts = true; swChanger('cours');
+}
+const SW_ONGLETS = [['alea','Aléatoire'],['erreurs','Mes erreurs'],['actu','Actualité'],['cours','Mes cours']];
+function swOnglets(w){
+  const niv = w.niv || niveauCand();
+  const replie = w.mode === 'cours' && w.mat && !w.chipsOuverts;
+  const chips = replie ? `<div class="sw-puces"><div><button class="on" data-sw-rouvrir="1">${E(w.mat)} · ${({ troisieme:'Troisième', terminale:'Terminale', licence:'Licence' })[niv] || ''} ▾</button></div></div>` : w.mode === 'cours' ? `<div class="sw-puces">
+    <div>${[['troisieme','Troisième'],['terminale','Terminale'],['licence','Licence']].map(([v, l]) => `<button class="${niv === v ? 'on' : ''}" data-sw-niv="${v}">${l}</button>`).join('')}</div>
+    <div>${swMatieresNiveau(niv).map(m => `<button class="${w.mat === m ? 'on' : ''}" data-sw-mat="${E(m)}">${E(m)}</button>`).join('')}</div></div>` : '';
+  return `<nav class="sw-onglets" aria-label="Quoi swiper">${SW_ONGLETS.map(([k, l]) => `<button class="${w.mode === k ? 'on' : ''}" data-sw-mode="${k}">${l}</button>`).join('')}</nav>${chips}`;
+}
+function swEcranVide(w){
+  return `${swHaut(w)}<div class="sw-vide">${w.phase === 'charge' ? '<div class="squelette" style="height:180px"></div>' : `<p>${E(w.msg || '')}</p>`}</div>`;
 }
 function swEntrer(){
   const w = S.sw; if(!w || !w.lot || !w.lot.length) return;
@@ -6601,7 +6649,10 @@ function swLancerCompte(){
   const w = S.sw; w.compte = 3;
   S.swCompte = setInterval(() => {
     if(!S.sw || S.ecran !== 'swipe' || S.sw.phase !== 'bilan'){ return swArreterCompte(); }
-    if(!S.sw.suivant){ return; }       // la série suivante n'est pas encore arrivée : on attend
+    if(!S.sw.suivant){
+      if(S.sw.suivantVide){ swArreterCompte(); S.sw.phase = 'vide'; S.sw.msg = S.sw.mode === 'erreurs' ? 'Tu as fait le tour de tes erreurs. Bravo.' : 'Tu as fait le tour des questions neuves ici.'; ecranSwipe(); }
+      return;       // la série suivante n'est pas encore arrivée : on attend
+    }
     S.sw.compte--;
     if(S.sw.compte <= 0){ swArreterCompte(); swPasser(swSerieSuivante); }
     else { const b = document.getElementById('sw-compte'); if(b) b.textContent = S.sw.compte; }
@@ -6635,7 +6686,7 @@ function swHaut(w){
   return `<div class="sw-haut"><button class="sw-x" data-sw-quitter="1" aria-label="Quitter le mode Swipe">✕</button>
     <span class="sw-serie${w.serie >= 3 ? ' chaud' : ''}">${ico('flamme',14)} ${w.serie ? 'Série ' + w.serie : 'Série'}</span>
     ${w.serie >= 3 ? '<span class="sw-combo">×2</span>' : ''}
-    <span class="sw-pts">+${nombreFr(w.pts)} pts</span></div>`;
+    <span class="sw-pts">+${nombreFr(w.pts)} pts</span></div>${swOnglets(w)}`;
 }
 function swPoints(w){
   return `<div class="sw-pts-lot">${w.lot.map((x, k) => {
@@ -6651,6 +6702,7 @@ function ecranSwipe(){
   else if(w.phase === 'palier') h = swPalier(w);
   else if(w.phase === 'recompense') h = swRecompense(w);
   else if(w.phase === 'bilan') h = swBilan(w);
+  else if(w.phase === 'charge' || w.phase === 'vide') h = swEcranVide(w);
   else h = swJeu(w);
   const mur = w.phase === 'mur' && w.c ? swMur(w, w.c) : '';
   vue().innerHTML = `<div class="sw sw-${w.phase}"><div class="sw-page${w.entre ? ' sw-entre' : ''}">${h}</div>${mur}</div>`;
@@ -6665,6 +6717,7 @@ function swEntree(w, e){
   const semaine = e.note_semaine !== null && e.note_semaine !== undefined ? Math.round((note - e.note_semaine) * 10) / 10 : null;
   return `<button class="sw-x sw-x-seul" data-sw-quitter="1" aria-label="Quitter">✕</button>
   <div class="sw-entree">
+    ${swOnglets(w)}
     ${live ? `<div class="sw-live"><i></i>${E(live)}</div>` : ''}
     <h1>Mode<br>Swipe</h1>
     <p class="sw-chapeau">Une question. Tu réponds, tu glisses, la suivante tombe. À chaque réponse, ta note estimée bouge.</p>
@@ -6793,6 +6846,7 @@ function swBilan(w){
   const passes = a.rang && rang ? a.rang - rang : 0;
   const texte = 'J\'ai fait ' + a.justes + ' sur ' + (w.lot.length - (a.passees || 0)) + ' en mode Swipe sur Mon Concours. Ma note estimée : ' + swFr(note) + '/20. Tu fais mieux ? ' + CONTACT.site;
   return `<div class="sw-bilan">
+    ${swOnglets(w)}
     <div class="sw-eyebrow">Série ${w.lotNum} terminée</div>
     <h1>${a.justes} sur ${w.lot.length - (a.passees || 0)}</h1>${a.passees ? `<p class="sw-petit" style="margin:-10px 0 14px">${a.passees} question${a.passees > 1 ? 's passées' : ' passée'}</p>` : ''}
     <div class="sw-carte-note">
@@ -6831,7 +6885,7 @@ function bulleSwipe(){
   return `<button class="sw-bulle" style="--nav-h:${hNav}px" data-swipe="1" aria-label="Ouvrir le mode Swipe"><b>SWIPE</b><i>LIVE</i></button>`;
 }
 document.addEventListener('click', ev => {
-  const t = ev.target.closest('[data-swipe],[data-sw-entrer],[data-sw-rep],[data-sw-suiv],[data-sw-quitter],[data-sw-palier],[data-sw-jouer],[data-sw-serie],[data-sw-reessayer]');
+  const t = ev.target.closest('[data-swipe],[data-sw-entrer],[data-sw-rep],[data-sw-suiv],[data-sw-quitter],[data-sw-palier],[data-sw-jouer],[data-sw-serie],[data-sw-reessayer],[data-sw-mode],[data-sw-mat],[data-sw-niv],[data-sw-rouvrir]');
   if(!t) return;
   const d = t.dataset;
   if(d.swipe) return lancerSwipe();
@@ -6841,6 +6895,10 @@ document.addEventListener('click', ev => {
   if(d.swQuitter) return swQuitter();
   if(d.swPalier) return swPasser(swApresPalier);
   if(d.swJouer) return swPasser(() => { S.sw.phase = 'jeu'; swSuivante(true); });
+  if(d.swRouvrir){ S.sw.chipsOuverts = true; return ecranSwipe(); }
+  if(d.swMode){ if(S.sw) S.sw.chipsOuverts = false; return swChanger(d.swMode); }
+  if(d.swMat){ S.sw.chipsOuverts = false; if(S.sw.mat === d.swMat && S.sw.mode === 'cours'){ return ecranSwipe(); } S.sw.mode = 'x'; return swChanger('cours', d.swMat); }
+  if(d.swNiv) return swChoisirNiveau(d.swNiv);
   if(d.swSerie) return swPasser(swSerieSuivante);
   if(d.swReessayer){ const w = S.sw; if(w){ w.rep = undefined; w.c = null; ecranSwipe(); } }
 });
