@@ -6716,7 +6716,7 @@ function ecranSwipe(){
   else if(w.phase === 'charge' || w.phase === 'vide') h = swEcranVide(w);
   else h = swJeu(w);
   const mur = w.phase === 'mur' && w.c ? swMur(w, w.c) : '';
-  vue().innerHTML = `<div class="sw sw-${w.phase}"><div class="sw-page${w.entre ? ' sw-entre' : ''}">${h}</div>${mur}</div>`;
+  vue().innerHTML = `<div class="sw sw-${w.phase}"><div class="sw-page${w.entre ? ' sw-entre' : ''}${w.phase === 'jeu' ? (w.rep === undefined ? ' sw-fixe' : ' sw-rep') : ''}">${h}</div>${mur}</div>`;
   w.entre = false;
 }
 function swEntree(w, e){
@@ -6922,7 +6922,7 @@ document.addEventListener('click', ev => {
     if(e.target.closest && e.target.closest('.sw-feuille')) return;
     const v = document.querySelector('.sw');
     y0 = e.touches[0].clientY; x0 = e.touches[0].clientX; dy = 0; tire = false;
-    enBas = !v || v.scrollTop + v.clientHeight >= v.scrollHeight - 6;
+    enBas = !v || v.scrollTop + v.clientHeight >= v.scrollHeight - 140;   // un reste de défilement ne doit jamais coûter un deuxième glissement
     action = swPeutPasser();
   }, { passive:true });
   document.addEventListener('touchmove', e => {

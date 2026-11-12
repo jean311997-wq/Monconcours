@@ -2482,3 +2482,17 @@ body.swipe-on .fab-canal,body.swipe-on .sw-bulle{display:none!important}
 .sw-page .sw-opts{display:flex;flex-direction:column}
 .sw-page .sw-opt{flex:1 1 0;min-height:56px;max-height:104px;margin-bottom:10px}
 .sw-page .sw-rail{justify-content:flex-start}
+/* un seul glissement : la page tient exactement dans l'écran visible (barre d'adresse comprise), elle ne défile pas */
+.sw-page{min-height:100%}
+.sw-page.sw-fixe{height:100%;min-height:0}
+.sw-page.sw-fixe .sw-q,.sw-page.sw-fixe .sw-corps,.sw-page.sw-fixe .sw-opts{min-height:0}
+.sw-page .sw-opt{min-height:50px}
+/* après la réponse : tout reste compact pour qu'un seul glissement suffise */
+.sw-page.sw-rep .sw-source,.sw-page.sw-rep .sw-raison{display:none}
+.sw-page.sw-rep .sw-tb-mini .sw-tb3{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sw-page.sw-rep .sw-retour{padding:10px 12px;margin-top:6px}
+.sw-page.sw-rep .sw-retour span,.sw-page.sw-rep .sw-retour em{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.sw-page.sw-rep .sw-enonce{margin:8px 0 10px}
+.sw-page.sw-rep .sw-opt{padding:12px 13px;margin-bottom:8px}
+.sw-page.sw-rep .sw-glisse{margin-top:8px}
+.sw-page.sw-rep .sw-bas{padding-top:4px}
