@@ -6919,7 +6919,7 @@ document.addEventListener('click', ev => {
   const page = () => document.querySelector('.sw-page');
   document.addEventListener('touchstart', e => {
     if(S.ecran !== 'swipe' || !e.touches[0] || swEnPassage || (S.sw && S.sw.phase === 'mur')) return;
-    if(e.target.closest && e.target.closest('.sw-feuille')) return;
+    if(e.target.closest && e.target.closest('.sw-feuille, .avis-carte')) return;
     const v = document.querySelector('.sw');
     y0 = e.touches[0].clientY; x0 = e.touches[0].clientX; dy = 0; tire = false;
     enBas = !v || v.scrollTop + v.clientHeight >= v.scrollHeight - 140;   // un reste de défilement ne doit jamais coûter un deuxième glissement
@@ -7589,22 +7589,43 @@ function suiviAvis(){
   if(a.envoye) return;
   /* seul le temps où la personne agit compte : un téléphone posé sur une table ne compte pas */
   if(Date.now() - O.dernierTemps < 60000){ a.s = (a.s || 0) + 15; ecrireReglage('avis', a); }
-  const carte = document.querySelector('.avis-carte');
+  const carte = document.querySelector('.avis-carte:not(.avis-swipe)');
   const enEpreuve = enComposition() || SANS_TETE.includes(S.ecran);
   if(enEpreuve){ if(carte) carte.remove(); return; }
-  if(carte || S.modal) return;
+  if(carte || S.modal || document.querySelector('.avis-swipe')) return;
   if(a.s >= AVIS_SEUIL && Date.now() - (a.vu || 0) > AVIS_PAUSE_JOURS * 86400000) proposerAvis(a);
 }
 setInterval(suiviAvis, 15000);
-function proposerAvis(a){
-  a.vu = Date.now(); ecrireReglage('avis', a);
+/* mode Swipe : au bout d'environ dix minutes de jeu, une fenêtre propre au Swipe (avis rangés à part côté équipe) */
+const AVIS_SWIPE_SEUIL = 10 * 60;
+function etatAvisSwipe(){
+  const pour = String(S.util.tel || '').slice(-3);
+  const a = lireReglages().avisSwipe;
+  return (a && a.pour === pour) ? a : { pour: pour, s: 0, vu: 0, envoye: false };
+}
+function suiviAvisSwipe(){
+  if(document.visibilityState !== 'visible' || !S.util.connecte || !base || S.ecran !== 'swipe') return;
+  const a = etatAvisSwipe();
+  if(a.envoye) return;
+  if(Date.now() - O.dernierTemps < 60000){ a.s = (a.s || 0) + 15; ecrireReglage('avisSwipe', a); }
+  if(document.querySelector('.avis-carte') || S.modal) return;
+  const w = S.sw;
+  /* la fenêtre se ferme d'un glissement : elle ne bloque jamais le jeu */
+  if(!w || !['palier','recompense','bilan','jeu'].includes(w.phase) || (w.phase === 'jeu' && !w.c)) return;   // en jeu : seulement une fois la réponse donnée
+  if(a.s >= AVIS_SWIPE_SEUIL && Date.now() - (a.vu || 0) > AVIS_PAUSE_JOURS * 86400000) proposerAvis(a, 'swipe');
+}
+setInterval(suiviAvisSwipe, 15000);
+function proposerAvis(a, mode){
+  const sw = mode === 'swipe', cle = sw ? 'avisSwipe' : 'avis';
+  a.vu = Date.now(); ecrireReglage(cle, a);
   const c = document.createElement('div');
-  c.className = 'avis-carte';
+  c.className = 'avis-carte' + (sw ? ' avis-swipe' : '');
+  c.dataset.origine = sw ? 'swipe' : '';
   c.setAttribute('role', 'dialog');
   c.setAttribute('aria-label', 'Donnez votre avis');
-  c.innerHTML = `<div class="avis-tete"><i class="avis-poignee"></i><b>Votre avis nous aide à progresser</b>
-    <span>Que pensez-vous du site ou des recommandations ? Quelques mots suffisent.</span></div>
-    <textarea id="avis-texte" maxlength="1000" rows="3" aria-label="Votre avis" placeholder="Ce qui vous plaît, ce qui manque, ce qui ne va pas…"></textarea>
+  c.innerHTML = `<div class="avis-tete"><i class="avis-poignee"></i><b>${sw ? 'Que pensez-vous du mode Swipe ?' : 'Votre avis nous aide à progresser'}</b>
+    <span>${sw ? 'Les questions, le rythme, ce qui vous plaît ou vous gêne : quelques mots suffisent.' : 'Que pensez-vous du site ou des recommandations ? Quelques mots suffisent.'}</span></div>
+    <textarea id="avis-texte" maxlength="1000" rows="3" aria-label="Votre avis" placeholder="${sw ? 'Ce que vous aimez dans le Swipe, ce qu\'il faudrait changer…' : 'Ce qui vous plaît, ce qui manque, ce qui ne va pas…'}"></textarea>
     <button class="cta" data-avis-envoi="1">Envoyer mon avis</button>
     <small class="avis-aide">Pas maintenant ? Faites glisser cette fenêtre pour la fermer.</small>`;
   c.querySelector('[data-avis-envoi]').onclick = () => envoyerAvis(c);
@@ -7619,7 +7640,7 @@ function proposerAvis(a){
   });
   document.body.appendChild(c);
   setTimeout(() => c.classList.add('vu'), 30);
-  pister('FEEDBACK_PROMPT_SHOWN');
+  pister('FEEDBACK_PROMPT_SHOWN', sw ? { origine: 'swipe' } : undefined);
 }
 async function envoyerAvis(c){
   const champ = c.querySelector('#avis-texte');
@@ -7627,11 +7648,13 @@ async function envoyerAvis(c){
   if(texte.length < 3){ toast('Écrivez quelques mots avant d\'envoyer.'); if(champ) champ.focus(); return; }
   const bouton = c.querySelector('[data-avis-envoi]'); if(bouton) bouton.disabled = true;
   try{
-    const { data } = await base.rpc('envoyer_avis', { p_message: texte });
+    const sw = c.classList.contains('avis-swipe');
+    const { data } = await base.rpc('envoyer_avis', sw ? { p_message: texte, p_origine: 'swipe' } : { p_message: texte });
     if(data && data.ok){
-      const a = etatAvis(); a.envoye = true; ecrireReglage('avis', a);
+      if(sw){ const b = etatAvisSwipe(); b.envoye = true; ecrireReglage('avisSwipe', b); }
+      else { const a = etatAvis(); a.envoye = true; ecrireReglage('avis', a); }
       c.remove(); toast('Merci ! Votre avis est bien arrivé.');
-      pister('FEEDBACK_SENT');
+      pister('FEEDBACK_SENT', sw ? { origine: 'swipe' } : undefined);
     } else {
       if(bouton) bouton.disabled = false;
       toast((data && data.message) || 'Envoi impossible pour le moment.');
