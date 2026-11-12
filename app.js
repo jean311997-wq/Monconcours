@@ -6717,7 +6717,6 @@ function swEntree(w, e){
   const semaine = e.note_semaine !== null && e.note_semaine !== undefined ? Math.round((note - e.note_semaine) * 10) / 10 : null;
   return `<button class="sw-x sw-x-seul" data-sw-quitter="1" aria-label="Quitter">✕</button>
   <div class="sw-entree">
-    ${swOnglets(w)}
     ${live ? `<div class="sw-live"><i></i>${E(live)}</div>` : ''}
     <h1>Mode<br>Swipe</h1>
     <p class="sw-chapeau">Une question. Tu réponds, tu glisses, la suivante tombe. À chaque réponse, ta note estimée bouge.</p>
