@@ -6602,35 +6602,55 @@ function swArreterCompte(){ if(S.swCompte){ clearInterval(S.swCompte); S.swCompt
 function swQuitter(){ swArreterCompte(); S.swEtat = null; aller('aujourdhui'); }
 
 /* une réponse */
+/* la correction s'affiche tout de suite (bonne réponse livrée avec la série) ;
+   le serveur enregistre derrière : points, cahier d'erreurs, limites gratuites */
+function swCompter(w, q, r){
+  const poids = q.annale ? 2 : 1;
+  const noteAvant = swNote(w.cc, w.n), rangAvant = swRang(S.swEtat, noteAvant);
+  w.n += poids; if(r.correcte) w.cc += poids;
+  const noteApres = swNote(w.cc, w.n), rangApres = swRang(S.swEtat, noteApres);
+  w.delta = Math.round((noteApres - noteAvant) * 10) / 10;
+  w.passes = rangAvant && rangApres ? rangAvant - rangApres : 0;
+  const m = q.matiere || 'Autre'; w.avant.mat[m] = w.avant.mat[m] || { j:0, n:0 }; w.avant.mat[m].n++;
+  if(r.correcte){
+    w.serie++; w.avant.justes++; w.avant.mat[m].j++;
+    w.gain = 5 * (w.serie >= 3 ? 2 : 1) * (q.annale ? 2 : 1); w.pts += w.gain;
+    sonJuste();
+    if(w.serie > w.record){ w.record = w.serie; swEcrire('record', w.record); w.nouveauRecord = true; }
+  } else { w.serie = 0; w.gain = 0; sonFaux(); }
+  compterReponse();
+  if(w.idx >= w.lot.length - 4) swPrecharger();
+}
 async function swRepondre(i){
   const w = S.sw; if(!w || w.phase !== 'jeu' || w.rep !== undefined) return;
-  const q = w.lot[w.idx];
-  w.rep = i; w.c = null; ecranSwipe();
-  const r = await corrigerAuServeur(q.id, [i], q.contexte === 'erreurs' ? 'erreurs' : 'revision', Date.now() - (w.t0 || Date.now()));
+  const q = w.lot[w.idx], idx = w.idx, temps = Date.now() - (w.t0 || Date.now());
+  const local = Array.isArray(q.bonnes) && q.bonnes.length
+    ? { ok:true, local:true, correcte: q.bonnes.length === 1 && +q.bonnes[0] === i, bonnes: q.bonnes.map(Number), explication: q.explication || null }
+    : null;
+  w.rep = i; w.c = local;
+  if(local) swCompter(w, q, local);
+  ecranSwipe();
+  const ctx = q.contexte === 'erreurs' ? 'erreurs' : 'revision';
+  let r = await corrigerAuServeur(q.id, [i], ctx, temps);
+  if(r && r.reseau && local){ await new Promise(ok => setTimeout(ok, 2500)); r = await corrigerAuServeur(q.id, [i], ctx, temps); }
   if(!S.sw || S.sw !== w) return;
-  w.c = r;
   if(r && r.ok){
-    const poids = q.annale ? 2 : 1;
-    const noteAvant = swNote(w.cc, w.n), rangAvant = swRang(S.swEtat, noteAvant);
-    w.n += poids; if(r.correcte) w.cc += poids;
-    const noteApres = swNote(w.cc, w.n), rangApres = swRang(S.swEtat, noteApres);
-    w.delta = Math.round((noteApres - noteAvant) * 10) / 10;
-    w.passes = rangAvant && rangApres ? rangAvant - rangApres : 0;
-    const m = q.matiere || 'Autre'; w.avant.mat[m] = w.avant.mat[m] || { j:0, n:0 }; w.avant.mat[m].n++;
-    if(r.correcte){
-      w.serie++; w.avant.justes++; w.avant.mat[m].j++;
-      w.gain = 5 * (w.serie >= 3 ? 2 : 1) * (q.annale ? 2 : 1); w.pts += w.gain;
-      sonJuste();
-      if(w.serie > w.record){ w.record = w.serie; swEcrire('record', w.record); w.nouveauRecord = true; }
-    } else { w.serie = 0; w.gain = 0; sonFaux(); }
-    compterReponse();
-    if(w.idx >= w.lot.length - 4) swPrecharger();
-  } else if(r && r.quota){
-    if(r.motif === 'matiere'){ toast('Tes 15 questions offertes en ' + (r.matiere || q.matiere || 'cette matière') + ' sont faites.'); w.rep = undefined; w.c = null; return swSuivante(true); }
+    if(!local){ w.c = r; swCompter(w, q, r); if(S.ecran === 'swipe') ecranSwipe(); }
+    return;
+  }
+  if(r && r.quota){
+    if(r.motif === 'matiere'){
+      toast('Tes 15 questions offertes en ' + (r.matiere || q.matiere || 'cette matière') + ' sont faites.');
+      if(!local && w.idx === idx){ w.rep = undefined; w.c = null; return swSuivante(true); }
+      return;
+    }
     w.phase = 'mur';
     pister('PAYWALL_VIEWED', { point: 'swipe', motif: r.motif || 'jour' });
+    if(S.ecran === 'swipe') ecranSwipe();
+    return;
   }
-  if(S.ecran === 'swipe') ecranSwipe();
+  /* sans correction locale, l'erreur réseau s'affiche comme avant */
+  if(!local && w.idx === idx){ w.c = r; if(S.ecran === 'swipe') ecranSwipe(); }
 }
 function swSuivante(sansPalier){
   const w = S.sw; if(!w) return;
