@@ -1831,6 +1831,7 @@ async function chargerProgression(){
     if(data && !pareil(data, S.stats)){ S.stats = data; memoEcrire('stats', data, true); rafraichirSiVisible(); }
     if(data) setTimeout(notificationsDuJour, 2500);
   }).catch(() => {});
+  chargerStatutGratuit();
 
   chargerCahier();
   chargerJournee();
@@ -2286,6 +2287,7 @@ async function corrigerAuServeur(questionId, choix, contexte, tempsMs){
       p_question: questionId, p_choix: choix, p_contexte: contexte,
       p_temps_ms: tempsMs || null, p_session: O.session || null });
     if(error) throw error;
+    noterCorrectionHabitue(contexte, data);
     return data || { ok:false, message:'Réponse vide du serveur.' };
   }catch(e){
     return { ok:false, reseau:true, message:"La correction n'a pas pu être chargée. Vérifiez votre connexion et réessayez." };
@@ -2352,7 +2354,10 @@ async function ouvrirComposition(){
       if(S.compoEtat === 'abonnement' && base){ base.rpc('mes_sujets_restants').then(({ data: sr }) => { S.sujetsRestants = sr; if(S.ecran === 'grille') rendre(); }, () => {}); }
       S.compoMessage = (data && data.message) || 'Composition indisponible.';
       S.compoDebloqueNotifs = !!(data && data.debloque_par_notifs);
+      S.compoHabitue = data && data.habitue ? { nationale: !!data.nationale } : null;
+      if(S.compoHabitue) S.habitue = Object.assign({}, S.habitue || {}, data.habitue, { habitue: true, jour: (S.habitue && S.habitue.jour) || aujourdhuiIso() });
     } else {
+      S.compoHabitue = null;
       S.compoDebloqueNotifs = false;
       if(S.compositionId && S.compositionId !== data.id){ S.reponses = {}; effacerEpreuve(); }
       S.compositionId = data.id;
@@ -3064,7 +3069,7 @@ function tableauAvantages(){
   const l = (a, g, p) => `<div class="tb-l"><span>${a}</span><span>${g}</span><span class="ok">${p}</span></div>`;
   const L = 'Limité', I = 'Illimité';
   return `<div class="tb"><div class="tb-l tb-h"><span></span><span>Gratuit</span><span>Abonnement</span></div>
-    ${l('Questions de toutes les matières', L, I)}${l('Corrections des QCM', L, I)}${l('Compositions chronométrées', L, I)}${l('Mes erreurs, chaque jour', L, I)}${l('Feuille corrigée détaillée en PDF', L, I)}${l('Cours et questions sans connexion', L, I)}${l('Composition nationale', 'Oui', 'Oui')}</div>`;
+    ${l('Questions de toutes les matières', L, I)}${l('Corrections des QCM', L, I)}${l('Compositions chronométrées', L, I)}${l('Mes erreurs, chaque jour', L, I)}${l('Feuille corrigée détaillée en PDF', L, I)}${l('Cours et questions sans connexion', L, I)}${l('Composition nationale', habitueActif() ? L : 'Oui', 'Oui')}</div>`;
 }
 function choixOffre(point){
   const an = FORMULES.annuelle, mo = FORMULES.mensuelle, douze = formulesBase().mensuelle.montant * 12;
@@ -4670,6 +4675,7 @@ function ecranQcm(){
         ${S.util.connecte ? 'La correction s\'affiche dès que tu réponds.' : 'Crée ton compte gratuit pour voir la correction.'}</p>` : ''}
 
     ${c && !c.ok ? (() => {
+      if(c.quota && c.motif === 'habitue') return murHabitue('qcm') + `<button class="cta creux" style="margin-top:9px" data-demain="1">À demain</button>`;
       const offre = c.quota && peutProposer(1);
       return `
       <div class="${c.quota ? 'mur-fini' : 'retour mal'}">
@@ -4749,7 +4755,7 @@ function blocPoint2(){
     rest !== null && rest > 0 ? tu(rest > 10 ? '10+' : rest, rest > 1 ? 'sujets t\'attendent' : 'sujet t\'attend') : ''].join('');
   return `
     ${tuiles ? `<div class="av-stats" style="margin:0 0 6px">${tuiles}</div>` : ''}
-    <p class="sous" style="margin:8px 0 0;font-size:12.5px">La composition nationale reste gratuite pour tous.</p>
+    ${habitueActif() ? '' : `<p class="sous" style="margin:8px 0 0;font-size:12.5px">La composition nationale reste gratuite pour tous.</p>`}
     ${offre ? offreDeuxPrix(true) : ''}`;
 }
 function ecranCompoAttente(){
@@ -4764,6 +4770,20 @@ function ecranCompoAttente(){
     abonnement: S.compoMessage || 'Pour composer d\'autres sujets, choisissez votre abonnement.',
     erreur: S.compoMessage || 'Le sujet n\'a pas pu être chargé.'
   };
+  if(etat === 'abonnement' && S.compoHabitue && habitueActif()){
+    const nat = S.compoHabitue.nationale, o = offreSelonUsage();
+    if(S._murHabitue !== (nat ? 'nationale' : 'composition') + aujourdhuiIso()){ S._murHabitue = (nat ? 'nationale' : 'composition') + aujourdhuiIso(); pister('PAYWALL_VIEWED', { point: 'habitue', zone: nat ? 'nationale' : 'composition' }); }
+    vue().innerHTML = `
+    <div class="pad" style="padding-top:40px">
+      <div style="text-align:center">${logoSvg(44)}
+      <h1 class="titre" style="font-size:24px;margin-top:16px">${nat ? 'La composition nationale fait partie de l\'abonnement' : 'Les compositions font partie de l\'abonnement'}</h1>
+      <p class="sous" style="margin:10px 0 14px">${nat ? 'Compose ce soir avec tous les candidats, et retrouve ta place au classement.' : 'Compose en conditions réelles, chronométré, avec ton classement.'}</p></div>
+      <div class="mur-atout"><b>${E(o.titre)}</b><span>${E(o.texte)}</span></div>
+      <div style="margin-top:12px">${offreDeuxPrix(true)}</div>
+      <button class="cta creux" style="margin-top:9px" data-go="aujourdhui">Revenir à l'accueil</button>
+    </div>`;
+    return;
+  }
   vue().innerHTML = `
   <div class="pad" style="padding-top:40px;text-align:center">
     ${logoSvg(44)}
@@ -5485,6 +5505,13 @@ function ecranReprise(){
   const e = S.cahier[repriseIdx];
   const rep = repriseRep;
   const juste = rep === e.i;
+  if(rep === undefined && seanceHabitueFinie()){
+    vue().innerHTML = `<div class="qzone">
+      <button class="retourhaut" data-sortir-reprise="1" style="margin-bottom:12px">Retour</button>
+      ${murHabitue('erreurs')}
+      <button class="cta creux" style="margin-top:9px" data-demain="1">À demain</button></div>`;
+    return;
+  }
   vue().innerHTML = `
   <div class="qzone">
     <button class="retourhaut" data-sortir-reprise="1" style="margin-bottom:12px">Retour</button>
@@ -5879,7 +5906,7 @@ async function supprimerCompte(){
     S.supprEnCours = false;
     S.util = {nom:'', tel:'', pin:'', connecte:false};
     S.form = {nom:'', tel:'', pin:''};
-    memoVider(); S.journee = null; S.stats = null; S.details = null; S.classement = null; S.notifications = []; S.cahier = []; S.top = null; S.rappel = null; S.elan = null;
+    memoVider(); S.habitue = null; S.journee = null; S.stats = null; S.details = null; S.classement = null; S.notifications = []; S.cahier = []; S.top = null; S.rappel = null; S.elan = null;
     oublierIdentite();
     toast('Votre compte a été supprimé. Merci d\'avoir révisé avec Mon Concours.', 6000);
     S.modalDejaVu = true;
@@ -6268,12 +6295,54 @@ function prechargerFil(){
 
 /* Le moment de payer : un seul message, choisi selon ce que le candidat fait le plus */
 function offreSelonUsage(){
-  const compos = (S.stats && S.stats.compositions) || 0, qcm = (S.stats && S.stats.questions_resolues) || 0, err = ouvertes();
+  const h = habitueActif() ? S.habitue : null;
+  const compos = h ? (h.compositions || 0) : ((S.stats && S.stats.compositions) || 0);
+  const qcm = h ? (h.reponses || 0) : ((S.stats && S.stats.questions_resolues) || 0);
+  const err = h ? Math.max(h.erreurs || 0, ouvertes()) : ouvertes();
   const rang = S.classement ? S.classement.rang : null, pop = S.classement ? S.classement.population : null;
   const place = rang && pop ? ` Tu es ${nombreFr(rang)}ᵉ sur ${nombreFr(pop)}.` : '';
-  if(err >= 20 && err * 2 >= qcm / 10) return { titre:'Corriger tes erreurs est ton meilleur atout pour progresser dans ta révision', texte:`Tu as ${nombreFr(err)} erreurs à reprendre. Chacune refermée rapporte 20 points. Avec l\'abonnement, les corrections n\'ont plus de limite : tu peux toutes les reprendre.` };
-  if(compos >= 3 && compos * 25 >= qcm / 4) return { titre:`Tu as déjà fait ${compos} compositions`, texte:`${place.trim()} L\'abonnement ouvre toutes les compositions chronométrées et le classement national jusqu\'au concours.`.trim() };
-  return { titre:'Tu avances bien, continue sur ta lancée', texte:`${nombreFr(qcm)} questions faites.${place} L\'abonnement ouvre toutes les questions de toutes les matières, corrigées et expliquées.` };
+  /* l'habitué voit d'abord tout ce qu'il a déjà fait : c'est la preuve que le site lui sert */
+  const deja = h && h.jours ? `Tu es venu ${nombreFr(h.jours)} jours et tu as répondu à ${nombreFr(qcm)} questions. ` : '';
+  if(err >= 20 && err * 2 >= qcm / 10) return { titre:'Corriger tes erreurs est ton meilleur atout pour progresser dans ta révision', texte:`${deja}Tu as ${nombreFr(err)} erreurs à reprendre. Chacune refermée rapporte 20 points. Avec l\'abonnement, les corrections n\'ont plus de limite : tu peux toutes les reprendre.` };
+  if(compos >= 3 && compos * 25 >= qcm / 4) return { titre:`Tu as déjà fait ${compos} compositions`, texte:`${deja}${place.trim()} L\'abonnement ouvre toutes les compositions chronométrées et le classement national jusqu\'au concours.`.replace(/\s+/g, ' ').trim() };
+  return { titre:'Tu avances bien, continue sur ta lancée', texte: h ? `${deja}${place.trim()} L\'abonnement ouvre toutes les questions de toutes les matières, corrigées et expliquées.`.replace(/\s+/g, ' ').trim()
+    : `${nombreFr(qcm)} questions faites.${place} L\'abonnement ouvre toutes les questions de toutes les matières, corrigées et expliquées.` };
+}
+
+/* Blocus secondaire (12 novembre) : un candidat sans abonnement qui a déjà 6 jours actifs
+   et qui a rencontré une limite devient « habitué » au calcul de la nuit. Dès son 7e jour,
+   il garde une séance de 5 questions corrigées par jour, tout compris ; les compositions
+   et les nationales passent par l'abonnement. Le serveur décide, le site l'explique. */
+const SEANCE_HABITUE = 5;
+const aujourdhuiIso = () => { const d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); };
+function habitueActif(){ return !!(S.habitue && S.habitue.habitue && S.util.connecte && !S.gratuit && !estAbonne()); }
+function chargerStatutGratuit(){
+  if(!base || !S.util.connecte) return;
+  base.rpc('mon_statut_gratuit').then(({ data }) => {
+    S.habitue = data && data.habitue ? Object.assign({}, data, { jour: aujourdhuiIso() }) : null;
+  }, () => {});
+}
+function seanceHabitueFinie(){
+  if(!habitueActif()) return false;
+  const j = aujourdhuiIso();
+  if(S.habitue.jour !== j){ S.habitue.jour = j; S.habitue.faites_jour = 0; }
+  return (S.habitue.faites_jour || 0) >= SEANCE_HABITUE;
+}
+/* chaque correction obtenue compte dans la séance ; un refus du serveur la déclare finie */
+function noterCorrectionHabitue(contexte, r){
+  if(!r) return;
+  if(r.quota && r.motif === 'habitue'){
+    S.habitue = Object.assign({}, S.habitue || {}, r.habitue || {}, { habitue: true, faites_jour: SEANCE_HABITUE, jour: aujourdhuiIso() });
+    return;
+  }
+  if(r.ok && habitueActif() && (contexte === 'revision' || contexte === 'erreurs')){ seanceHabitueFinie(); S.habitue.faites_jour = (S.habitue.faites_jour || 0) + 1; }
+}
+function murHabitue(zone){
+  if(S._murHabitue !== zone + aujourdhuiIso()){ S._murHabitue = zone + aujourdhuiIso(); pister('PAYWALL_VIEWED', { point: 'habitue', zone }); }
+  const o = offreSelonUsage();
+  return `<div class="mur-fini"><i class="mf-coche" aria-hidden="true">✓</i><div><h2>Ta séance gratuite du jour est faite</h2><p>Elle revient demain matin. Ou continue maintenant, sans attendre.</p></div></div>
+    <div class="mur-atout"><b>${E(o.titre)}</b><span>${E(o.texte)}</span></div>
+    <div style="margin-top:12px">${offreDeuxPrix(true)}</div>`;
 }
 function boutonConseillerAbo(){
   return `<a class="cta" style="display:block;margin-top:12px;text-align:center;text-decoration:none" href="https://wa.me/226${numeroConseiller()}?text=${encodeURIComponent(messageConseiller('annuelle'))}" target="_blank" rel="noopener" data-conseiller-wa="mur-fil" data-conseiller-formule="annuelle">${logoReseau('whatsapp')} Faire l'abonnement avec un conseiller sur WhatsApp</a>`;
@@ -6325,7 +6394,8 @@ function ecranPourToi(){
       return `<button class="opt ${k}" ${rep !== undefined ? 'disabled' : ''} data-fil-rep="${i}"><span class="lettre">${'ABCD'[i] || '•'}</span>${E(o)}</button>`;
     }).join('')}
 
-    ${c && !c.ok && c.quota ? `<div class="mur-fini">${c.motif === 'matiere'
+    ${c && !c.ok && c.quota && c.motif === 'habitue' ? murHabitue(f.seanceX ? 'seance' : 'pourtoi') + `<button class="cta creux" style="margin-top:9px" data-demain="1">À demain</button>` : ''}
+    ${c && !c.ok && c.quota && c.motif !== 'habitue' ? `<div class="mur-fini">${c.motif === 'matiere'
         ? `<i class="mf-coche" aria-hidden="true">✓</i><div><h2>Tes 15 questions offertes en ${E(c.matiere || q.matiere || 'cette matière')} sont faites</h2><p>Tu es lancé, ne t'arrête pas là.</p></div>`
         : `<i class="mf-coche" aria-hidden="true">✓</i><div><h2>Tes 5 corrections du jour sont faites</h2><p>Elles reviennent demain matin. Ou continue maintenant, sans attendre.</p></div>`}</div>
       ${(() => { const o = offreSelonUsage(); return `<div class="mur-atout"><b>${E(o.titre)}</b><span>${E(o.texte)}</span></div>`; })()}
@@ -9488,7 +9558,7 @@ document.addEventListener('click', ev=>{
     S.util = {nom:'', tel:'', pin:'', connecte:false};
     S.form = {nom:'', tel:'', pin:''};
     S.lus = null; S.lusCharges = false; S.popNatVu = false;
-    memoVider(); S.journee = null; S.stats = null; S.details = null; S.classement = null; S.notifications = []; S.cahier = []; S.top = null; S.rappel = null;
+    memoVider(); S.habitue = null; S.journee = null; S.stats = null; S.details = null; S.classement = null; S.notifications = []; S.cahier = []; S.top = null; S.rappel = null;
     oublierIdentite(); chargerRegleVisiteur();
     const connu = !!(lireMemoire() || {}).dejaVenu;
     S.modalDejaVu = connu;                    // on ne relance pas l'inscription d'un habitué
@@ -9559,6 +9629,7 @@ document.addEventListener('click', ev=>{
   if(d.rr !== undefined){
     const i = +d.rr, e = S.cahier[repriseIdx];
     if(!e || repriseRep !== undefined) return;
+    if(seanceHabitueFinie()) return ecranReprise();
     repriseRep = i;
     const juste = i === e.i;
     if(juste) sonJuste(); else sonFaux();
@@ -9568,6 +9639,7 @@ document.addEventListener('click', ev=>{
     if(juste && e.suite >= 3) pister('ERROR_FIXED');
     if(e.id){
       corrigerAuServeur(e.id, [i], 'erreurs').then(r => {
+        if(r && r.quota){ chargerCahier(); if(repriseIdx != null && S.cahier[repriseIdx] && document.querySelector('[data-sortir-reprise]')){ repriseRep = undefined; ecranReprise(); } return; }
         if(r && r.ok && r.correcte !== juste) chargerCahier();   // le serveur fait foi
       });
     }
