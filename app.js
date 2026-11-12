@@ -643,12 +643,33 @@ function blocAvisVitrine(){
   if(!(S.avisVitrine || []).length) return '';
   return `<div class="avis-vitrine" data-avis-n="3">${lignesAvis(3)}</div>`;
 }
+/* Candidat inscrit depuis moins de deux jours : l'avis des autres passe en haut de l'accueil */
+function candidatNeuf(){
+  if(!S.util.connecte || !S.inscritLe) return false;
+  const t = new Date(S.inscritLe).getTime();
+  return !isNaN(t) && Date.now() - t < 2 * 86400000 && !estAbonne();
+}
+/* Sur le mur de paiement : un avis qui change, juste au-dessus des prix */
+function blocAvisMur(){
+  chargerAvisVitrine();
+  if(!(S.avisVitrine || []).length) return '';
+  return `<section class="bloc avis-accueil avis-mur" aria-label="Ce que disent les candidats">
+    <div class="libelle">Ce que disent les candidats</div>
+    <div class="avis-vitrine" data-avis-n="1">${lignesAvis(1)}</div></section>`;
+}
 function blocAvisAccueil(){
   chargerAvisVitrine();
   if(!(S.avisVitrine || []).length) return '';
   return `<section class="bloc avis-accueil" aria-label="Ce que disent les candidats">
     <div class="libelle">Ce que disent les candidats</div>
     <div class="avis-vitrine" data-avis-n="1">${lignesAvis(1)}</div></section>`;
+}
+function majAvisMurVide(){
+  /* le mur déjà affiché sans avis : on l'ajoute dès qu'ils arrivent */
+  document.querySelectorAll('.offre-choix').forEach(o => {
+    if(o.previousElementSibling && o.previousElementSibling.classList && o.previousElementSibling.classList.contains('avis-mur')) return;
+    o.insertAdjacentHTML('beforebegin', blocAvisMur());
+  });
 }
 function majAvisDom(){
   document.querySelectorAll('.avis-vitrine[data-avis-n]').forEach(c => { c.innerHTML = lignesAvis(+c.dataset.avisN || 1); });
@@ -671,6 +692,7 @@ async function chargerAvisVitrine(){
       S.avisVitrine = data;
       if(['engagement'].includes(S.ecran)) rendre();
       else if(S.ecran === 'aujourdhui') rendre();
+      else majAvisMurVide();
     }
   }catch(e){ S.avisVitrineCharge = false; }
 }
@@ -2014,6 +2036,7 @@ async function reprendreSession0(){
     return;
   }
   const uid = data.session.user.id;
+  S.inscritLe = data.session.user.created_at || null;
   /* la session est connue : les chiffres partent tout de suite, sans attendre le profil */
   if(S.util.connecte){ S.progLancee = Date.now(); chargerProgression(); }
   const { data: profil } = await base.from('profils')
@@ -2663,6 +2686,7 @@ function ecranAujourdhui(){
   <div class="pad">
     ${salutAccueil()}
     ${blocEnLigne()}
+    ${candidatNeuf() ? blocAvisAccueil() : ''}
     ${nationaleEnHaut() ? `<section class="nat-jour${resultatsEnVedette() && blocDerniereNationale(true) ? ' res-vedette' : ''}" aria-label="Composition nationale du jour">${resultatsEnVedette() ? blocDerniereNationale(true) + (S.epreuve && S.epreuve.etat === 'terminee' ? '' : carteEpreuve()) : carteEpreuve() + blocDerniereNationale()}</section>` : ''}
     ${blocSeanceX()}
     ${estE2() && S.util.connecte ? tachesElite2() : ''}
@@ -2730,7 +2754,7 @@ function ecranAujourdhui(){
     </div>
 
     ${nationaleEnHaut() ? '' : carteEpreuve() + blocDerniereNationale()}
-    ${blocAvisAccueil()}
+    ${candidatNeuf() ? '' : blocAvisAccueil()}
     ${blocPlus()}
   </div>`;
 }
@@ -3077,7 +3101,7 @@ function choixOffre(point){
   const rass = CONTACT.paiementDirect ? 'Orange Money, Moov Money ou Wave.<br>Validation souvent en quelques minutes.'
     : (paiementParPartenaire() ? 'Votre conseiller ' + E(S.regleP.nom) + ' vous guide sur WhatsApp.<br>Activation dès que votre paiement est vérifié.'
       : 'Orange Money, Moov Money ou Wave.<br>Ton accès s\'ouvre dès que le paiement est vérifié.');
-  return `<div class="offre-choix" data-offre-point="${E(point || 'abonnement')}">
+  return blocAvisMur() + `<div class="offre-choix" data-offre-point="${E(point || 'abonnement')}">
     <div class="of-liste" role="radiogroup" aria-label="Formule">
       <button type="button" class="of on" role="radio" aria-checked="true" data-offre-f="annuelle">
         <span class="of-ruban">Le plus choisi</span><i class="of-rad" aria-hidden="true"></i>
@@ -5906,7 +5930,7 @@ async function supprimerCompte(){
     S.supprEnCours = false;
     S.util = {nom:'', tel:'', pin:'', connecte:false};
     S.form = {nom:'', tel:'', pin:''};
-    memoVider(); S.habitue = null; S.journee = null; S.stats = null; S.details = null; S.classement = null; S.notifications = []; S.cahier = []; S.top = null; S.rappel = null; S.elan = null;
+    memoVider(); S.habitue = null; S.inscritLe = null; S.journee = null; S.stats = null; S.details = null; S.classement = null; S.notifications = []; S.cahier = []; S.top = null; S.rappel = null; S.elan = null;
     oublierIdentite();
     toast('Votre compte a été supprimé. Merci d\'avoir révisé avec Mon Concours.', 6000);
     S.modalDejaVu = true;
@@ -9558,7 +9582,7 @@ document.addEventListener('click', ev=>{
     S.util = {nom:'', tel:'', pin:'', connecte:false};
     S.form = {nom:'', tel:'', pin:''};
     S.lus = null; S.lusCharges = false; S.popNatVu = false;
-    memoVider(); S.habitue = null; S.journee = null; S.stats = null; S.details = null; S.classement = null; S.notifications = []; S.cahier = []; S.top = null; S.rappel = null;
+    memoVider(); S.habitue = null; S.inscritLe = null; S.journee = null; S.stats = null; S.details = null; S.classement = null; S.notifications = []; S.cahier = []; S.top = null; S.rappel = null;
     oublierIdentite(); chargerRegleVisiteur();
     const connu = !!(lireMemoire() || {}).dejaVenu;
     S.modalDejaVu = connu;                    // on ne relance pas l'inscription d'un habitué

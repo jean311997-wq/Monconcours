@@ -2252,3 +2252,4 @@ body:not([data-theme="clair"]) .fp{background:var(--ardoise)}
 .cg-stats div{border:1px solid var(--filet,#ddd);border-radius:10px;padding:8px 6px;text-align:center;background:#fff}
 .cg-stats b{display:block;font-size:18px;line-height:1.1}.cg-stats span{font-size:11px;color:var(--encre-3,#666)}
 .cg-grille+p{margin-top:10px}
+.avis-mur{margin:14px 0 4px}
