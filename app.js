@@ -6529,12 +6529,23 @@ function lancerSwipe(){
     record: swLire('record', 0), lotNum: 0, debut: Date.now(), mode: 'alea', mat: null, niv: niveauCand() };
   aller('swipe');
   pister('SWIPE_OPENED');
-  swEtatCharger(true).then(e => {
+  const direct = !!swLire('vu', 0);       // déjà venu : on ne repasse l'écran d'entrée qu'au premier passage du jour
+  const pe = swEtatCharger(true).then(e => {
     const w = S.sw; if(!w) return;
     if(e){ w.n = +e.n || 0; w.cc = +e.c || 0; }
-    if(S.ecran === 'swipe') ecranSwipe();
+    if(S.ecran === 'swipe' && !direct) ecranSwipe();
   });
-  swLotCharger().then(l => { const w = S.sw; if(!w || w.mode !== 'alea' || w.phase !== 'entree') return; w.lot = l; w.lotErreur = !l.length; if(S.ecran === 'swipe' && w.phase === 'entree') ecranSwipe(); });
+  const pl = swLotCharger().then(l => { const w = S.sw; if(!w || w.mode !== 'alea' || w.tok || !['entree','charge'].includes(w.phase)) return; w.lot = l; w.lotErreur = !l.length; if(S.ecran === 'swipe' && w.phase === 'entree' && !direct) ecranSwipe(); });
+  if(direct){
+    S.sw.phase = 'charge'; ecranSwipe();
+    Promise.all([pe, pl]).then(() => {
+      const w = S.sw; if(!w || w.phase !== 'charge' || w.mode !== 'alea') return;
+      const e = S.swEtat || {};
+      if(w.lot && w.lot.length && e.joue_aujourdhui !== false) swCommencerLot(w.lot);
+      else w.phase = 'entree';
+      if(S.ecran === 'swipe') ecranSwipe();
+    });
+  }
 }
 function swCommencerLot(liste){
   const w = S.sw;
@@ -6560,7 +6571,7 @@ function swChanger(mode, mat){
     if(!l.length){
       w.phase = 'vide';
       w.msg = mode === 'erreurs' ? 'Aucune erreur à revoir pour le moment. Continue en aléatoire, elles reviendront ici.'
-        : (mode === 'cours' ? 'Plus de question neuve dans cette matière pour le moment.' : 'Rien de nouveau ici pour le moment.');
+        : (mode === 'cours' ? 'Plus de question neuve dans cette matière pour le moment.' : (mode === 'actu' ? "Tu as fait le tour des questions d'actualité du moment. D'autres arrivent avec les prochaines informations." : 'Rien de nouveau ici pour le moment.'));
     } else swCommencerLot(l);
     if(S.ecran === 'swipe') ecranSwipe();
   });
@@ -6650,7 +6661,7 @@ function swLancerCompte(){
   S.swCompte = setInterval(() => {
     if(!S.sw || S.ecran !== 'swipe' || S.sw.phase !== 'bilan'){ return swArreterCompte(); }
     if(!S.sw.suivant){
-      if(S.sw.suivantVide){ swArreterCompte(); S.sw.phase = 'vide'; S.sw.msg = S.sw.mode === 'erreurs' ? 'Tu as fait le tour de tes erreurs. Bravo.' : 'Tu as fait le tour des questions neuves ici.'; ecranSwipe(); }
+      if(S.sw.suivantVide){ swArreterCompte(); S.sw.phase = 'vide'; S.sw.msg = S.sw.mode === 'erreurs' ? 'Tu as fait le tour de tes erreurs. Bravo.' : (S.sw.mode === 'actu' ? "Tu as fait le tour des questions d'actualité du moment. D'autres arrivent avec les prochaines informations." : 'Tu as fait le tour des questions neuves ici.'); ecranSwipe(); }
       return;       // la série suivante n'est pas encore arrivée : on attend
     }
     S.sw.compte--;
@@ -6676,11 +6687,11 @@ function swTableau(w){
   if(w.c && w.c.ok && w.passes > 0) l3 = `<b class="sw-v">Tu passes devant ${nombreFr(w.passes)} candidat${w.passes > 1 ? 's' : ''}.</b> ` + (manque > 0 ? `Plus que <b>${swFr(manque)}</b>` : '');
   if(w.c && w.c.ok && w.passes < 0) l3 = `<b class="sw-r">${nombreFr(-w.passes)} candidat${w.passes < -1 ? 's repassent' : ' repasse'} devant toi.</b> Reprends-les à la suivante.`;
   const d = w.c && w.c.ok ? w.delta : null;
-  return `<div class="sw-tb">
-    <div class="sw-tb1"><span>Ma note estimée</span>${rang ? `<span>rang <b>${nombreFr(rang)}ᵉ</b> / ${nombreFr(e.total)}</span>` : ''}</div>
-    <div class="sw-tb2"><b class="sw-note">${swFr(note)}</b><small>/20</small>${d !== null && d !== 0 ? `<i class="sw-var ${d > 0 ? 'up' : 'dn'}">${d > 0 ? '+' : '−'}${swFr(Math.abs(d))}</i>` : ''}</div>
-    <div class="sw-barre"><i style="width:${pos}%"></i><u style="left:${seuil}%"></u><em style="left:${seuil}%">la barre ${swFr(barre)}</em></div>
-    <div class="sw-tb3">${l3}</div></div>`;
+  const repondu = w.c && w.c.ok;
+  return `<div class="sw-tb sw-tb-mini">
+    <div class="sw-tb2"><b class="sw-note">${swFr(note)}</b><small>/20</small>${d !== null && d !== 0 ? `<i class="sw-var ${d > 0 ? 'up' : 'dn'}">${d > 0 ? '+' : '−'}${swFr(Math.abs(d))}</i>` : ''}${rang ? `<span class="sw-rang">rang <b>${nombreFr(rang)}ᵉ</b> / ${nombreFr(e.total)}</span>` : ''}</div>
+    <div class="sw-barre"><i style="width:${pos}%"></i><u style="left:${seuil}%"></u></div>
+    ${repondu ? `<div class="sw-tb3">${l3}</div>` : ''}</div>`;
 }
 function swHaut(w){
   return `<div class="sw-haut"><button class="sw-x" data-sw-quitter="1" aria-label="Quitter le mode Swipe">✕</button>
@@ -6746,6 +6757,7 @@ function swJeu(w){
   if(fini) q._ok = !!c.correcte;
   let tag = `<span class="sw-tag">${E(q.matiere || '')}</span>`;
   if(revanche) tag = `<span class="sw-tag rev">Revanche</span><span class="sw-tag">${E(q.matiere || '')}</span>`;
+  if(q.etiquette === 'Actualité') tag = `<span class="sw-tag">Actualité</span>${q.raison ? `<span class="sw-source">${E(q.raison)}</span>` : ''}`;
   const retour = !fini ? '' : (c.correcte
     ? `<div class="sw-retour ok"><b>${revanche ? 'Revanche gagnée.' : 'Juste.'}${trouvent !== null && trouvent < 70 ? ` ${100 - trouvent} % se trompent ici. Pas toi.` : ''}</b>${c.explication ? `<span>${E(c.explication)}</span>` : ''}</div>`
     : `<div class="sw-retour ko"><b>C'était ${E('ABCD'[bon] || '')}${q.options && q.options[bon] ? ' : ' + E(q.options[bon]) : ''}.</b>${c.explication ? `<span>${E(c.explication)}</span>` : ''}<em>Elle revient dans « Mes erreurs » jusqu'à ce qu'elle soit acquise.</em></div>`);

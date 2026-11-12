@@ -15,14 +15,17 @@ begin
     select jsonb_build_object('id', q.id, 'enonce', q.enonce, 'matiere', m.nom,
              'options', (select jsonb_agg(o.texte order by o.position) from public.question_options o where o.question_id = q.id),
              'contexte', case when p_mode = 'erreurs' then 'erreurs' else 'revision' end,
-             'etiquette', case when p_mode = 'erreurs' then 'Revanche' else m.nom end,
-             'raison', case when p_mode = 'erreurs' then 'Une question que tu as ratée.' else '' end) j,
+             'etiquette', case when p_mode = 'erreurs' then 'Revanche' when p_mode = 'actu' then 'Actualité' else m.nom end,
+             'raison', case when p_mode = 'erreurs' then 'Une question que tu as ratée.' when p_mode = 'actu' then coalesce(ac.titre, '') else '' end) j,
            row_number() over (order by
              case when p_mode = 'erreurs' then e.revoir_le end asc nulls last,
-             case when v.derniere is null then 0 else 1 end, random()) k
+             case when v.derniere is null then 0 else 1 end,
+             case when p_mode = 'actu' then ac.publie_le end desc nulls last, random()) k
       from public.questions q
       join public.matieres m on m.id = q.matiere_id
       left join public.erreurs_utilisateur e on e.user_id = v_user and e.question_id = q.id
+      left join public.actualite_questions aq on aq.question_id = q.id
+      left join public.actualites ac on ac.id = aq.actualite_id
       left join lateral (select max(t.cree_le) derniere from public.tentatives_question t
                           where t.user_id = v_user and t.question_id = q.id) v on true
      where q.statut = 'publie' and (q.niveau = v_niveau or q.niveau is null)
@@ -31,7 +34,7 @@ begin
        and not public.question_gardee(q.id)
        and case p_mode
              when 'erreurs' then e.id is not null and not e.acquise
-             when 'actu'    then m.nom in ('Culture générale', 'Géopolitique', 'Institutions et AES')
+             when 'actu'    then aq.question_id is not null and ac.statut = 'publie'
              when 'cours'   then m.nom = p_matiere
              else false end
        and (p_mode = 'erreurs' or v.derniere is null or v.derniere < now() - interval '1 day')
