@@ -297,7 +297,7 @@ function rendre(){
   const plus = window.ADMIN && window.ADMIN.vues && window.ADMIN.vues[A.vue];
   if(plus){ try{ history.replaceState(null, '', '#' + A.vue); }catch(e){} $('#vue').scrollTop = 0; plus(); return; }
   try{ history.replaceState(null, '', '#' + A.vue); }catch(e){}
-  ({ priorites:vuePriorites, tableau:vueTableau, bannissement:vueBannissement, acces:vueAcces, apercu:vueApercu, analyse:vueAnalyse, direct:vueDirect, comportement:vueComportement,
+  ({ swipe:vueSwipe, priorites:vuePriorites, tableau:vueTableau, bannissement:vueBannissement, acces:vueAcces, apercu:vueApercu, analyse:vueAnalyse, direct:vueDirect, comportement:vueComportement,
      pedagogie:vuePedagogie, candidats:vueCandidats,
      depot:vueDepot, import:vueImport, bibliotheque:vueBibliotheque,
      validation:vueValidation, questions:vueQuestions, sujets:vueSujets, actualites:vueActualites,
@@ -2916,6 +2916,57 @@ async function vueAvis(){
 /* ============================================================
    INDICATEURS : est-ce que Mon Concours aide vraiment ?
    ============================================================ */
+
+/* ============================================================
+   MODE SWIPE : qui l'ouvre, qui enchaîne, ce qu'ils en disent
+   ============================================================ */
+async function vueSwipe(){
+  const jours = A.swJours || 7;
+  const { data: d, error } = await db.rpc('admin_swipe_stats', { p_jours: jours });
+  if(error) return erreur(error, 'Lecture impossible');
+  const pc = (a, b) => b ? Math.round(100 * a / b) + ' %' : '—';
+  const rep = d.repartition || {}, ong = d.onglets || {};
+  const nomOnglet = { alea:'Aléatoire', erreurs:'Mes erreurs', actu:'Actualité', cours:'Mes cours' };
+  const tuile = (v, l, s) => `<div class="carte" style="flex:1 1 150px;min-width:150px;margin:0"><div style="font-size:26px;font-weight:800;line-height:1.1">${v}</div><div style="font-size:13px;margin-top:4px">${l}</div>${s ? `<small style="color:var(--craie2)">${s}</small>` : ''}</div>`;
+  const barre = (n, tot, c) => `<div style="display:flex;align-items:center;gap:10px;margin:7px 0"><div style="width:150px;font-size:13px">${E(c[0])}</div><div style="flex:1;background:rgba(127,127,127,.18);border-radius:6px;height:12px;overflow:hidden"><div style="width:${tot ? Math.round(100 * n / tot) : 0}%;height:100%;background:${c[1]}"></div></div><div class="num" style="width:70px;text-align:right">${n} (${pc(n, tot)})</div></div>`;
+  $('#vue').innerHTML = `
+    <h2 class="titre">Mode Swipe</h2>
+    <p class="sous">Comment les candidats utilisent le Swipe. Vos comptes et celui de l'investisseur ne sont pas comptés.</p>
+    <div class="bloc"><div style="display:flex;gap:8px;flex-wrap:wrap">
+      ${[[1,'Aujourd\'hui'],[7,'7 jours'],[30,'30 jours']].map(([j, t]) => `<button class="mini${jours === j ? ' on' : ''}" data-sw-jours="${j}">${t}</button>`).join('')}
+    </div></div>
+    <div class="bloc" style="display:flex;gap:10px;flex-wrap:wrap">
+      ${tuile(d.ouvrants, 'Candidats l\'ont ouvert', d.ouvertures + ' ouvertures')}
+      ${tuile(d.finisseurs, 'Ont fini au moins une série', pc(d.finisseurs, d.ouvrants) + ' des ouvrants')}
+      ${tuile(d.series, 'Séries de 10 terminées', d.score_moyen != null ? 'score moyen ' + String(d.score_moyen).replace('.', ',') + ' / 10' : '')}
+      ${tuile(d.record_series, 'Record de séries', 'chez un seul candidat')}
+      ${tuile(d.murs, 'Ont atteint la limite gratuite', pc(d.murs, d.ouvrants) + ' des ouvrants')}
+      ${tuile(d.payeurs, 'Ouvrants ayant payé', 'abonnement confirmé, même avant le Swipe')}
+    </div>
+    <div class="bloc"><div class="libelle">Combien de séries font-ils ?</div><div class="carte">
+      ${barre(rep.aucune || 0, d.ouvrants, ['Aucune (partis avant)', '#c0392b'])}
+      ${barre(rep.une || 0, d.ouvrants, ['Une série', '#c77d00'])}
+      ${barre(rep.deux_trois || 0, d.ouvrants, ['2 à 3 séries', '#2e8b57'])}
+      ${barre(rep.quatre_plus || 0, d.ouvrants, ['4 séries ou plus', '#14503B'])}
+    </div></div>
+    <div class="bloc"><div class="libelle">Par jour</div><div class="carte">
+      ${(d.par_jour || []).length ? `<table><thead><tr><th>Jour</th><th>Candidats</th><th>Séries terminées</th></tr></thead><tbody>
+        ${d.par_jour.map(x => `<tr><td>${E(dateCourte(x.jour))}</td><td class="num">${x.ouvrants}</td><td class="num">${x.series}</td></tr>`).join('')}</tbody></table>` : '<div class="vide">Aucune activité sur la période.</div>'}
+    </div></div>
+    <div class="bloc"><div class="libelle">Onglets utilisés</div><div class="carte">
+      ${Object.keys(ong).length ? Object.keys(ong).map(k => `<span style="display:inline-block;margin:0 14px 4px 0"><b>${E(nomOnglet[k] || k)}</b> <span class="num">${ong[k]}</span></span>`).join('') : '<div class="vide">Personne n\'a changé d\'onglet.</div>'}
+    </div></div>
+    <div class="bloc"><div class="libelle">Ceux qui enchaînent le plus</div><div class="carte">
+      ${(d.meilleurs || []).length ? `<table><thead><tr><th>Candidat</th><th>Séries</th><th>Bonnes réponses</th></tr></thead><tbody>
+        ${d.meilleurs.map(m => `<tr><td><span class="cliquable" data-fiche="${E(m.user_id)}">${E(m.nom || 'Candidat')}</span></td><td class="num">${m.series}</td><td class="num">${m.justes} / ${m.series * 10}</td></tr>`).join('')}</tbody></table>` : '<div class="vide">Aucune série terminée.</div>'}
+    </div></div>
+    <div class="bloc"><div class="libelle">Avis donnés sur le Swipe</div><div class="carte">
+      ${(d.avis || []).length ? d.avis.map(a => `<div style="padding:8px 0;border-bottom:1px solid var(--trait,#333)"><b>${E(a.nom || 'Candidat')}</b> <small style="color:var(--craie2)">${E(dateHeure(a.cree_le))}</small><div>${E(a.message)}</div></div>`).join('') : '<div class="vide">Aucun avis pour le moment.</div>'}
+      <p class="sous" style="margin-top:10px">Pour répondre, aimer ou mettre en vitrine : section « Avis des candidats », ils portent l'étiquette « Avis mode Swipe ».</p>
+    </div></div>`;
+  $$('[data-sw-jours]').forEach(b => b.onclick = () => { A.swJours = +b.dataset.swJours; vueSwipe(); });
+}
+
 async function vueIndicateurs(){
   const [{ data: d, error }, { data: sansExpl }] = await Promise.all([
     db.rpc('indicateurs_produit'),

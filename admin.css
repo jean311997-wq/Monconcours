@@ -541,3 +541,6 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:rgba(79,194,14
   .plage-libre{width:100%}
 }
 @media(max-width:620px){ .carte{overflow-x:auto} }
+
+/* carte « État de la base » : sur téléphone, seule la première ligne reste visible, le détail au toucher */
+@media (max-width:700px){#carte-sante .sante-detail{display:none!important}#carte-sante.ouverte .sante-detail{display:flex!important}#carte-sante{cursor:pointer}}

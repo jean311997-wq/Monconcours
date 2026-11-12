@@ -20,13 +20,14 @@ let prec = null, histo = [], minuteur = null, enCours = false;
 function carte(){
   let c = document.getElementById('carte-sante');
   if(c) return c;
-  const vue = document.getElementById('vue');
-  if(!vue || !vue.parentNode) return null;
+  const corps = document.querySelector('#admin .corps');
+  if(!corps || !corps.parentNode) return null;
   c = document.createElement('div');
   c.id = 'carte-sante';
   c.setAttribute('role', 'status');
-  c.style.cssText = 'margin:0 0 14px;padding:12px 16px;border-radius:10px;border:1px solid var(--trait,#ddd);background:var(--fond2,#fff);font-size:13.5px;line-height:1.45';
-  vue.parentNode.insertBefore(c, vue);
+  c.style.cssText = 'margin:10px 14px 0;padding:10px 14px;border-radius:12px;border:1px solid var(--trait);background:var(--ardoise);color:var(--craie);font-size:13px;line-height:1.45';
+  corps.parentNode.insertBefore(c, corps);
+  c.addEventListener('click', () => c.classList.toggle('ouverte'));
   return c;
 }
 
@@ -87,7 +88,7 @@ async function mesurer(){
       <b style="color:${n.couleur};font-size:15px">État de la base : ${n.nom}</b>
       <span>${n.texte}</span>
     </div>
-    <div style="display:flex;flex-wrap:wrap;gap:4px 22px;margin-top:6px;color:var(--craie2,#555)">
+    <div class="sante-detail" style="display:flex;flex-wrap:wrap;gap:4px 22px;margin-top:6px;color:var(--craie2)">
       <span>Temps de réponse : <b>${lat} ms</b></span>
       <span>Lectures disque : <b>${lecturesParS}/s</b> (pic ${pic}/s sur 30 min)</span>
       <span>Requêtes actives : <b>${data.actives}</b>${data.lentes ? ` dont <b style="color:#c0392b">${data.lentes} bloquée(s) &gt; 5 s</b>` : ''}</span>
@@ -95,7 +96,7 @@ async function mesurer(){
       <span>Taille : <b>${data.taille_mo} Mo / ${data.limite_mo} Mo</b> (${rempli} %)</span>
       ${cache != null ? `<span>Lu en mémoire : <b>${cache} %</b></span>` : ''}
     </div>
-    <div style="margin-top:6px;font-size:12px;color:var(--craie2,#666)">Estimation faite ici : la réserve exacte de disque du plan gratuit n'est visible que dans le tableau de bord Supabase. Mise à jour chaque minute.</div>`;
+    <div class="sante-detail" style="margin-top:6px;font-size:12px;color:var(--craie2)">Estimation faite ici : la réserve exacte de disque du plan gratuit n'est visible que dans le tableau de bord Supabase. Mise à jour chaque minute.</div>`;
 }
 
 function demarrer(){

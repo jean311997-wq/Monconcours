@@ -1,0 +1,2 @@
+-- Admin : statistiques du mode Swipe (vue « Mode Swipe », avant Priorités).
+-- Voir la fonction public.admin_swipe_stats(p_jours) appliquée en base (lecteurs de l'équipe seulement).
