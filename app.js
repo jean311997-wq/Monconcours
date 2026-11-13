@@ -354,8 +354,9 @@ window.addEventListener('beforeunload', e => {
    position dans un QCM. Le candidat ne recommence rien. */
 (function reprendreReglages(){
   const r = lireReglages();
-  if(r.theme === 'sombre' || r.theme === 'clair') S.theme = r.theme;
-  if(r.themeSwipe === 'sombre' || r.themeSwipe === 'clair') S.themeSwipe = r.themeSwipe;
+  /* sans choix de sa part : clair de 7 h à 18 h, sombre ensuite */
+  if(r.theme === 'sombre' || r.theme === 'clair'){ S.theme = r.theme; S.themeChoix = r.theme; }
+  else { S.themeChoix = 'auto'; S.theme = heureTheme(); }
   if(PARCOURS_CONNUS.includes(r.parcours)) S.parcours = r.parcours;
   /* Lien d'aperçu : ?apercu=normal | b | e1 | e2 (et l'ancien xx1) montre ce parcours sur ce téléphone */
   try{
@@ -6767,11 +6768,8 @@ function swPoints(w){
     const r = k < w.idx ? (x._saut ? 's' : (x._ok ? 'ok' : 'ko')) : (k === w.idx ? (w.c && w.c.ok ? (w.c.correcte ? 'ok' : 'ko') : 'f') : '');
     return `<i class="${r}"></i>`; }).join('')}</div>`;
 }
-/* Swipe : clair de 7 h à 18 h, sombre le reste du temps, sauf si la personne a choisi */
-function swThemeEffectif(){
-  if(S.themeSwipe === 'clair' || S.themeSwipe === 'sombre') return S.themeSwipe;
-  const h = new Date().getHours(); return h >= 7 && h < 18 ? 'clair' : 'sombre';
-}
+/* le Swipe suit le thème de l'application (automatique : clair de 7 h à 18 h) */
+function swThemeEffectif(){ return S.theme === 'sombre' ? 'sombre' : 'clair'; }
 function swBoutonTheme(cl){
   const c = swThemeEffectif() === 'clair';
   return `<button class="sw-x ${cl}" data-sw-theme="1" aria-label="${c ? 'Passer en mode sombre' : 'Passer en mode clair'}">${c ? ico('lune',16) : ico('soleil',16)}</button>`;
@@ -7057,7 +7055,7 @@ document.addEventListener('click', ev => {
   if(d.swEntrer) return swPasser(swEntrer);
   if(d.swRep !== undefined) return swRepondre(+d.swRep);
   if(d.swSuiv) return swPasser(() => swSuivante());
-  if(d.swTheme){ S.themeSwipe = swThemeEffectif() === 'clair' ? 'sombre' : 'clair'; ecrireReglage('themeSwipe', S.themeSwipe); return ecranSwipe(); }
+  if(d.swTheme){ S.theme = S.theme === 'sombre' ? 'clair' : 'sombre'; S.themeChoix = S.theme; ecrireReglage('theme', S.theme); appliquerTheme(); return ecranSwipe(); }
   if(d.swRevenir) return swPasser(swRevenirRevue);
   if(d.swQuitter) return swQuitter();
   if(d.swPalier) return swPasser(swApresPalier);
@@ -9689,10 +9687,17 @@ function annoncer(){
   const a = document.getElementById('annonce');
   if(a && n) a.textContent = 'Écran : ' + n;
 }
-function appliquerTheme(){ document.body.dataset.theme = S.theme; }
+function heureTheme(){ const h = new Date().getHours(); return h >= 7 && h < 18 ? 'clair' : 'sombre'; }
+function appliquerTheme(){ if(S.themeChoix === 'auto') S.theme = heureTheme(); document.body.dataset.theme = S.theme; }
+setInterval(() => {
+  if(S.themeChoix !== 'auto' || heureTheme() === S.theme) return;
+  document.body.classList.add('en-transition'); appliquerTheme();
+  if(S.ecran === 'swipe' && S.sw) ecranSwipe(); else rendre();
+  setTimeout(() => document.body.classList.remove('en-transition'), 480);
+}, 60000);
 function basculerTheme(){
   document.body.classList.add('en-transition');
-  S.theme = S.theme==='sombre' ? 'clair' : 'sombre';
+  S.theme = S.theme==='sombre' ? 'clair' : 'sombre'; S.themeChoix = S.theme;
   ecrireReglage('theme', S.theme);
   rendre();
   clearTimeout(S.tTheme);
@@ -9898,13 +9903,18 @@ function ecranApparence(){
     <h1 class="titre">Apparence</h1>
     <p class="sous" style="margin:8px 0 18px">Même application, deux ambiances. Le choix s'applique tout de suite, partout.</p>
 
-    <button class="theme-carte ${S.theme==='sombre'?'on':''}" data-theme-choix="sombre" aria-pressed="${S.theme==='sombre'}">
-      ${S.theme==='sombre'?'<span class="coche">ACTIF</span>':''}
+    <button class="theme-carte ${S.themeChoix==='auto'?'on':''}" data-theme-choix="auto" aria-pressed="${S.themeChoix==='auto'}">
+      ${S.themeChoix==='auto'?'<span class="coche">ACTIF</span>':''}
+      <div class="demo"><i style="background:#F5F5F0"></i><i style="background:#14211C"></i><i style="background:#13805A"></i></div>
+      <b>Automatique</b><span>Clair de 7 h à 18 h, sombre le reste du temps</span>
+    </button>
+    <button class="theme-carte ${S.themeChoix==='sombre'?'on':''}" data-theme-choix="sombre" aria-pressed="${S.themeChoix==='sombre'}">
+      ${S.themeChoix==='sombre'?'<span class="coche">ACTIF</span>':''}
       <div class="demo"><i style="background:#14211C"></i><i style="background:#0C1512"></i><i style="background:#13805A"></i></div>
       <b>Mode sombre</b><span>Vert Faso sur fond nuit, pensé pour le soir</span>
     </button>
-    <button class="theme-carte ${S.theme==='clair'?'on':''}" data-theme-choix="clair" aria-pressed="${S.theme==='clair'}">
-      ${S.theme==='clair'?'<span class="coche">ACTIF</span>':''}
+    <button class="theme-carte ${S.themeChoix==='clair'?'on':''}" data-theme-choix="clair" aria-pressed="${S.themeChoix==='clair'}">
+      ${S.themeChoix==='clair'?'<span class="coche">ACTIF</span>':''}
       <div class="demo"><i style="background:#F5F5F0"></i><i style="background:#FFFFFF"></i><i style="background:#0B6B4A"></i></div>
       <b>Mode clair</b><span>Fond clair, cartes blanches, texte foncé, mêmes couleurs</span>
     </button>
@@ -10297,9 +10307,9 @@ document.addEventListener('click', ev=>{
   if(d.cours){ return; }
   if(d.badges){ S.voirBadges = !S.voirBadges; return rendre(); }
   if(d.themeChoix){
-    if(d.themeChoix===S.theme) return;
+    if(d.themeChoix===S.themeChoix) return;
     document.body.classList.add('en-transition');
-    S.theme = d.themeChoix; ecrireReglage('theme', S.theme); rendre();
+    S.themeChoix = d.themeChoix; S.theme = d.themeChoix === 'auto' ? heureTheme() : d.themeChoix; ecrireReglage('theme', d.themeChoix); rendre();
     clearTimeout(S.tTheme);
     S.tTheme = setTimeout(()=>document.body.classList.remove('en-transition'), 480);
     return;
