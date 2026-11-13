@@ -6618,7 +6618,7 @@ function swCompter(w, q, r){
     sonJuste();
     if(w.serie > w.record){ w.record = w.serie; swEcrire('record', w.record); w.nouveauRecord = true; }
   } else { w.serie = 0; w.gain = -1; w.pts -= 1; sonFaux(); }
-  w.jour++; w.fete = swFelicite(w);
+  w.jour++; w.fete = swFelicite(w); swEcrire('compte', { d: aujourdhuiIso(), n: w.jour });
   compterReponse();
   if(w.idx >= w.lot.length - 4) swPrecharger();
 }
@@ -9614,6 +9614,34 @@ function basculerTheme(){
 /* --- surcouche d'inscription différée --- */
 const COULEURS = ['Rouge','Bleu','Vert','Jaune','Orange','Noir','Blanc','Marron','Violet'];
 
+/* ---------- invitation au Swipe : une fois par jour, pour qui a déjà joué, sur l'accueil (jamais dans le Swipe) ---------- */
+const T_OUV_SWIPE = Date.now();
+function majInvitSwipe(){
+  const b = document.getElementById('invit-swipe');
+  const ok = S.ecran === 'aujourdhui' && S.util && S.util.connecte && !enComposition() && !S.modal &&
+    swLire('vu', 0) && lireReglages().invitSwipe !== aujourdhuiIso() && !document.getElementById('bandeau-appli');
+  if(!ok){ if(b && S.ecran !== 'aujourdhui') b.remove(); return; }
+  if(b || Date.now() - T_OUV_SWIPE < 12000) return;
+  const c = swLire('compte', null), auj = aujourdhuiIso();
+  if(c && c.d === auj) return;                       // il a déjà joué aujourd'hui
+  ecrireReglage('invitSwipe', auj);
+  const txt = c && c.n >= 10 ? `La dernière fois : ${nombreFr(c.n)} questions. Tu fais mieux aujourd'hui ?` : 'Une série de 20 questions t\'attend.';
+  const el = document.createElement('div');
+  el.id = 'invit-swipe'; el.className = 'invit-swipe'; el.setAttribute('role', 'status');
+  el.innerHTML = `<span class="is-ico">${ico('flamme',18)}</span><span class="is-txt"><b>Mode Swipe</b><small>${E(txt)}</small></span>
+    <button type="button" class="is-go" data-is="go">J'y vais</button><button type="button" class="is-x" data-is="x" aria-label="Fermer">×</button>`;
+  el.onclick = ev => {
+    const t = ev.target.closest('button'); if(!t) return;
+    el.remove();
+    if(t.dataset.is === 'go'){ pister('SWIPE_INVIT_CLIC'); lancerSwipe(); }
+  };
+  document.getElementById('apptete').insertAdjacentElement('afterend', el);
+  el.style.setProperty('--tete-h', ((document.getElementById('apptete') || {}).offsetHeight || 56) + 8 + 'px');
+  pister('SWIPE_INVIT_VUE');
+  setTimeout(() => { if(el.isConnected) el.remove(); }, 9000);
+}
+setTimeout(() => { try{ majInvitSwipe(); }catch(e){} }, 12500);
+
 /* ---------- bandeau « Télécharger l'application » : toujours visible, sous l'en-tête ---------- */
 const CLE_BANDEAU = 'mc_bandeau_appli_ferme';
 function bandeauAppliRecemmentFerme(){
@@ -9855,7 +9883,7 @@ function rendre(){
         <button class="cta creux" style="margin-top:9px" onclick="location.reload()">Recharger</button>
       </div>`;
   }
-  try{ nav(); apptete(); majBandeauAppli(); annoncer(); surcouche(); appliquerConcentration(); }catch(e){ console.error(e); }
+  try{ nav(); apptete(); majBandeauAppli(); majInvitSwipe(); annoncer(); surcouche(); appliquerConcentration(); }catch(e){ console.error(e); }
   try{ animerApresRendu(); }catch(e){}
 }
 
