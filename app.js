@@ -9622,7 +9622,7 @@ function fermerBandeauAppli(){
 function majBandeauAppli(){
   let b = document.getElementById('bandeau-appli');
   const visible = S.ecran === 'aujourdhui' && !estInstallee() && !enComposition() && !S.modal &&
-    (S.installer && !S.appliLa && !bandeauAppliRecemmentFerme());
+    (!S.appliLa && !bandeauAppliRecemmentFerme());
   if(!visible){ if(b) b.remove(); return; }
   if(!b){
     b = document.createElement('div');
@@ -9633,7 +9633,7 @@ function majBandeauAppli(){
       telechargerAppli();
     };
     document.getElementById('apptete').insertAdjacentElement('afterend', b);
-    setTimeout(() => fermerBandeauAppli(), 25000);
+    setTimeout(() => fermerBandeauAppli(), 10000);
   }
   { const n = document.getElementById('nav');
     b.style.setProperty('--nav-h', ((n && n.offsetHeight) || 64) + 'px');
