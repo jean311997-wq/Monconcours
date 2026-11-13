@@ -6911,12 +6911,33 @@ function swMur(w, c){
 }
 
 /* la bulle d'entrée sur l'accueil */
+const BULLE_ROTATION_MS = 30 * 60000;   // la bulle change de côté toutes les 30 minutes
+function etatBulle(){
+  let e = lireReglages().bulleSwipe;
+  if(!e || (e.cote !== 'd' && e.cote !== 'g')) e = { cote: 'd', t: Date.now() };
+  if(!e.t) e.t = Date.now();
+  return e;
+}
 function bulleSwipe(){
   const hNav = ((document.getElementById('nav') || {}).offsetHeight) || 64;
-  const pos = lireReglages().bulleSwipe;   // place choisie par le candidat (appui long puis glisser)
-  const ici = pos && pos.x >= 0 && pos.y >= 0 ? `left:${Math.round(pos.x * 1000) / 10}vw;top:${Math.round(pos.y * 1000) / 10}vh;bottom:auto;` : '';
-  return `<button class="sw-bulle" style="--nav-h:${hNav}px;${ici}" data-swipe="1" aria-label="Ouvrir le mode Swipe (appui long pour la déplacer)"><b>SWIPE</b><i>LIVE</i></button>`;
+  let e = etatBulle();
+  if(Date.now() - e.t >= BULLE_ROTATION_MS){ e = { cote: e.cote === 'd' ? 'g' : 'd', t: Date.now() }; }
+  ecrireReglage('bulleSwipe', e);
+  const pos = e.x >= 0 && e.y >= 0 && e.x !== undefined ? e : null;   // place choisie par le candidat (appui long puis glisser)
+  const ici = pos ? `left:${Math.round(pos.x * 1000) / 10}vw;top:${Math.round(pos.y * 1000) / 10}vh;bottom:auto;` : '';
+  return `<button class="sw-bulle${e.cote === 'g' ? ' cote-g' : ''}" style="--nav-h:${hNav}px;${ici}" data-swipe="1" aria-label="Ouvrir le mode Swipe (appui long pour la déplacer)"><b>SWIPE</b><i>LIVE</i></button>`;
 }
+/* toutes les 30 minutes la bulle glisse de l'autre côté de l'écran, sous les yeux du candidat */
+setInterval(() => {
+  const c = document.querySelector('.sw-bulle');
+  if(!c || document.hidden || c.classList.contains('sw-bulle-prise')) return;
+  const e = etatBulle();
+  if(Date.now() - e.t < BULLE_ROTATION_MS) return;
+  ecrireReglage('bulleSwipe', { cote: e.cote === 'd' ? 'g' : 'd', t: Date.now() });
+  c.style.left = ''; c.style.top = ''; c.style.bottom = '';
+  c.classList.toggle('cote-g', e.cote === 'd');
+  pister('SWIPE_BULLE_COTE', { cote: e.cote === 'd' ? 'gauche' : 'droite' });
+}, 20000);
 /* appui long sur la bulle : elle se décolle et suit le doigt ; relâchée, elle reste à sa nouvelle place */
 (function(){
   let b = null, minuterie = null, x0 = 0, y0 = 0, dx = 0, dy = 0, deplace = false, bloquerClic = false;
@@ -6944,7 +6965,7 @@ function bulleSwipe(){
     if(b && deplace){
       b.classList.remove('sw-bulle-prise');
       const r = b.getBoundingClientRect();
-      ecrireReglage('bulleSwipe', { x: r.left / window.innerWidth, y: r.top / window.innerHeight });
+      ecrireReglage('bulleSwipe', Object.assign(etatBulle(), { x: r.left / window.innerWidth, y: r.top / window.innerHeight }));
       bloquerClic = true; setTimeout(() => { bloquerClic = false; }, 400);
       pister('SWIPE_BULLE_DEPLACEE');
     }
@@ -9533,6 +9554,8 @@ function majBoutonCanal(){
   const nav = document.getElementById('nav');
   b.style.setProperty('--nav-h', ((nav && nav.offsetHeight) || 0) + 'px');
 }
+function signalerFabCanal(){ document.body.classList.toggle('fab-canal-on', !!document.getElementById('fab-canal')); }
+setInterval(signalerFabCanal, 2000);
 setInterval(() => { if(!document.hidden) majBoutonCanal(); }, 4000);
 function apptete(){
   majBoutonCanal();

@@ -2500,3 +2500,9 @@ body.swipe-on .fab-canal,body.swipe-on .sw-bulle{display:none!important}
 /* bulle Swipe déplaçable : appui long */
 .sw-bulle{touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .sw-bulle.sw-bulle-prise{animation:none;transform:scale(1.12);box-shadow:0 14px 30px rgba(20,80,59,.5),0 0 0 8px rgba(47,194,133,.22);transition:transform .15s}
+
+/* bulle Swipe : au-dessus du bouton WhatsApp (même zone, en bas à droite), elle change de côté toutes les 30 minutes */
+.sw-bulle{left:calc(100% - 76px);bottom:calc(var(--nav-h,0px) + env(safe-area-inset-bottom,0px) + 14px);transition:left .9s cubic-bezier(.5,0,.2,1),bottom .9s cubic-bezier(.5,0,.2,1),top .9s,transform .15s}
+body.fab-canal-on .sw-bulle:not(.cote-g):not([style*="top"]){bottom:calc(var(--nav-h,0px) + env(safe-area-inset-bottom,0px) + 80px)}
+.sw-bulle.cote-g{left:14px}
+.sw-bulle.sw-bulle-prise{transition:none}
