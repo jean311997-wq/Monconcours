@@ -6475,12 +6475,12 @@ async function repondreFil(i){
    Ce qui fait revenir : la note estimée qui bouge à chaque réponse, le rang
    parmi les candidats, la barre (la note des 20 % les mieux placés), la série
    de bonnes réponses, la série de jours, les questions tombées au concours.
-   Léger : une lecture à l'entrée (swipe_etat), un lot de 10 questions à la
+   Léger : une lecture à l'entrée (swipe_etat), un lot de 20 questions à la
    fois (swipe_lot, préchargé), chaque réponse corrigée par corriger_question
    comme dans « Pour toi » (mêmes quotas, même blocus). Le rang se calcule ici,
    sur le téléphone, avec l'histogramme des notes envoyé à l'entrée.
    ====================================================================== */
-const SW_LOT = 10;
+const SW_LOT = 20;
 const swNote = (c, n) => Math.round(200 * (c + 6) / (n + 12)) / 10;
 const swFr = (x, d) => (Math.round(x * 10) / 10).toLocaleString('fr-FR', { minimumFractionDigits: d === undefined ? 1 : d, maximumFractionDigits: 1 });
 function swCle(k){ return 'sw-' + k + '-' + ((S.util && S.util.tel) || 'x'); }
@@ -6614,10 +6614,10 @@ function swCompter(w, q, r){
   const m = q.matiere || 'Autre'; w.avant.mat[m] = w.avant.mat[m] || { j:0, n:0 }; w.avant.mat[m].n++;
   if(r.correcte){
     w.serie++; w.avant.justes++; w.avant.mat[m].j++;
-    w.gain = 5 * (w.serie >= 3 ? 2 : 1) * (q.annale ? 2 : 1); w.pts += w.gain;
+    w.gain = 1; w.pts += 1;
     sonJuste();
     if(w.serie > w.record){ w.record = w.serie; swEcrire('record', w.record); w.nouveauRecord = true; }
-  } else { w.serie = 0; w.gain = 0; sonFaux(); }
+  } else { w.serie = 0; w.gain = -1; w.pts -= 1; sonFaux(); }
   compterReponse();
   if(w.idx >= w.lot.length - 4) swPrecharger();
 }
@@ -6660,7 +6660,7 @@ function swSuivante(sansPalier){
   }
   w.palierVu = false;
   w.idx++; w.rep = undefined; w.c = null; w.gain = 0; w.t0 = Date.now(); w.nouveauRecord = false;
-  if(w.idx >= w.lot.length){ w.phase = 'bilan'; pister('SWIPE_LOT_DONE', { justes: w.avant.justes, n: w.lot.length }); swPrecharger(); ecranSwipe(); return swLancerCompte(); }
+  if(w.idx >= w.lot.length){ w.phase = 'bilan'; pister('SWIPE_LOT_DONE', { justes: w.avant.justes, n: w.lot.length }); swPrecharger(); ecranSwipe(); if(w.avant.justes === w.lot.length && !w.avant.passees) setTimeout(() => confettis(document.querySelector('.sw-bilan')), 400); return swLancerCompte(); }
   w.phase = 'jeu';
   ecranSwipe();
   const v = document.querySelector('.sw'); if(v) v.scrollTop = 0;
@@ -6706,18 +6706,16 @@ function swTableau(w){
   let l3 = manque > 0 ? `Plus que <b>${swFr(manque)} point${manque >= 2 ? 's' : ''}</b> pour la zone des 20 % les mieux placés` : `<b class="sw-v">Tu es dans la zone des 20 % les mieux placés.</b>`;
   if(w.c && w.c.ok && w.passes > 0) l3 = `<b class="sw-v">Tu passes devant ${nombreFr(w.passes)} candidat${w.passes > 1 ? 's' : ''}.</b> ` + (manque > 0 ? `Plus que <b>${swFr(manque)}</b>` : '');
   if(w.c && w.c.ok && w.passes < 0) l3 = `<b class="sw-r">${nombreFr(-w.passes)} candidat${w.passes < -1 ? 's repassent' : ' repasse'} devant toi.</b> Reprends-les à la suivante.`;
-  const d = w.c && w.c.ok ? w.delta : null;
   const repondu = w.c && w.c.ok;
   return `<div class="sw-tb sw-tb-mini">
-    <div class="sw-tb2"><b class="sw-note">${swFr(note)}</b><small>/20</small>${d !== null && d !== 0 ? `<i class="sw-var ${d > 0 ? 'up' : 'dn'}">${d > 0 ? '+' : '−'}${swFr(Math.abs(d))}</i>` : ''}${rang ? `<span class="sw-rang">rang <b>${nombreFr(rang)}ᵉ</b> / ${nombreFr(e.total)}</span>` : ''}</div>
+    <div class="sw-tb2"><b class="sw-note">${swFr(note)}</b><small>/20</small>${rang ? `<span class="sw-rang">rang <b>${nombreFr(rang)}ᵉ</b> / ${nombreFr(e.total)}</span>` : ''}</div>
     <div class="sw-barre"><i style="width:${pos}%"></i><u style="left:${seuil}%"></u></div>
     ${repondu ? `<div class="sw-tb3">${l3}</div>` : ''}</div>`;
 }
 function swHaut(w){
   return `<div class="sw-haut"><button class="sw-x" data-sw-quitter="1" aria-label="Quitter le mode Swipe">✕</button>
     <span class="sw-serie${w.serie >= 3 ? ' chaud' : ''}">${ico('flamme',14)} ${w.serie ? 'Série ' + w.serie : 'Série'}</span>
-    ${w.serie >= 3 ? '<span class="sw-combo">×2</span>' : ''}
-    <span class="sw-pts">+${nombreFr(w.pts)} pts</span></div>${swOnglets(w)}`;
+    <span class="sw-pts">${w.pts > 0 ? '+' : (w.pts < 0 ? '−' : '')}${nombreFr(Math.abs(w.pts))} pt${Math.abs(w.pts) > 1 ? 's' : ''}</span></div>${swOnglets(w)}`;
 }
 function swPoints(w){
   return `<div class="sw-pts-lot">${w.lot.map((x, k) => {
@@ -6803,7 +6801,7 @@ function swJeu(w){
     ${rep !== undefined && !c ? `<p class="sw-petit">Correction…</p>` : ''}
     ${c && !c.ok && !c.quota ? `<div class="sw-retour ko"><b>Correction indisponible</b><span>${E(c.message || '')}</span></div><button class="sw-cta creux" data-sw-reessayer="1">Réessayer</button>` : ''}
     ${retour}
-    ${fini && w.gain ? `<div class="sw-gain" aria-hidden="true">+${w.gain}${w.serie >= 3 ? '<small>combo ×2</small>' : ''}</div>` : ''}
+    ${fini && w.gain ? `<div class="sw-gain${w.gain < 0 ? ' dn' : ''}" aria-hidden="true">${w.gain < 0 ? '−1' : '+1'}</div>` : ''}
     ${fini && w.nouveauRecord && w.serie >= 5 ? `<p class="sw-record">${ico('flamme',14)} Nouveau record : ${w.serie} d'affilée</p>` : ''}
   </div>
   ${fini ? `<div class="sw-glisse"><span class="sw-fleche">⌃</span>Glisse vers le haut<button data-sw-suiv="1">Suivante</button></div>` : (rep === undefined ? `<div class="sw-glisse discret"><span class="sw-fleche">⌃</span>Glisse pour passer cette question</div>` : '')}
@@ -6878,8 +6876,8 @@ function swBilan(w){
   const texte = 'J\'ai fait ' + a.justes + ' sur ' + (w.lot.length - (a.passees || 0)) + ' en mode Swipe sur Mon Concours. Ma note estimée : ' + swFr(note) + '/20. Tu fais mieux ? ' + CONTACT.site;
   return `<div class="sw-bilan">
     ${swOnglets(w)}
-    <div class="sw-eyebrow">Série ${w.lotNum} terminée</div>
-    <h1>${a.justes} sur ${w.lot.length - (a.passees || 0)}</h1>${a.passees ? `<p class="sw-petit" style="margin:-10px 0 14px">${a.passees} question${a.passees > 1 ? 's passées' : ' passée'}</p>` : ''}
+    <div class="sw-eyebrow">${a.justes === w.lot.length && !a.passees ? 'Sans faute' : 'Série ' + w.lotNum + ' terminée'}</div>
+    <h1>${a.justes} sur ${w.lot.length - (a.passees || 0)}</h1>${a.justes === w.lot.length && !a.passees ? `<p class="sw-fete-txt">Félicitations, vous avez fait ${w.lot.length} sur ${w.lot.length} !</p>` : ''}${a.passees ? `<p class="sw-petit" style="margin:-10px 0 14px">${a.passees} question${a.passees > 1 ? 's passées' : ' passée'}</p>` : ''}
     <div class="sw-carte-note">
       <div class="sw-tb1"><span>Ma note estimée</span>${rang ? '<span>Mon rang</span>' : ''}</div>
       <div class="sw-avap"><b>${swFr(a.note)} → <span class="${note >= a.note ? 'sw-v' : 'sw-r'}">${swFr(note)}</span></b>${rang && a.rang ? `<b>${nombreFr(a.rang)}ᵉ → <span class="${rang <= a.rang ? 'sw-v' : 'sw-r'}">${nombreFr(rang)}ᵉ</span></b>` : ''}</div>

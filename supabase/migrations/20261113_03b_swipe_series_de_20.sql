@@ -1,0 +1,2 @@
+-- Swipe : séries de 20 questions (swipe_lot et swipe_lot_choix plafonnent à 20) ;
+-- admin_swipe_stats renvoie les vrais totaux de questions. Appliquée via MCP.

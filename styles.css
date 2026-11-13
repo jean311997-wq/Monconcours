@@ -2522,3 +2522,6 @@ body.fab-canal-on .sw-bulle:not(.cote-g):not([style*="top"]){bottom:calc(var(--n
 .bandeau-appli{z-index:45;gap:10px}
 .bandeau-appli .ba-txt small{white-space:nowrap;font-size:12px}
 .bandeau-appli .bandeau-appli-go{padding:10px 16px;font-size:14px}
+
+.sw-gain.dn{color:var(--sr);text-shadow:0 0 24px rgba(239,90,95,.5)}
+.sw-fete-txt{margin:-8px 0 16px;font-size:17px;font-weight:700;color:var(--sv)}
