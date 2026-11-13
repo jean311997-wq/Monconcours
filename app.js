@@ -6525,14 +6525,14 @@ function swPrecharger(){
 function lancerSwipe(){
   if(!S.util.connecte){ S.modal = 'inscription'; S.erreur = ''; return surcouche(); }
   swArreterCompte();
-  S.sw = { phase:'entree', lot:null, idx:0, rep:undefined, c:null, serie:0, pts:0, n:0, cc:0,
+  S.sw = { phase:'entree', lot:null, idx:0, rep:undefined, c:null, serie:0, pts:0, n:0, cc:0, jour:0, hier:0,
     record: swLire('record', 0), lotNum: 0, debut: Date.now(), mode: 'alea', mat: null, niv: niveauCand() };
   aller('swipe');
   pister('SWIPE_OPENED');
   const direct = !!swLire('vu', 0);       // déjà venu : on ne repasse l'écran d'entrée qu'au premier passage du jour
   const pe = swEtatCharger(true).then(e => {
     const w = S.sw; if(!w) return;
-    if(e){ w.n = +e.n || 0; w.cc = +e.c || 0; }
+    if(e){ w.n = +e.n || 0; w.cc = +e.c || 0; w.jour = +e.mes_jour || 0; w.hier = +e.mes_hier || 0; }
     if(S.ecran === 'swipe' && !direct) ecranSwipe();
   });
   const pl = swLotCharger().then(l => { const w = S.sw; if(!w || w.mode !== 'alea' || w.tok || !['entree','charge'].includes(w.phase)) return; w.lot = l; w.lotErreur = !l.length; if(S.ecran === 'swipe' && w.phase === 'entree' && !direct) ecranSwipe(); });
@@ -6618,8 +6618,15 @@ function swCompter(w, q, r){
     sonJuste();
     if(w.serie > w.record){ w.record = w.serie; swEcrire('record', w.record); w.nouveauRecord = true; }
   } else { w.serie = 0; w.gain = -1; w.pts -= 1; sonFaux(); }
+  w.jour++; w.fete = swFelicite(w);
   compterReponse();
   if(w.idx >= w.lot.length - 4) swPrecharger();
+}
+/* un petit mot quand le total du jour passe un cap, ou dépasse celui d'hier */
+const SW_CAPS = { 20:'Belle séance.', 50:'Tu es lancé.', 100:'Excellent travail.', 150:'Tu ne lâches rien.', 200:'Impressionnant.', 300:'Quelle journée de travail.', 500:'Bravo, quelle persévérance.' };
+function swFelicite(w){
+  if(w.hier >= 10 && w.jour === w.hier + 1) return `Tu dépasses hier (${nombreFr(w.hier)} questions). Continue.`;
+  return SW_CAPS[w.jour] ? `${nombreFr(w.jour)} questions aujourd'hui. ${SW_CAPS[w.jour]}` : '';
 }
 async function swRepondre(i){
   const w = S.sw; if(!w || w.phase !== 'jeu' || w.rep !== undefined) return;
@@ -6659,7 +6666,7 @@ function swSuivante(sansPalier){
     w.palierVu = true; w.phase = 'palier'; return ecranSwipe();
   }
   w.palierVu = false;
-  w.idx++; w.rep = undefined; w.c = null; w.gain = 0; w.t0 = Date.now(); w.nouveauRecord = false;
+  w.idx++; w.rep = undefined; w.c = null; w.gain = 0; w.fete = ''; w.t0 = Date.now(); w.nouveauRecord = false;
   if(w.idx >= w.lot.length){ w.phase = 'bilan'; pister('SWIPE_LOT_DONE', { justes: w.avant.justes, n: w.lot.length }); swPrecharger(); ecranSwipe(); if(w.avant.justes === w.lot.length && !w.avant.passees) setTimeout(() => confettis(document.querySelector('.sw-bilan')), 400); return swLancerCompte(); }
   w.phase = 'jeu';
   ecranSwipe();
@@ -6715,7 +6722,7 @@ function swTableau(w){
 function swHaut(w){
   return `<div class="sw-haut"><button class="sw-x" data-sw-quitter="1" aria-label="Quitter le mode Swipe">✕</button>
     <span class="sw-serie${w.serie >= 3 ? ' chaud' : ''}">${ico('flamme',14)} ${w.serie ? 'Série ' + w.serie : 'Série'}</span>
-    <span class="sw-pts">${w.pts > 0 ? '+' : (w.pts < 0 ? '−' : '')}${nombreFr(Math.abs(w.pts))} pt${Math.abs(w.pts) > 1 ? 's' : ''}</span></div>${swOnglets(w)}`;
+    <span class="sw-pts" aria-label="Questions traitées aujourd'hui"><b>${nombreFr(w.jour || 0)}</b> question${(w.jour || 0) > 1 ? 's' : ''} aujourd'hui</span></div>${swOnglets(w)}`;
 }
 function swPoints(w){
   return `<div class="sw-pts-lot">${w.lot.map((x, k) => {
@@ -6802,6 +6809,7 @@ function swJeu(w){
     ${c && !c.ok && !c.quota ? `<div class="sw-retour ko"><b>Correction indisponible</b><span>${E(c.message || '')}</span></div><button class="sw-cta creux" data-sw-reessayer="1">Réessayer</button>` : ''}
     ${retour}
     ${fini && w.gain ? `<div class="sw-gain${w.gain < 0 ? ' dn' : ''}" aria-hidden="true">${w.gain < 0 ? '−1' : '+1'}</div>` : ''}
+    ${fini && w.fete ? `<p class="sw-record">${ico('flamme',14)} ${E(w.fete)}</p>` : ''}
     ${fini && w.nouveauRecord && w.serie >= 5 ? `<p class="sw-record">${ico('flamme',14)} Nouveau record : ${w.serie} d'affilée</p>` : ''}
   </div>
   ${fini ? `<div class="sw-glisse"><span class="sw-fleche">⌃</span>Glisse vers le haut<button data-sw-suiv="1">Suivante</button></div>` : (rep === undefined ? `<div class="sw-glisse discret"><span class="sw-fleche">⌃</span>Glisse pour passer cette question</div>` : '')}

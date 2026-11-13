@@ -1,0 +1,1 @@
+-- swipe_etat renvoie mes_jour (questions traitées aujourd'hui) et mes_hier. Appliquée via MCP.

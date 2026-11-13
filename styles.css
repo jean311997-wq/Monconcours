@@ -2525,3 +2525,4 @@ body.fab-canal-on .sw-bulle:not(.cote-g):not([style*="top"]){bottom:calc(var(--n
 
 .sw-gain.dn{color:var(--sr);text-shadow:0 0 24px rgba(239,90,95,.5)}
 .sw-fete-txt{margin:-8px 0 16px;font-size:17px;font-weight:700;color:var(--sv)}
+.sw-pts{font-size:12.5px;text-align:right;line-height:1.2}.sw-pts b{color:#fff;font-size:15px}
