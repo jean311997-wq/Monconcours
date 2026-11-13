@@ -1,0 +1,3 @@
+-- Mode Swipe en test : corriger_question accepte p_origine = 'swipe' (aucune limite, réponses
+-- marquées origine='swipe' et exclues des quotas des autres modes). Appliquée via MCP.
+-- Pour remettre les limites : v_libre := false dans la fonction.

@@ -2303,14 +2303,14 @@ async function utilisateurCourant(){
 
 /* Une réponse de révision ou de reprise est corrigée par le serveur.
    Il enregistre la tentative, le cahier d'erreurs, les points et l'assiduité. */
-async function corrigerAuServeur(questionId, choix, contexte, tempsMs){
+async function corrigerAuServeur(questionId, choix, contexte, tempsMs, origine){
   if(!base) return { ok:false, message:"Pas de connexion au serveur pour l'instant." };
   try{
     const { data, error } = await base.rpc('corriger_question', {
       p_question: questionId, p_choix: choix, p_contexte: contexte,
-      p_temps_ms: tempsMs || null, p_session: O.session || null });
+      p_temps_ms: tempsMs || null, p_session: O.session || null, p_origine: origine || null });
     if(error) throw error;
-    noterCorrectionHabitue(contexte, data);
+    if(origine !== 'swipe') noterCorrectionHabitue(contexte, data);
     return data || { ok:false, message:'Réponse vide du serveur.' };
   }catch(e){
     return { ok:false, reseau:true, message:"La correction n'a pas pu être chargée. Vérifiez votre connexion et réessayez." };
@@ -6631,8 +6631,8 @@ async function swRepondre(i){
   if(local) swCompter(w, q, local);
   ecranSwipe();
   const ctx = q.contexte === 'erreurs' ? 'erreurs' : 'revision';
-  let r = await corrigerAuServeur(q.id, [i], ctx, temps);
-  if(r && r.reseau && local){ await new Promise(ok => setTimeout(ok, 2500)); r = await corrigerAuServeur(q.id, [i], ctx, temps); }
+  let r = await corrigerAuServeur(q.id, [i], ctx, temps, 'swipe');
+  if(r && r.reseau && local){ await new Promise(ok => setTimeout(ok, 2500)); r = await corrigerAuServeur(q.id, [i], ctx, temps, 'swipe'); }
   if(!S.sw || S.sw !== w) return;
   if(r && r.ok){
     if(!local){ w.c = r; swCompter(w, q, r); if(S.ecran === 'swipe') ecranSwipe(); }
