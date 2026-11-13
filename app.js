@@ -6522,8 +6522,23 @@ function swPrecharger(){
   });
 }
 /* entrée dans le mode */
+/* pendant la composition nationale, le Swipe se met en retrait : on renvoie le candidat vers la composition */
+function swipeFermePourCompo(){
+  const ep = S.epreuve, v = document.getElementById('voile');
+  if(!v || !salleOuverte(ep)) return false;
+  S.modal = 'rappel'; v.hidden = false;
+  v.innerHTML = `<div class="panneau pop-nat" role="dialog" aria-modal="true" aria-labelledby="pr-titre">
+    <button class="pn-x" data-rappel-fermer="1" aria-label="Fermer">×</button>
+    <h3 id="pr-titre">Le mode Swipe n'est pas disponible pour le moment</h3>
+    <p class="intro">La composition nationale est en cours. Passe d'abord la composition du jour, le Swipe reviendra juste après.</p>
+    <button class="cta" data-rejoindre="${E(ep.id)}">Aller à la composition</button>
+    <button class="lien" style="display:block;margin:12px auto 0" data-rappel-fermer="1">Plus tard</button></div>`;
+  pister('SWIPE_BLOQUE_COMPO');
+  return true;
+}
 function lancerSwipe(){
   if(!S.util.connecte){ S.modal = 'inscription'; S.erreur = ''; return surcouche(); }
+  if(swipeFermePourCompo()) return;
   swArreterCompte();
   S.sw = { phase:'entree', lot:null, idx:0, rep:undefined, c:null, serie:0, pts:0, n:0, cc:0, jour:0, hier:0,
     record: swLire('record', 0), lotNum: 0, debut: Date.now(), mode: 'alea', mat: null, niv: niveauCand() };
@@ -9619,7 +9634,7 @@ const T_OUV_SWIPE = Date.now();
 function majInvitSwipe(){
   const b = document.getElementById('invit-swipe');
   const ok = S.ecran === 'aujourdhui' && S.util && S.util.connecte && !enComposition() && !S.modal &&
-    swLire('vu', 0) && lireReglages().invitSwipe !== aujourdhuiIso() && !document.getElementById('bandeau-appli');
+    swLire('vu', 0) && !salleOuverte(S.epreuve) && lireReglages().invitSwipe !== aujourdhuiIso() && !document.getElementById('bandeau-appli');
   if(!ok){ if(b && S.ecran !== 'aujourdhui') b.remove(); return; }
   if(b || Date.now() - T_OUV_SWIPE < 12000) return;
   const c = swLire('compte', null), auj = aujourdhuiIso();
