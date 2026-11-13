@@ -6536,15 +6536,36 @@ function swipeFermePourCompo(){
   pister('SWIPE_BLOQUE_COMPO');
   return true;
 }
+/* Le Swipe s'ouvre sans attente : pour qui a déjà joué, l'état et la première série sont chargés en douceur
+   depuis l'accueil, puis gardés quelques minutes. */
+function swPrechauffer(){
+  if(S.ecran !== 'aujourdhui' || !S.util || !S.util.connecte || S.swPreEnCours || salleOuverte(S.epreuve)) return;
+  if(!swLire('vu', 0) || Date.now() - T_OUV_SWIPE < 4000) return;
+  if(S.swPre && Date.now() - S.swPre.t < 6 * 60000) return;
+  S.swPreEnCours = true;
+  Promise.all([swEtatCharger(true), swLotCharger()]).then(([e, l]) => {
+    S.swPreEnCours = false;
+    if(e && l && l.length) S.swPre = { lot: l, t: Date.now() };
+  }).catch(() => { S.swPreEnCours = false; });
+}
 function lancerSwipe(){
   if(!S.util.connecte){ S.modal = 'inscription'; S.erreur = ''; return surcouche(); }
   if(swipeFermePourCompo()) return;
   swArreterCompte();
   S.sw = { phase:'entree', lot:null, idx:0, rep:undefined, c:null, serie:0, pts:0, n:0, cc:0, jour:0, hier:0,
     record: swLire('record', 0), lotNum: 0, debut: Date.now(), mode: 'alea', mat: null, niv: niveauCand() };
+  const pre = S.swPre && Date.now() - S.swPre.t < 8 * 60000 ? S.swPre : null; S.swPre = null;
+  const etat0 = S.swEtat && Date.now() - S.swEtat.t < 10 * 60000 ? S.swEtat : null;
+  if(etat0){ S.sw.n = +etat0.n || 0; S.sw.cc = +etat0.c || 0; S.sw.jour = +etat0.mes_jour || 0; S.sw.hier = +etat0.mes_hier || 0; }
   aller('swipe');
   pister('SWIPE_OPENED');
-  const direct = !!swLire('vu', 0);       // déjà venu : on ne repasse l'écran d'entrée qu'au premier passage du jour
+  const direct = !!swLire('vu', 0);
+  if(direct && pre && etat0 && etat0.joue_aujourdhui !== false){
+    swCommencerLot(pre.lot); ecranSwipe();
+    swEtatCharger(true).then(e => { const w = S.sw; if(w && e){ w.n = +e.n || 0; w.cc = +e.c || 0; w.jour = Math.max(w.jour, +e.mes_jour || 0); w.hier = +e.mes_hier || 0; } });
+    swPrecharger();
+    return;
+  }       // déjà venu : on ne repasse l'écran d'entrée qu'au premier passage du jour
   const pe = swEtatCharger(true).then(e => {
     const w = S.sw; if(!w) return;
     if(e){ w.n = +e.n || 0; w.cc = +e.c || 0; w.jour = +e.mes_jour || 0; w.hier = +e.mes_hier || 0; }
@@ -9898,7 +9919,7 @@ function rendre(){
         <button class="cta creux" style="margin-top:9px" onclick="location.reload()">Recharger</button>
       </div>`;
   }
-  try{ nav(); apptete(); majBandeauAppli(); majInvitSwipe(); annoncer(); surcouche(); appliquerConcentration(); }catch(e){ console.error(e); }
+  try{ nav(); apptete(); majBandeauAppli(); majInvitSwipe(); swPrechauffer(); annoncer(); surcouche(); appliquerConcentration(); }catch(e){ console.error(e); }
   try{ animerApresRendu(); }catch(e){}
 }
 
