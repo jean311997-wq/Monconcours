@@ -2263,6 +2263,11 @@ setInterval(() => {
   document.addEventListener(t, () => { O.actif = true; }, { passive: true }));
 setInterval(() => { O.actif = false; }, 60000);
 document.addEventListener('visibilitychange', () => {
+  /* Le temps passé sur l'écran en cours est enregistré dès que l'application passe en arrière-plan : un candidat qui ferme
+     l'application depuis le Swipe, sans changer d'écran, n'était jamais compté. Au retour, le compteur de l'écran repart. */
+  if(document.visibilityState === 'hidden'){
+    if(O.dernierEcran && O.entreeEcran) pister('SCREEN_LEFT', { ecran: O.dernierEcran, duree_ms: Math.min(Date.now() - O.entreeEcran, 1800000), arriere_plan: 1 });
+  }else O.entreeEcran = Date.now();
   pister(document.visibilityState === 'visible' ? 'APP_FOREGROUND' : 'APP_BACKGROUND');
   if(document.visibilityState === 'hidden') viderFile();
 });
