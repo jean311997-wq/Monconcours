@@ -355,6 +355,7 @@ window.addEventListener('beforeunload', e => {
 (function reprendreReglages(){
   const r = lireReglages();
   if(r.theme === 'sombre' || r.theme === 'clair') S.theme = r.theme;
+  if(r.themeSwipe === 'sombre' || r.themeSwipe === 'clair') S.themeSwipe = r.themeSwipe;
   if(PARCOURS_CONNUS.includes(r.parcours)) S.parcours = r.parcours;
   /* Lien d'aperçu : ?apercu=normal | b | e1 | e2 (et l'ancien xx1) montre ce parcours sur ce téléphone */
   try{
@@ -6759,12 +6760,21 @@ function swTableau(w){
 function swHaut(w){
   return `<div class="sw-haut"><button class="sw-x" data-sw-quitter="1" aria-label="Quitter le mode Swipe">✕</button>
     <span class="sw-serie${w.serie >= 3 ? ' chaud' : ''}">${ico('flamme',14)} ${w.serie ? 'Série ' + w.serie : 'Série'}</span>
-    <span class="sw-pts" aria-label="Questions traitées aujourd'hui"><b>${nombreFr(w.jour || 0)}</b> question${(w.jour || 0) > 1 ? 's' : ''} aujourd'hui</span></div>${swOnglets(w)}`;
+    ${swBoutonTheme('sw-theme')}<span class="sw-pts" aria-label="Questions traitées aujourd'hui"><b>${nombreFr(w.jour || 0)}</b> question${(w.jour || 0) > 1 ? 's' : ''} aujourd'hui</span></div>${swOnglets(w)}`;
 }
 function swPoints(w){
   return `<div class="sw-pts-lot">${w.lot.map((x, k) => {
     const r = k < w.idx ? (x._saut ? 's' : (x._ok ? 'ok' : 'ko')) : (k === w.idx ? (w.c && w.c.ok ? (w.c.correcte ? 'ok' : 'ko') : 'f') : '');
     return `<i class="${r}"></i>`; }).join('')}</div>`;
+}
+/* Swipe : clair de 7 h à 18 h, sombre le reste du temps, sauf si la personne a choisi */
+function swThemeEffectif(){
+  if(S.themeSwipe === 'clair' || S.themeSwipe === 'sombre') return S.themeSwipe;
+  const h = new Date().getHours(); return h >= 7 && h < 18 ? 'clair' : 'sombre';
+}
+function swBoutonTheme(cl){
+  const c = swThemeEffectif() === 'clair';
+  return `<button class="sw-x ${cl}" data-sw-theme="1" aria-label="${c ? 'Passer en mode sombre' : 'Passer en mode clair'}">${c ? ico('lune',16) : ico('soleil',16)}</button>`;
 }
 function ecranSwipe(){
   const w = S.sw;
@@ -6778,7 +6788,7 @@ function ecranSwipe(){
   else if(w.phase === 'charge' || w.phase === 'vide') h = swEcranVide(w);
   else h = swJeu(w);
   const mur = w.phase === 'mur' && w.c ? swMur(w, w.c) : '';
-  vue().innerHTML = `<div class="sw sw-${w.phase}"><div class="sw-page${w.entre ? ' sw-entre' : ''}${w.entreHaut ? ' sw-entre-haut' : ''}${w.phase === 'jeu' ? ((w.revue != null ? w.lot[w.revue]._rep : w.rep) === undefined ? ' sw-fixe' : ' sw-rep') : ''}">${h}</div>${mur}</div>`;
+  vue().innerHTML = `<div class="sw sw-${w.phase}${swThemeEffectif() === 'clair' ? ' sw-clair' : ''}"><div class="sw-page${w.entre ? ' sw-entre' : ''}${w.entreHaut ? ' sw-entre-haut' : ''}${w.phase === 'jeu' ? ((w.revue != null ? w.lot[w.revue]._rep : w.rep) === undefined ? ' sw-fixe' : ' sw-rep') : ''}">${h}</div>${mur}</div>`;
   w.entre = false; w.entreHaut = false;
 }
 function swEntree(w, e){
@@ -6788,7 +6798,7 @@ function swEntree(w, e){
   const minuit = (() => { const d = new Date(), m = new Date(d); m.setHours(24, 0, 0, 0); const mn = Math.floor((m - d) / 60000); return Math.floor(mn / 60) + ' h ' + String(mn % 60).padStart(2, '0') + ' min'; })();
   const prete = w.lot && w.lot.length;
   const semaine = e.note_semaine !== null && e.note_semaine !== undefined ? Math.round((note - e.note_semaine) * 10) / 10 : null;
-  return `<button class="sw-x sw-x-seul" data-sw-quitter="1" aria-label="Quitter">✕</button>
+  return `<button class="sw-x sw-x-seul" data-sw-quitter="1" aria-label="Quitter">✕</button>${swBoutonTheme('sw-theme-seul')}
   <div class="sw-entree">
     ${live ? `<div class="sw-live"><i></i>${E(live)}</div>` : ''}
     <h1>Mode<br>Swipe</h1>
@@ -7040,13 +7050,14 @@ setInterval(() => {
   document.addEventListener('contextmenu', e => { if(e.target.closest && e.target.closest('.sw-bulle')) e.preventDefault(); });
 })();
 document.addEventListener('click', ev => {
-  const t = ev.target.closest('[data-swipe],[data-sw-entrer],[data-sw-rep],[data-sw-suiv],[data-sw-revenir],[data-sw-quitter],[data-sw-palier],[data-sw-jouer],[data-sw-serie],[data-sw-reessayer],[data-sw-mode],[data-sw-mat],[data-sw-niv],[data-sw-rouvrir]');
+  const t = ev.target.closest('[data-swipe],[data-sw-entrer],[data-sw-rep],[data-sw-suiv],[data-sw-revenir],[data-sw-theme],[data-sw-quitter],[data-sw-palier],[data-sw-jouer],[data-sw-serie],[data-sw-reessayer],[data-sw-mode],[data-sw-mat],[data-sw-niv],[data-sw-rouvrir]');
   if(!t) return;
   const d = t.dataset;
   if(d.swipe) return lancerSwipe();
   if(d.swEntrer) return swPasser(swEntrer);
   if(d.swRep !== undefined) return swRepondre(+d.swRep);
   if(d.swSuiv) return swPasser(() => swSuivante());
+  if(d.swTheme){ S.themeSwipe = swThemeEffectif() === 'clair' ? 'sombre' : 'clair'; ecrireReglage('themeSwipe', S.themeSwipe); return ecranSwipe(); }
   if(d.swRevenir) return swPasser(swRevenirRevue);
   if(d.swQuitter) return swQuitter();
   if(d.swPalier) return swPasser(swApresPalier);
