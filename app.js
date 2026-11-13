@@ -6761,7 +6761,7 @@ function swTableau(w){
 function swHaut(w){
   return `<div class="sw-haut"><button class="sw-x" data-sw-quitter="1" aria-label="Quitter le mode Swipe">✕</button>
     <span class="sw-serie${w.serie >= 3 ? ' chaud' : ''}">${ico('flamme',14)} ${w.serie ? 'Série ' + w.serie : 'Série'}</span>
-    ${swBoutonTheme('sw-theme')}<span class="sw-pts" aria-label="Questions traitées aujourd'hui"><b>${nombreFr(w.jour || 0)}</b> question${(w.jour || 0) > 1 ? 's' : ''} aujourd'hui</span></div>${swOnglets(w)}`;
+    ${swBoutonTheme('sw-theme')}<span class="sw-pts" aria-label="Objectif du jour : 200 QCM. QCM traités aujourd'hui : ${w.jour || 0}"><span class="sw-obj">Objectif du jour : <b>200</b> QCM</span><span class="sw-trait">QCM traités aujourd'hui : <b>${nombreFr(w.jour || 0)}</b></span></span></div>${swOnglets(w)}`;
 }
 function swPoints(w){
   return `<div class="sw-pts-lot">${w.lot.map((x, k) => {
