@@ -1558,7 +1558,7 @@ async function notificationsDuJour(){
 const estInstallee = () => window.matchMedia && window.matchMedia('(display-mode: standalone)').matches;
 function installerAppli(){
   if(CONTACT.playStore) return window.open(CONTACT.playStore, '_blank', 'noopener');
-  if(S.installer){ S.installer.prompt(); S.installer.userChoice.then(() => { S.installer = null; }); return; }
+  if(S.installer){ const inv = S.installer; inv.prompt(); inv.userChoice.then(c => { S.installer = null; if(c && c.outcome === 'accepted') installeReussi(); }).catch(() => { S.installer = null; }); return; }
   if(estInstallee()) return toast('L\'application est déjà installée sur ce téléphone.');
   /* Pas de fenêtre d'installation : on est sans doute dans WhatsApp ou Facebook, ou sur un iPhone.
      Au lieu de ne rien faire, on guide la personne (Android : vers Chrome ; iPhone : Safari). */
@@ -8097,7 +8097,7 @@ window.addEventListener('popstate', ev => {
 /* Les nouveaux boutons ont leur propre écouteur : le grand aiguillage
    plus bas reste tel quel. */
 document.addEventListener('click', ev => {
-  const t = ev.target.closest('[data-abo-matiere],[data-corr-nat],[data-fin-essai-non],[data-fin-essai-oui],[data-class-fermer],[data-class-voir],[data-quitter],[data-quitter-oui],[data-quitter-non],[data-son],[data-correction-differee],[data-gagnants],[data-pourtoi],[data-fil-rep],[data-fil-suiv],[data-qdj-rep],[data-qp-rep],[data-signaler],[data-signal-envoi],[data-objectif],[data-rejoindre],[data-rappel-activer],[data-rappel-retirer],[data-reagir],[data-partage-question],[data-partage-qdj],[data-partage-rang],[data-carte-resultat],[data-sortir-reprise],[data-inscrire-nat],[data-correction-nat],[data-nat-oui],[data-nat-non],[data-resultats-pdf],[data-telecharger-mat],[data-rappel-heure],[data-rappel-inter],[data-rappel-oui],[data-rappel-autre],[data-rappel-plus-tard],[data-rappel-fermer],[data-rappel-masquer],[data-rappel-wa],[data-installe-d],[data-installer-lien],[data-notifs-lien],[data-notifs-d],[data-paiement-plus-tard],[data-ouvrir-chrome],[data-canal-tete]');
+  const t = ev.target.closest('[data-abo-matiere],[data-corr-nat],[data-fin-essai-non],[data-fin-essai-oui],[data-class-fermer],[data-class-voir],[data-quitter],[data-quitter-oui],[data-quitter-non],[data-son],[data-correction-differee],[data-gagnants],[data-pourtoi],[data-fil-rep],[data-fil-suiv],[data-qdj-rep],[data-qp-rep],[data-signaler],[data-signal-envoi],[data-objectif],[data-rejoindre],[data-rappel-activer],[data-rappel-retirer],[data-reagir],[data-partage-question],[data-partage-qdj],[data-partage-rang],[data-carte-resultat],[data-sortir-reprise],[data-inscrire-nat],[data-correction-nat],[data-nat-oui],[data-nat-non],[data-resultats-pdf],[data-telecharger-mat],[data-rappel-heure],[data-rappel-inter],[data-rappel-oui],[data-rappel-autre],[data-rappel-plus-tard],[data-rappel-fermer],[data-rappel-masquer],[data-rappel-wa],[data-installe-d],[data-installer-lien],[data-ouvrir-appli],[data-notifs-lien],[data-notifs-d],[data-paiement-plus-tard],[data-ouvrir-chrome],[data-canal-tete]');
   if(!t) return;
   const d = t.dataset;
   try{ const cle = Object.keys(d)[0]; pister('BUTTON_CLICKED', { valeur: String(d[cle]).slice(0,40) }, cle); }catch(e){}
@@ -8167,6 +8167,7 @@ document.addEventListener('click', ev => {
   if(d.rappelActiver) return activerRappel(d.rappelActiver, 0);
   if(d.rappelRetirer) return retirerRappel();
   if(d.installerLien){ pister('INSTALL_LINK_CLICKED'); return installerAppli(); }
+  if(d.ouvrirAppli !== undefined){ fermerFenetreRappel(); return ouvrirAppli(); }
   if(d.canalTete){
     pister('WHATSAPP_JOINED_CLICK', { source:'entete' });
     ecrireReglage('inv_whatsapp_fait', true);
@@ -9320,7 +9321,7 @@ window.choisirConcours = async function(id){
 
 /* ---------- installer l'application ---------- */
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); S.installer = e; if(S.ecran === 'aujourdhui') rendre(); });
-window.addEventListener('appinstalled', () => { S.installer = null; pister('APP_INSTALLED'); });
+window.addEventListener('appinstalled', () => { S.installer = null; pister('APP_INSTALLED'); try{ installeReussi(); }catch(e){} });
 
 /* ---------- export du cahier d'erreurs ---------- */
 function exporterCahier(){
@@ -9621,7 +9622,7 @@ function fermerBandeauAppli(){
 function majBandeauAppli(){
   let b = document.getElementById('bandeau-appli');
   const visible = S.ecran === 'aujourdhui' && !estInstallee() && !enComposition() && !S.modal &&
-    (S.appliInstallee || (S.installer && !S.appliLa && !bandeauAppliRecemmentFerme()));
+    (S.installer && !S.appliLa && !bandeauAppliRecemmentFerme());
   if(!visible){ if(b) b.remove(); return; }
   if(!b){
     b = document.createElement('div');
@@ -9632,14 +9633,15 @@ function majBandeauAppli(){
       telechargerAppli();
     };
     document.getElementById('apptete').insertAdjacentElement('afterend', b);
-    setTimeout(() => { if(!S.appliInstallee) fermerBandeauAppli(); }, 20000);
+    setTimeout(() => fermerBandeauAppli(), 25000);
   }
-  { const t = document.getElementById('apptete');
-    b.style.setProperty('--tete-h', ((t && t.offsetHeight) || 56) + 8 + 'px');
+  { const n = document.getElementById('nav');
+    b.style.setProperty('--nav-h', ((n && n.offsetHeight) || 64) + 'px');
   }
-  b.innerHTML = S.appliInstallee
-    ? `<span>Installation terminée. <b>Ouvrez Mon Concours</b> depuis votre écran d'accueil.</span><button type="button" class="bandeau-appli-go" data-appli-ok="1">Compris</button>`
-    : `<button type="button" class="bandeau-appli-go">↓ Télécharger l'application</button><button type="button" class="bandeau-appli-x" data-appli-x="1" aria-label="Fermer">×</button>`;
+  b.innerHTML = `<img class="ba-ico" src="/icone-192.png" alt="" width="46" height="46">
+    <span class="ba-txt"><b>Mon Concours</b><small>Gratuit · moins de 2 Mo</small></span>
+    <button type="button" class="bandeau-appli-go">Installer</button>
+    <button type="button" class="bandeau-appli-x" data-appli-x="1" aria-label="Fermer">×</button>`;
 }
 document.addEventListener('click', ev => { if(ev.target.closest('[data-appli-dl]')) telechargerAppli(); });
 /* L'application est-elle déjà sur ce téléphone ? Alors le bouton dit « Ouvrir », jamais « Télécharger ». */
@@ -9656,6 +9658,21 @@ function ouvrirAppli(){
     setTimeout(() => { if(!document.hidden) fenetreInstallerPas('manuel'); }, 1800);
   } else fenetreInstallerPas('manuel');
 }
+/* Après l'installation : une feuille qui monte du bas, avec le bouton pour ouvrir l'application tout de suite. */
+function installeReussi(){
+  if(S._installeVu) return; S._installeVu = true;
+  S.appliLa = true; S.installer = null;
+  try{ const b = document.getElementById('bandeau-appli'); if(b) b.remove(); }catch(e){}
+  const v = document.getElementById('voile'); if(!v) return;
+  S.modal = 'rappel'; v.hidden = false;
+  v.innerHTML = `<div class="panneau pop-nat feuille-installe" role="dialog" aria-modal="true" aria-labelledby="pr-titre">
+    <button class="pn-x" data-rappel-fermer="1" aria-label="Fermer">×</button>
+    <i class="fi-coche" aria-hidden="true">✓</i>
+    <h3 id="pr-titre">C'est installé !</h3>
+    <p class="intro">Mon Concours est sur ton écran d'accueil, comme tes autres applications. Elle s'ouvre vite, même avec peu de réseau.</p>
+    <button class="cta" data-ouvrir-appli="1">Ouvrir Mon Concours</button></div>`;
+  pister('INSTALL_DONE_SHOWN');
+}
 async function telechargerAppli(){
   try{ pister('APPLI_BANDEAU_CLIC'); }catch(e){}
   if(S.appliLa) return ouvrirAppli();
@@ -9664,7 +9681,7 @@ async function telechargerAppli(){
   invite.prompt();
   try{
     const choix = await invite.userChoice;
-    if(choix && choix.outcome === 'accepted') S.appliInstallee = true;
+    if(choix && choix.outcome === 'accepted') installeReussi();
   }catch(e){}
   S.installer = null;
   majBandeauAppli();

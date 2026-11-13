@@ -2506,3 +2506,19 @@ body.swipe-on .fab-canal,body.swipe-on .sw-bulle{display:none!important}
 body.fab-canal-on .sw-bulle:not(.cote-g):not([style*="top"]){bottom:calc(var(--nav-h,0px) + env(safe-area-inset-bottom,0px) + 80px)}
 .sw-bulle.cote-g{left:14px}
 .sw-bulle.sw-bulle-prise{transition:none}
+
+/* Carte « Installer » en bas, au-dessus de la barre de navigation */
+.bandeau-appli{top:auto;bottom:calc(var(--nav-h,64px) + 10px);left:12px;right:12px;transform:none;width:auto;max-width:none;justify-content:flex-start;gap:12px;padding:10px 8px 10px 12px;border-radius:20px;background:#fff;color:#0f2a1c;box-shadow:0 10px 30px rgba(0,0,0,.35);animation:monte .35s cubic-bezier(.2,.8,.3,1) both}
+.bandeau-appli .ba-ico{width:46px;height:46px;border-radius:12px;flex:none}
+.bandeau-appli .ba-txt{display:flex;flex-direction:column;flex:1;min-width:0;padding:0;line-height:1.25}
+.bandeau-appli .ba-txt b{font-size:16px;font-weight:800}
+.bandeau-appli .ba-txt small{font-size:12.5px;color:#5b6b62}
+.bandeau-appli .bandeau-appli-go{background:#FFD21F;color:#1a1a1a;font-weight:800;font-size:15px;padding:10px 20px;min-height:44px}
+.bandeau-appli .bandeau-appli-x{color:#5b6b62;padding:4px 6px}
+.feuille-installe{text-align:left}
+.feuille-installe .fi-coche{display:grid;place-items:center;width:64px;height:64px;border-radius:50%;background:linear-gradient(145deg,#1a9b5a,#0c6b3a);color:#fff;font-style:normal;font-size:34px;font-weight:800;margin:6px 0 10px}
+.feuille-installe h3{font-size:26px}
+.feuille-installe .cta{width:100%;margin-top:6px}
+.bandeau-appli{z-index:45;gap:10px}
+.bandeau-appli .ba-txt small{white-space:nowrap;font-size:12px}
+.bandeau-appli .bandeau-appli-go{padding:10px 16px;font-size:14px}
