@@ -2420,6 +2420,8 @@ body.swipe-on .fab-canal,body.swipe-on .sw-bulle{display:none!important}
 /* Swipe : la page qui glisse */
 .sw-page{min-height:calc(100vh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px) - 26px);display:flex;flex-direction:column;will-change:transform}
 .sw-page.sw-entre{animation:swEntre .34s cubic-bezier(.16,.84,.3,1)}
+@keyframes swEntreHaut{from{transform:translateY(-40%);opacity:.35}to{transform:none;opacity:1}}
+.sw-page.sw-entre-haut{animation:swEntreHaut .3s cubic-bezier(.16,.84,.3,1)}
 @keyframes swEntre{from{transform:translateY(62%);opacity:.35}to{transform:none;opacity:1}}
 .sw-apercu{margin:18px -16px calc(-16px - env(safe-area-inset-bottom,0px));margin-top:auto;padding:14px 18px 18px;border-radius:20px 20px 0 0;background:#131C18;border:1px solid var(--st);border-bottom:0;max-height:92px;overflow:hidden;position:relative}
 .sw-apercu:after{content:"";position:absolute;left:0;right:0;bottom:0;height:34px;background:linear-gradient(transparent,#131C18)}

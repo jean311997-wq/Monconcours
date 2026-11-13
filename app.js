@@ -6665,7 +6665,7 @@ function swFelicite(w){
   return SW_CAPS[w.jour] ? `${nombreFr(w.jour)} questions aujourd'hui. ${SW_CAPS[w.jour]}` : '';
 }
 async function swRepondre(i){
-  const w = S.sw; if(!w || w.phase !== 'jeu' || w.rep !== undefined) return;
+  const w = S.sw; if(!w || w.phase !== 'jeu' || w.rep !== undefined || w.revue != null) return;
   const q = w.lot[w.idx], idx = w.idx, temps = Date.now() - (w.t0 || Date.now());
   const local = Array.isArray(q.bonnes) && q.bonnes.length
     ? { ok:true, local:true, correcte: q.bonnes.length === 1 && +q.bonnes[0] === i, bonnes: q.bonnes.map(Number), explication: q.explication || null }
@@ -6696,12 +6696,13 @@ async function swRepondre(i){
   if(!local && w.idx === idx){ w.c = r; if(S.ecran === 'swipe') ecranSwipe(); }
 }
 function swSuivante(sansPalier){
-  const w = S.sw; if(!w) return;
+  const w = S.sw; if(!w || w.revue != null) return;
   if(w.phase === 'jeu' && w.rep === undefined && !sansPalier) return;
   if(w.phase === 'jeu' && !sansPalier && w.c && w.c.ok && w.c.correcte && w.serie > 0 && w.serie % 10 === 0 && !w.palierVu){
     w.palierVu = true; w.phase = 'palier'; return ecranSwipe();
   }
   w.palierVu = false;
+  { const q0 = w.lot[w.idx]; if(q0){ q0._rep = w.rep; q0._corr = w.c; } }
   w.idx++; w.rep = undefined; w.c = null; w.gain = 0; w.fete = ''; w.t0 = Date.now(); w.nouveauRecord = false;
   if(w.idx >= w.lot.length){ w.phase = 'bilan'; pister('SWIPE_LOT_DONE', { justes: w.avant.justes, n: w.lot.length }); swPrecharger(); ecranSwipe(); if(w.avant.justes === w.lot.length && !w.avant.passees) setTimeout(() => confettis(document.querySelector('.sw-bilan')), 400); return swLancerCompte(); }
   w.phase = 'jeu';
@@ -6777,8 +6778,8 @@ function ecranSwipe(){
   else if(w.phase === 'charge' || w.phase === 'vide') h = swEcranVide(w);
   else h = swJeu(w);
   const mur = w.phase === 'mur' && w.c ? swMur(w, w.c) : '';
-  vue().innerHTML = `<div class="sw sw-${w.phase}"><div class="sw-page${w.entre ? ' sw-entre' : ''}${w.phase === 'jeu' ? (w.rep === undefined ? ' sw-fixe' : ' sw-rep') : ''}">${h}</div>${mur}</div>`;
-  w.entre = false;
+  vue().innerHTML = `<div class="sw sw-${w.phase}"><div class="sw-page${w.entre ? ' sw-entre' : ''}${w.entreHaut ? ' sw-entre-haut' : ''}${w.phase === 'jeu' ? ((w.revue != null ? w.lot[w.revue]._rep : w.rep) === undefined ? ' sw-fixe' : ' sw-rep') : ''}">${h}</div>${mur}</div>`;
+  w.entre = false; w.entreHaut = false;
 }
 function swEntree(w, e){
   const premiere = !swLire('vu', 0);
@@ -6807,8 +6808,9 @@ function swEntree(w, e){
   </div>`;
 }
 function swJeu(w){
-  const q = w.lot[w.idx]; if(!q) return '';
-  const c = w.c, rep = w.rep, fini = c && c.ok;
+  const rv = w.revue != null;
+  const q = w.lot[rv ? w.revue : w.idx]; if(!q) return '';
+  const c = rv ? q._corr : w.c, rep = rv ? q._rep : w.rep, fini = c && c.ok;
   const rp = Array.isArray(q.repartition) ? q.repartition.slice(0, (q.options || []).length) : null;
   const nRep = (q.repondants || 0) + (fini ? 1 : 0);
   const pct = k => { if(!rp || nRep < 10) return null; const v = (rp[k] || 0) + (fini && k === rep ? 1 : 0); return Math.round(100 * v / nRep); };
@@ -6822,7 +6824,7 @@ function swJeu(w){
   const retour = !fini ? '' : (c.correcte
     ? `<div class="sw-retour ok"><b>${revanche ? 'Revanche gagnée.' : 'Juste.'}${trouvent !== null && trouvent < 70 ? ` ${100 - trouvent} % se trompent ici. Pas toi.` : ''}</b>${c.explication ? `<span>${E(c.explication)}</span>` : ''}</div>`
     : `<div class="sw-retour ko"><b>C'était ${E('ABCD'[bon] || '')}${q.options && q.options[bon] ? ' : ' + E(q.options[bon]) : ''}.</b>${c.explication ? `<span>${E(c.explication)}</span>` : ''}<em>Elle revient dans « Mes erreurs » jusqu'à ce qu'elle soit acquise.</em></div>`);
-  return `${swHaut(w)}${swTableau(w)}
+  return `${swHaut(w)}${swTableau(rv ? Object.assign({}, w, { c: null }) : w)}
   <div class="sw-q${q.annale ? ' annale' : ''}">
     ${q.annale ? `<div class="sw-annale"><span>Tombée au concours${q.annee ? ' ' + q.annee : ''}</span><b>compte double</b></div>` : ''}
     <div class="sw-tags">${tag}</div>
@@ -6834,23 +6836,24 @@ function swJeu(w){
       if(fini){ if((c.bonnes || []).includes(k)) cl = 'ok'; else if(k === rep) cl = 'ko'; }
       else if(k === rep) cl = 'choisi';
       const p = fini ? pct(k) : null;
-      return `<button class="sw-opt ${cl}" ${rep !== undefined ? 'disabled' : ''} data-sw-rep="${k}">${p !== null ? `<i class="sw-jauge" style="width:${p}%"></i>` : ''}<b>${cl === 'ok' ? '✓' : cl === 'ko' ? '✕' : 'ABCD'[k]}</b><span>${E(o)}</span>${p !== null ? `<small>${p} %</small>` : ''}</button>`;
+      return `<button class="sw-opt ${cl}" ${rep !== undefined || rv ? 'disabled' : ''} data-sw-rep="${k}">${p !== null ? `<i class="sw-jauge" style="width:${p}%"></i>` : ''}<b>${cl === 'ok' ? '✓' : cl === 'ko' ? '✕' : 'ABCD'[k]}</b><span>${E(o)}</span>${p !== null ? `<small>${p} %</small>` : ''}</button>`;
     }).join('')}</div>
     <div class="sw-rail">
       <div class="sw-r1"><span>${ico('groupe',18)}</span><small>${trouvent !== null ? trouvent + ' %<br>trouvent' : (q.repondants >= 10 ? nombreFr(q.repondants) + '<br>réponses' : 'Nouvelle')}</small></div>
       <button class="sw-r1" data-partage-question="${E(q.id)}"><span>${logoReseau('whatsapp')}</span><small>Défier</small></button>
       <button class="sw-r1" data-signaler="${E(q.id)}"><span>${ico('drapeau',17)}</span><small>Signaler</small></button>
     </div></div>
-    ${rep !== undefined && !c ? `<p class="sw-petit">Correction…</p>` : ''}
+    ${rv ? `<p class="sw-petit">${fini ? 'Question déjà traitée.' : 'Question passée.'} Ta note ne bouge pas.</p>` : ''}
+    ${rep !== undefined && !c && !rv ? `<p class="sw-petit">Correction…</p>` : ''}
     ${c && !c.ok && !c.quota ? `<div class="sw-retour ko"><b>Correction indisponible</b><span>${E(c.message || '')}</span></div><button class="sw-cta creux" data-sw-reessayer="1">Réessayer</button>` : ''}
     ${retour}
-    ${fini && w.gain ? `<div class="sw-gain${w.gain < 0 ? ' dn' : ''}" aria-hidden="true">${w.gain < 0 ? '−1' : '+1'}</div>` : ''}
-    ${fini && w.fete ? `<p class="sw-record">${ico('flamme',14)} ${E(w.fete)}</p>` : ''}
-    ${fini && w.nouveauRecord && w.serie >= 5 ? `<p class="sw-record">${ico('flamme',14)} Nouveau record : ${w.serie} d'affilée</p>` : ''}
+    ${fini && !rv && w.gain ? `<div class="sw-gain${w.gain < 0 ? ' dn' : ''}" aria-hidden="true">${w.gain < 0 ? '−1' : '+1'}</div>` : ''}
+    ${fini && !rv && w.fete ? `<p class="sw-record">${ico('flamme',14)} ${E(w.fete)}</p>` : ''}
+    ${fini && !rv && w.nouveauRecord && w.serie >= 5 ? `<p class="sw-record">${ico('flamme',14)} Nouveau record : ${w.serie} d'affilée</p>` : ''}
   </div>
-  ${fini ? `<div class="sw-glisse"><span class="sw-fleche">⌃</span>Glisse vers le haut<button data-sw-suiv="1">Suivante</button></div>` : (rep === undefined ? `<div class="sw-glisse discret"><span class="sw-fleche">⌃</span>Glisse pour passer cette question</div>` : '')}
-  <div class="sw-bas">${swPoints(w)}<span>Série ${w.lotNum} · question ${w.idx + 1} sur ${w.lot.length}</span></div>
-  ${fini ? swApercu(w) : ''}`;
+  ${rv ? `<div class="sw-glisse"><span class="sw-fleche">⌃</span>Glisse vers le haut pour revenir<button data-sw-revenir="1">Revenir</button></div>` : fini ? `<div class="sw-glisse"><span class="sw-fleche">⌃</span>Glisse vers le haut<button data-sw-suiv="1">Suivante</button></div>` : (rep === undefined ? `<div class="sw-glisse discret"><span class="sw-fleche">⌃</span>Glisse pour passer cette question</div>` : '')}
+  <div class="sw-bas">${swPoints(w)}<span>Série ${w.lotNum} · question ${(rv ? w.revue : w.idx) + 1} sur ${w.lot.length}</span></div>
+  ${fini && !rv ? swApercu(w) : ''}`;
 }
 /* la suivante dépasse en bas de l'écran, comme la vidéo suivante sur TikTok */
 function swApercu(w){
@@ -6880,10 +6883,27 @@ function swPasserQuestion(){
   const q = w.lot[w.idx]; if(q){ q._saut = true; w.avant.passees = (w.avant.passees || 0) + 1; }
   swSuivante(true);
 }
+/* revenir voir la question d'avant (lecture seule : la note ne bouge pas) */
+function swPeutRevoir(){
+  const w = S.sw; if(!w || w.phase !== 'jeu' || swEnPassage) return false;
+  if(w.revue == null && w.rep !== undefined && !w.c) return false;     // correction en cours
+  return (w.revue != null ? w.revue : w.idx) > 0;
+}
+function swRevoir(){
+  const w = S.sw; if(!w || !swPeutRevoir()) return;
+  w.revue = (w.revue != null ? w.revue : w.idx) - 1; w.entreHaut = true; ecranSwipe();
+  const v = document.querySelector('.sw'); if(v) v.scrollTop = 0;
+}
+function swRevenirRevue(){
+  const w = S.sw; if(!w || w.revue == null) return;
+  w.revue = w.revue + 1 >= w.idx ? null : w.revue + 1;
+  ecranSwipe();
+}
 function swPeutPasser(){
   const w = S.sw; if(!w) return null;
   if(w.phase === 'entree') return w.lot && w.lot.length ? swEntrer : null;
   if(w.phase === 'jeu'){
+    if(w.revue != null) return swRevenirRevue;
     if(w.c && w.c.ok) return () => swSuivante();
     if(w.rep === undefined) return swPasserQuestion;      // pas de réponse : la question est passée, rien ne change
     return null;                                          // correction en cours : on attend
@@ -7020,13 +7040,14 @@ setInterval(() => {
   document.addEventListener('contextmenu', e => { if(e.target.closest && e.target.closest('.sw-bulle')) e.preventDefault(); });
 })();
 document.addEventListener('click', ev => {
-  const t = ev.target.closest('[data-swipe],[data-sw-entrer],[data-sw-rep],[data-sw-suiv],[data-sw-quitter],[data-sw-palier],[data-sw-jouer],[data-sw-serie],[data-sw-reessayer],[data-sw-mode],[data-sw-mat],[data-sw-niv],[data-sw-rouvrir]');
+  const t = ev.target.closest('[data-swipe],[data-sw-entrer],[data-sw-rep],[data-sw-suiv],[data-sw-revenir],[data-sw-quitter],[data-sw-palier],[data-sw-jouer],[data-sw-serie],[data-sw-reessayer],[data-sw-mode],[data-sw-mat],[data-sw-niv],[data-sw-rouvrir]');
   if(!t) return;
   const d = t.dataset;
   if(d.swipe) return lancerSwipe();
   if(d.swEntrer) return swPasser(swEntrer);
   if(d.swRep !== undefined) return swRepondre(+d.swRep);
   if(d.swSuiv) return swPasser(() => swSuivante());
+  if(d.swRevenir) return swPasser(swRevenirRevue);
   if(d.swQuitter) return swQuitter();
   if(d.swPalier) return swPasser(swApresPalier);
   if(d.swJouer) return swPasser(() => { S.sw.phase = 'jeu'; swSuivante(true); });
@@ -7039,7 +7060,7 @@ document.addEventListener('click', ev => {
 });
 /* glisser vers le haut : la page suit le doigt, puis part ; sinon elle revient en place */
 (function(){
-  let y0 = null, x0 = null, dy = 0, tire = false, enBas = false, action = null;
+  let y0 = null, x0 = null, dy = 0, tire = false, enBas = false, action = null, enHaut = false, bas = false;
   const page = () => document.querySelector('.sw-page');
   document.addEventListener('touchstart', e => {
     if(S.ecran !== 'swipe' || !e.touches[0] || swEnPassage || (S.sw && S.sw.phase === 'mur')) return;
@@ -7047,11 +7068,19 @@ document.addEventListener('click', ev => {
     const v = document.querySelector('.sw');
     y0 = e.touches[0].clientY; x0 = e.touches[0].clientX; dy = 0; tire = false;
     enBas = !v || v.scrollTop + v.clientHeight >= v.scrollHeight - 140;   // un reste de défilement ne doit jamais coûter un deuxième glissement
-    action = swPeutPasser();
+    action = swPeutPasser(); enHaut = !v || v.scrollTop <= 2; bas = false;
   }, { passive:true });
   document.addEventListener('touchmove', e => {
     if(y0 === null || S.ecran !== 'swipe' || !e.touches[0]) return;
     const d = e.touches[0].clientY - y0, dx = Math.abs(e.touches[0].clientX - x0);
+    if(!tire && d > 8 && dx < d && enHaut && swPeutRevoir()){ tire = true; bas = true; }
+    if(bas){
+      dy = Math.max(0, d);
+      if(e.cancelable) e.preventDefault();
+      const p = page(); if(!p) return;
+      p.style.transition = 'none'; p.style.transform = 'translateY(' + Math.min(dy * 0.8, 260) + 'px)'; p.style.opacity = String(Math.max(.4, 1 - dy / 700));
+      return;
+    }
     if(!tire && (d > -8 || dx > Math.abs(d) || !enBas)) return;
     tire = true; dy = Math.min(0, d);
     if(e.cancelable) e.preventDefault();
@@ -7066,6 +7095,18 @@ document.addEventListener('click', ev => {
     y0 = null;
     const p = page();
     if(!tire || !p) return;
+    if(bas){
+      bas = false;
+      if(dy > 70 && swPeutRevoir()){
+        if(swMouvementReduit()){ swRevoir(); return; }
+        swEnPassage = true;
+        p.style.transition = 'transform .2s ease-in, opacity .2s'; p.style.transform = 'translateY(105%)'; p.style.opacity = '.2';
+        setTimeout(() => { swEnPassage = false; swRevoir(); }, 190);
+        return;
+      }
+      p.style.transition = 'transform .28s cubic-bezier(.2,.9,.3,1.2), opacity .2s'; p.style.transform = 'translateY(0)'; p.style.opacity = '1';
+      return;
+    }
     if(action && dy < -70){ swPasser(action); return; }
     p.style.transition = 'transform .28s cubic-bezier(.2,.9,.3,1.2), opacity .2s';
     p.style.transform = 'translateY(0)'; p.style.opacity = '1';
