@@ -6246,7 +6246,19 @@ function entrerEnSalle(id, origine){
   pister('NATIONAL_JOINED', origine ? { origine } : undefined);
   return aller('grille');
 }
-const salleOuverte = ep => !!(ep && ep.etat === 'en_cours' && !(ep.moi && ep.moi.terminee));
+/* la salle est ouverte d'après l'heure réelle (début, fin), pas seulement d'après l'état reçu au dernier chargement :
+   sinon un candidat resté sur un autre écran à 19 h garde « à venir » et le Swipe ne se bloque pas */
+const salleOuverte = ep => {
+  if(!ep || (ep.moi && ep.moi.terminee)) return false;
+  const d = Date.parse(ep.debut_le), f = Date.parse(ep.fin_le), t = Date.now();
+  if(isFinite(d) && isFinite(f)) return t >= d && t < f;
+  return ep.etat === 'en_cours';
+};
+/* le Swipe est déjà ouvert quand la composition démarre : on le ferme et on envoie le candidat composer */
+setInterval(() => {
+  if(document.visibilityState !== 'visible' || S.ecran !== 'swipe' || !salleOuverte(S.epreuve)) return;
+  swArreterCompte(); S.swEtat = null; aller('aujourdhui'); swipeFermePourCompo();
+}, 10000);
 async function inscrireNationale(id, depuisPopup){
   if(!S.util.connecte){
     document.getElementById('voile').hidden = true; S.modal = null;
@@ -6536,9 +6548,9 @@ function swipeFermePourCompo(){
   S.modal = 'rappel'; v.hidden = false;
   v.innerHTML = `<div class="panneau pop-nat" role="dialog" aria-modal="true" aria-labelledby="pr-titre">
     <button class="pn-x" data-rappel-fermer="1" aria-label="Fermer">×</button>
-    <h3 id="pr-titre">Le mode Swipe n'est pas disponible pour le moment</h3>
-    <p class="intro">La composition nationale est en cours. Passe d'abord la composition du jour, le Swipe reviendra juste après.</p>
-    <button class="cta" data-rejoindre="${E(ep.id)}">Aller à la composition</button>
+    <h3 id="pr-titre">La composition est en cours</h3>
+    <p class="intro">Allez composer, c'est maintenant. Le mode Swipe est fermé pendant la composition et revient juste après.</p>
+    <button class="cta" data-rejoindre="${E(ep.id)}">Composer maintenant</button>
     <button class="lien" style="display:block;margin:12px auto 0" data-rappel-fermer="1">Plus tard</button></div>`;
   pister('SWIPE_BLOQUE_COMPO');
   return true;
