@@ -305,10 +305,12 @@ const EPREUVE = 'monconcours.epreuve';
 
 function sauverEpreuve(){
   try{
-    if(S.corrige || !Object.keys(S.reponses || {}).length){ localStorage.removeItem(EPREUVE); return; }
+    /* une copie en cours d'envoi ou refusée par le réseau reste sur le téléphone jusqu'à ce que le serveur l'ait reçue */
+    const enAttente = S.remiseEtat === 'envoi' || S.remiseEtat === 'erreur';
+    if((S.corrige && !enAttente) || !Object.keys(S.reponses || {}).length){ localStorage.removeItem(EPREUVE); return; }
     localStorage.setItem(EPREUVE, JSON.stringify({
       reponses: S.reponses, chrono: S.chrono,
-      compositionId: S.compositionId || null, le: Date.now()
+      compositionId: S.compositionId || null, le: Date.now(), remise: enAttente
     }));
   }catch(e){}
 }
@@ -323,8 +325,22 @@ function effacerEpreuve(){ try{ localStorage.removeItem(EPREUVE); }catch(e){} }
     S.reponses = e.reponses;
     if(typeof e.chrono === 'number') S.chrono = e.chrono;
     if(e.compositionId) S.compositionId = e.compositionId;
+    S.copieReprise = { remise: !!e.remise, fini: !!e.remise || (typeof e.chrono === 'number' && Date.now() > (e.le || 0) + e.chrono * 1000 + 5000) };
   }catch(err){}
 })();
+/* Une copie restée sur le téléphone dont le temps est écoulé (ou dont l'envoi avait échoué) repart toute seule dès que le réseau répond. */
+function renvoyerCopieEnAttente(){
+  const c = S.copieReprise;
+  if(!c || !c.fini || !base || !S.util || !S.util.connecte || !S.compositionId || !Object.keys(S.reponses || {}).length) return;
+  if(S.remiseEtat === 'envoi' || S.remiseEtat === 'ok' || S.ecran === 'grille') return;
+  S.copieReprise = null;
+  S.corrige = true; S.remiseEtat = 'envoi';
+  pister('COMPOSITION_RENVOI_AUTO', { traitees: Object.keys(S.reponses).length });
+  cloturerComposition().then(() => {
+    toast(S.remiseEtat === 'ok' ? 'Ta copie de la composition a bien été envoyée.' : 'Ta copie est gardée, elle sera renvoyée à la prochaine ouverture.');
+    if(S.remiseEtat !== 'ok') S.copieReprise = { remise: true, fini: true };
+  });
+}
 
 /* On prévient avant de quitter une composition en cours. La copie est
    sauvegardée, mais le chronomètre du serveur, lui, continue de tourner. */
@@ -2448,11 +2464,29 @@ async function cloturerComposition(){
   if(S.sync){ clearInterval(S.sync); S.sync = null; }
   if(!base || !S.compositionId){ S.remiseEtat = 'erreur'; return; }
   S.remiseEtat = 'envoi';
+  sauverEpreuve();
   try{
-    const { data, error } = await base.rpc('remettre_composition', {
-      p_composition: S.compositionId, p_reponses: S.reponses, p_duree: (S.dureeCompo || 2400) - S.chrono
-    });
+    /* le réseau est parfois saturé le soir de la nationale : on réessaie jusqu'à quatre fois, 20 s d'attente au plus à chaque essai */
+    let data = null, error = null;
+    for(let essai = 0; essai < 4; essai++){
+      try{
+        const r = await Promise.race([
+          base.rpc('remettre_composition', { p_composition: S.compositionId, p_reponses: S.reponses, p_duree: (S.dureeCompo || 2400) - S.chrono }),
+          new Promise((_, no) => setTimeout(() => no(new Error('delai')), 20000))
+        ]);
+        data = r.data; error = r.error;
+        if(!error) break;
+      }catch(e){ error = e; }
+      if(essai < 3) await new Promise(ok => setTimeout(ok, 2500 * (essai + 1)));
+    }
     if(error) throw error;
+    if(data && !data.ok && /déjà remise/.test(data.message || '')){
+      /* le premier envoi était bien passé, seule la réponse s'est perdue */
+      effacerEpreuve(); S.compositionId = null; chargerCompositions(); chargerCahier();
+      S.remiseEtat = 'erreur'; S.remiseMessage = 'Votre copie a déjà été reçue par le serveur. Retrouvez votre note dans vos résultats.';
+      if(['copie','grille'].includes(S.ecran)) rendre();
+      return;
+    }
     if(data && data.ok){
       S.grilleNote = data.note;
       S.dureeUtilisee = data.duree;
@@ -2482,7 +2516,8 @@ async function cloturerComposition(){
     }
   }catch(e){
     S.remiseEtat = 'erreur';
-    S.remiseMessage = "La copie n'a pas pu être envoyée. Elle reste gardée sur ce téléphone.";
+    S.remiseMessage = "La copie n'a pas pu être envoyée. Elle reste gardée sur ce téléphone, rouvrez l'application et elle repartira toute seule.";
+    sauverEpreuve();
   }
   if(['copie','grille'].includes(S.ecran)) rendre();
 }
@@ -5988,6 +6023,7 @@ async function chargerEpreuve(){
     memoEcrire('epreuve', S.epreuve, true);
     noterFinCompo(S.epreuve);
     nettoyerCopieAbandonnee();
+    renvoyerCopieEnAttente();
     if(S.lienSalle && S.epreuve && S.epreuve.id === S.lienSalle){
       const idSalle = S.lienSalle; S.lienSalle = null;
       if(salleOuverte(S.epreuve) && S.util.connecte && !enComposition()) return entrerEnSalle(idSalle, 'lien');
