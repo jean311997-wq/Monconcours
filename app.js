@@ -328,6 +328,29 @@ function effacerEpreuve(){ try{ localStorage.removeItem(EPREUVE); }catch(e){} }
     S.copieReprise = { remise: !!e.remise, fini: !!e.remise || (typeof e.chrono === 'number' && Date.now() > (e.le || 0) + e.chrono * 1000 + 5000) };
   }catch(err){}
 })();
+/* Écran bloquant : tant que le serveur n'a pas reçu la copie, le candidat ne peut rien faire d'autre. */
+function blocCopie(etat, msg){
+  S.copieBloc = { etat, msg: msg || '' };
+  const v = document.getElementById('voile'); if(!v) return;
+  S.modal = 'copie-bloc'; v.hidden = false; document.body.classList.add('copie-bloc');
+  const idEp = (S.epreuveRemise || (S.derniereNat && S.derniereNat.id)) || '';
+  const corps = etat === 'envoi'
+    ? `<div class="attente" role="status" aria-label="Envoi en cours"></div>
+       <h3 id="cb-titre">Envoi de votre copie</h3>
+       <p class="intro">Ne fermez pas l'application. Votre copie est en cours de remise. Votre note, la correction et votre classement s'affichent juste après.</p>`
+    : etat === 'erreur'
+    ? `<h3 id="cb-titre">Votre copie n'est pas encore partie</h3>
+       <p class="intro">Vérifiez votre connexion, puis appuyez sur le bouton. Votre copie est gardée sur ce téléphone, elle ne sera pas perdue. Il faut qu'elle parte pour être corrigée et classée.</p>
+       <button class="cta" data-copie-renvoyer="1">Renvoyer ma copie</button>`
+    : `<h3 id="cb-titre">Copie reçue</h3>
+       <p class="intro">${typeof S.grilleNote === 'number' ? `Votre note : <b class="num">${S.grilleNote}</b>. ` : ''}Votre copie est corrigée et classée. Voyez votre rang et la correction.</p>
+       <button class="cta" data-copie-voir="${E(idEp)}">Voir mon classement et la correction</button>`;
+  v.innerHTML = `<div class="panneau pop-nat" role="alertdialog" aria-modal="true" aria-labelledby="cb-titre" style="text-align:center">${corps}</div>`;
+}
+/* un autre message ne doit pas recouvrir l'écran tant que la copie n'est pas partie */
+setInterval(() => {
+  if(S.copieBloc && S.copieBloc.etat !== 'ok' && S.modal !== 'copie-bloc') blocCopie(S.copieBloc.etat, S.copieBloc.msg);
+}, 1500);
 /* Une copie restée sur le téléphone dont le temps est écoulé (ou dont l'envoi avait échoué) repart toute seule dès que le réseau répond. */
 function renvoyerCopieEnAttente(){
   const c = S.copieReprise;
@@ -336,10 +359,8 @@ function renvoyerCopieEnAttente(){
   S.copieReprise = null;
   S.corrige = true; S.remiseEtat = 'envoi';
   pister('COMPOSITION_RENVOI_AUTO', { traitees: Object.keys(S.reponses).length });
-  cloturerComposition().then(() => {
-    toast(S.remiseEtat === 'ok' ? 'Ta copie de la composition a bien été envoyée.' : 'Ta copie est gardée, elle sera renvoyée à la prochaine ouverture.');
-    if(S.remiseEtat !== 'ok') S.copieReprise = { remise: true, fini: true };
-  });
+  blocCopie('envoi');
+  cloturerComposition().then(() => { if(S.remiseEtat !== 'ok') S.copieReprise = { remise: true, fini: true }; });
 }
 
 /* On prévient avant de quitter une composition en cours. La copie est
@@ -2483,7 +2504,8 @@ async function cloturerComposition(){
     if(data && !data.ok && /déjà remise/.test(data.message || '')){
       /* le premier envoi était bien passé, seule la réponse s'est perdue */
       effacerEpreuve(); S.compositionId = null; chargerCompositions(); chargerCahier();
-      S.remiseEtat = 'erreur'; S.remiseMessage = 'Votre copie a déjà été reçue par le serveur. Retrouvez votre note dans vos résultats.';
+      S.remiseEtat = 'ok';
+      blocCopie('ok');
       if(['copie','grille'].includes(S.ecran)) rendre();
       return;
     }
@@ -2508,6 +2530,7 @@ async function cloturerComposition(){
       effacerEpreuve();
       chargerCahier(); chargerProgression(); chargerCompositions();
       if(S.epreuveRemise) chargerEpreuve();
+      if(S.copieBloc) blocCopie('ok');
     } else {
       /* déjà remise (par exemple depuis un autre appareil) : on relit la copie */
       S.remiseEtat = 'erreur';
@@ -2518,6 +2541,7 @@ async function cloturerComposition(){
     S.remiseEtat = 'erreur';
     S.remiseMessage = "La copie n'a pas pu être envoyée. Elle reste gardée sur ce téléphone, rouvrez l'application et elle repartira toute seule.";
     sauverEpreuve();
+    blocCopie('erreur', S.remiseMessage);
   }
   if(['copie','grille'].includes(S.ecran)) rendre();
 }
@@ -10039,7 +10063,7 @@ function rendre(){
 }
 
 document.addEventListener('click', ev=>{
-  const t = ev.target.closest('[data-matiere],[data-vers],[data-musique],[data-notifs],[data-notifs-tout],[data-notifs-vider],[data-notif-lire],[data-copier],[data-partage-natif],[data-fermer-partage],[data-paieretour],[data-preuve-modifier],[data-preuve-envoyer],[data-plan-faire],[data-plan-effacer],[data-copie-plus-tard],[data-pass],[data-proche],[data-code-ouvrir],[data-code-valider],[data-copier-num],[data-demain],[data-feuille],[data-lire-feuille],[data-lire-cahier],[data-lecteur-dl],[data-nivinfo],[data-archive],[data-toutes-compos],[data-partage],[data-oeil],[data-reinitialiser],[data-lire],[data-telecharger],[data-apercu],[data-saut],[data-compotab],[data-bascule-theme],[data-modal],[data-entrer],[data-bascule],[data-plustard],[data-deconnecter],[data-theme-choix],[data-erreursdusoir],[data-cible],[data-cours],[data-inscrire],[data-connecter],[data-oubli],[data-oubli-wa],[data-formule],[data-operateur],[data-payer],[data-paiefin],[data-paieannul],[data-go],[data-toutcahier],[data-actu],[data-actu-repli],[data-niv],[data-mat],[data-qcm],[data-qsuiv],[data-cahierfreq],[data-classement],[data-diagnostic],[data-defi],[data-duel],[data-badges],[data-phase],[data-conc],[data-dep],[data-test],[data-tb],[data-tremettre],[data-seance],[data-rep],[data-suivante],[data-b],[data-remettre],[data-recommencer],[data-reprise],[data-xr-rep],[data-xr-suiv],[data-xseance],[data-xnotifs],[data-xinstall],[data-rr],[data-fin-reprise],[data-qcm-relancer],[data-compo-relancer],[data-remise-relancer],[data-recu]');
+  const t = ev.target.closest('[data-matiere],[data-vers],[data-musique],[data-notifs],[data-notifs-tout],[data-notifs-vider],[data-notif-lire],[data-copier],[data-partage-natif],[data-fermer-partage],[data-paieretour],[data-preuve-modifier],[data-preuve-envoyer],[data-plan-faire],[data-plan-effacer],[data-copie-plus-tard],[data-pass],[data-proche],[data-code-ouvrir],[data-code-valider],[data-copier-num],[data-demain],[data-feuille],[data-lire-feuille],[data-lire-cahier],[data-lecteur-dl],[data-nivinfo],[data-archive],[data-toutes-compos],[data-partage],[data-oeil],[data-reinitialiser],[data-lire],[data-telecharger],[data-apercu],[data-saut],[data-compotab],[data-bascule-theme],[data-modal],[data-entrer],[data-bascule],[data-plustard],[data-deconnecter],[data-theme-choix],[data-erreursdusoir],[data-cible],[data-cours],[data-inscrire],[data-connecter],[data-oubli],[data-oubli-wa],[data-formule],[data-operateur],[data-payer],[data-paiefin],[data-paieannul],[data-go],[data-toutcahier],[data-actu],[data-actu-repli],[data-niv],[data-mat],[data-qcm],[data-qsuiv],[data-cahierfreq],[data-classement],[data-diagnostic],[data-defi],[data-duel],[data-badges],[data-phase],[data-conc],[data-dep],[data-test],[data-tb],[data-tremettre],[data-seance],[data-rep],[data-suivante],[data-b],[data-remettre],[data-recommencer],[data-reprise],[data-xr-rep],[data-xr-suiv],[data-xseance],[data-xnotifs],[data-xinstall],[data-rr],[data-fin-reprise],[data-qcm-relancer],[data-compo-relancer],[data-remise-relancer],[data-copie-renvoyer],[data-copie-voir],[data-recu]');
   if(!t) return;
   const d = t.dataset;
 
@@ -10138,6 +10162,13 @@ document.addEventListener('click', ev=>{
   if(d.qcmRelancer){ const r = S.qcmRep; S.qcmRep = undefined; return repondreQcm(r); }
   if(d.compoRelancer){ S.compoEtat = null; return ouvrirComposition(); }
   if(d.remiseRelancer){ S.remiseEtat = 'envoi'; rendre(); return cloturerComposition(); }
+  if(d.copieRenvoyer){ S.remiseEtat = 'envoi'; blocCopie('envoi'); return cloturerComposition(); }
+  if(d.copieVoir !== undefined){
+    const v = document.getElementById('voile'); if(v){ v.hidden = true; v.innerHTML = ''; }
+    S.modal = null; S.copieBloc = null; document.body.classList.remove('copie-bloc');
+    if(d.copieVoir){ compterVueResultats(d.copieVoir); chargerClassement(d.copieVoir); return aller('gagnants'); }
+    return aller('aujourdhui');
+  }
   if(d.pass){
     if(!FORMULES[d.pass]) return;
     if(!S.util.connecte){ S.modal = 'inscription'; S.erreur = ''; return surcouche(); }
