@@ -1397,6 +1397,7 @@ function fenetreAnnonce(n){
   const [genre, idLien] = String(n.lien || '').split(':');
   const suite = { abonnement:'Voir mon abonnement', compte:'Ouvrir mon compte', parcours:'Ouvrir mon parcours', offre:'Voir l\'offre', resultats:'Voir mes résultats', communaute:'Entrer dans la communauté', epreuve:(S.epreuve && S.epreuve.id === idLien && salleOuverte(S.epreuve) ? 'Rejoindre la salle' : 'Oui, je participe') }[genre];
   const guide = String(n.lien || '') === 'annonce:guide-compo';
+  const fbLien = String(n.lien || '') === 'annonce:concours-directs';
   if(guide){
     f.classList.add('guide-compo');
     f.innerHTML = `<div class="fe-carte">
@@ -1451,6 +1452,7 @@ function fenetreAnnonce(n){
     <p class="fe-texte fe-long">${E(n.message || '').replace(/\n/g, '<br>')}</p>
     ${genre === 'inscrire' ? `${(S.epreuve && S.epreuve.id === idLien && S.epreuve.inscrit) ? '' : '<button class="cta" data-fe="inscrire">Oui, je m\'inscris</button>'}${notifsAEncourager() ? '<button class="cta creux" style="margin-top:10px" data-fe="notifs">Oui, j\'active les notifications</button>' : ''}<button class="lien" style="display:block;margin:12px auto 0" data-fe="fermer">${(S.epreuve && S.epreuve.id === idLien && S.epreuve.inscrit && !notifsAEncourager()) ? 'J\'ai compris' : 'Plus tard'}</button>`
     : suite ? `<button class="cta" data-fe="suite">${suite}</button><button class="lien" style="display:block;margin:10px auto 0" data-fe="fermer">${genre === 'epreuve' ? 'Plus tard' : 'Fermer'}</button>`
+            : fbLien ? `<button class="cta" data-fe="facebook">Lire sur Facebook</button><button class="lien" style="display:block;margin:10px auto 0" data-fe="fermer">Fermer</button>`
             : `<button class="cta" data-fe="fermer">J'ai compris</button>`}
   </div>`;
   const fermer = aller_ => {
@@ -1468,6 +1470,7 @@ function fenetreAnnonce(n){
       pister('WEEK_REPORT_SHARED', {});
       window.open('https://wa.me/?text=' + encodeURIComponent(t), '_blank', 'noopener');
     }
+    else if(b && b.dataset.fe === 'facebook'){ window.open('https://www.facebook.com/share/1Bcw5t6Vnu/', '_blank', 'noopener'); fermer(false); }
     else if(b && b.dataset.fe === 'suite-erreurs'){ fermer(false); aller('cahier'); }
     else if(b && b.dataset.fe === 'notifs'){ fermer(false); pister('COMPO_COMMUNE_NOTIFS_CLICKED', {}); activerNotifsSeules(); }
     else if(b) fermer(b.dataset.fe === 'suite');
@@ -1546,7 +1549,7 @@ function ouvrirNotif(n){
   if(genre === 'communaute') return ouvrirCommunaute(id);
   if(genre === 'nouveau-code') return verifierChangementCode(true);
   if(genre === 'avis' || genre === 'annonce'){
-    if(NOTIFS_FENETRE.includes(n.type) || n.type === 'reponse_admin' || n.type === 'annonce') return fenetreAnnonce(Object.assign({}, n, { type: n.type === 'reponse_admin' ? 'reponse_admin_plein' : (n.type === 'annonce' ? 'annonce_plein' : n.type), lue:true, lien:(/^(epreuve|inscrire|bilan|resultats):/.test(String(n.lien || '')) ? n.lien : '') }));
+    if(NOTIFS_FENETRE.includes(n.type) || n.type === 'reponse_admin' || n.type === 'annonce') return fenetreAnnonce(Object.assign({}, n, { type: n.type === 'reponse_admin' ? 'reponse_admin_plein' : (n.type === 'annonce' ? 'annonce_plein' : n.type), lue:true, lien:(/^(epreuve|inscrire|bilan|resultats):|^annonce:concours-directs$/.test(String(n.lien || '')) ? n.lien : '') }));
   }
   if(genre === 'compte') return aller('compte');
   if(genre === 'abonnement'){ chargerPromo().then(() => aller('abonnement')); return; }
