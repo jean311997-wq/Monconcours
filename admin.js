@@ -301,7 +301,7 @@ function rendre(){
      pedagogie:vuePedagogie, candidats:vueCandidats,
      depot:vueDepot, import:vueImport, bibliotheque:vueBibliotheque,
      validation:vueValidation, questions:vueQuestions, sujets:vueSujets, actualites:vueActualites,
-     referentiel:vueReferentiel, journal:vueJournal, musique:vueMusique, paiements:vuePaiements, relances_paiement:vueRelancesPaiement,
+     referentiel:vueReferentiel, journal:vueJournal, musique:vueMusique, paiements:vuePaiements, relances_paiement:vueRelancesPaiement, relance_strategique:vueRelanceStrategique, abandons:vueAbandons,
      collectives:vueCollectives, signalements:vueSignalements, avis:vueAvis, indicateurs:vueIndicateurs, propositions:vuePropositions }[A.vue] || vueTableau)();
   $('#vue').scrollTop = 0;
 }
@@ -583,6 +583,113 @@ async function vueRelancesPaiement(){
   <div class="carte" id="pai-aband"><h3 style="margin:0 0 6px">Paiements abandonnés</h3><p style="margin:0">Chargement…</p></div>`;
   chargerRenouvellements();
   chargerAbandonnes();
+}
+
+
+/* =====================================================================
+   RELANCE STRATÉGIQUE — deux listes qui se remplissent seules, un message prêt pour chacune
+   ===================================================================== */
+const SITE = 'https://monconcoursbf.com';
+const prenomDe = c => (c.nom || '').trim().split(/\s+/)[0] || '';
+const PRIX = 'Semaine 500 F, Mois 1 000 F, Année 4 000 F (Orange Money, Moov Money ou Wave)';
+function messageAvis(c){
+  return 'Bonjour ' + prenomDe(c) + ', c\'est l\'équipe Mon Concours. Merci pour ton avis, on le lit vraiment. ' +
+    'Je vois que tu t\'entraînes' + (c.concours ? ' pour le concours ' + c.concours : '') + ' : avec l\'abonnement, plus aucun blocage, corrections et compositions sans limite. ' +
+    PRIX + '. Ouvre l\'application ici, rubrique Abonnement : ' + SITE + ' . Si le paiement te bloque, écris-moi, je te guide en deux minutes.';
+}
+function messageLimite(c){
+  return 'Bonjour ' + prenomDe(c) + ', c\'est Mon Concours. Tu as utilisé tes 5 corrections gratuites ' + (c.jours_limite || 3) + ' jours cette semaine : tu veux avancer' + (c.concours ? ' pour le concours ' + c.concours : '') + ', alors ne te laisse plus arrêter. ' +
+    'Avec l\'abonnement, tu continues sans limite, le jour même. ' + PRIX + '. Ouvre ' + SITE + ' et touche Abonnement. Une question ou un blocage au paiement ? Réponds ici.';
+}
+const CAUSES = {
+  erreur:         { titre:'Une erreur est apparue pendant le paiement', msg: c => 'Bonjour ' + prenomDe(c) + ', c\'est Mon Concours. Un message d\'erreur est apparu pendant ton paiement, désolé pour ça. Tu peux réessayer ici : ' + SITE + ' , ou m\'envoyer ta capture de paiement directement sur WhatsApp, je m\'en occupe.' },
+  annule:         { titre:'A arrêté le paiement lui-même', msg: c => 'Bonjour ' + prenomDe(c) + ', c\'est Mon Concours. Tu as arrêté ton paiement en cours de route. Quelque chose t\'a gêné (prix, opérateur, étape qui n\'est pas claire) ? Dis-moi, je te guide pas à pas.' },
+  sans_capture:   { titre:'Dit avoir payé, mais n\'a pas envoyé la capture', msg: c => 'Bonjour ' + prenomDe(c) + ', c\'est Mon Concours. Ton paiement est presque terminé : il manque la capture de ton message de transfert. Envoie-la ici sur WhatsApp ou dans l\'application, et ton accès s\'ouvre dès que l\'équipe la voit.' },
+  proche:         { titre:'A demandé à un proche de payer', msg: c => 'Bonjour ' + prenomDe(c) + ', c\'est Mon Concours. Tu as envoyé la demande de paiement à un proche. A-t-il pu payer ? Si oui, envoie-moi la capture ici et j\'ouvre ton accès tout de suite. Sinon, tu peux payer toi-même : ' + SITE + ' .' },
+  conseiller:     { titre:'A écrit au conseiller sans finir de payer', msg: c => 'Bonjour ' + prenomDe(c) + ', c\'est Mon Concours. Tu avais demandé de l\'aide pour payer ton abonnement. Où en es-tu ? Dis-moi l\'opérateur que tu utilises (Orange, Moov, Wave) et on termine ensemble, ça prend deux minutes.' },
+  ecran_paiement: { titre:'A ouvert l\'écran de paiement sans aller plus loin', msg: c => 'Bonjour ' + prenomDe(c) + ', c\'est Mon Concours. Tu as ouvert la page de paiement sans la terminer. C\'est simple : tu choisis ton opérateur, tu envoies le montant, tu ajoutes la capture. Si quelque chose n\'est pas clair, dis-le-moi et je te guide. ' + SITE },
+  avant_paiement: { titre:'A regardé l\'abonnement sans ouvrir le paiement', msg: c => 'Bonjour ' + prenomDe(c) + ', c\'est Mon Concours. Tu as regardé l\'abonnement' + (c.concours ? ' pour préparer le concours ' + c.concours : '') + '. ' + PRIX + '. Une question sur ce qu\'il ouvre ou sur le paiement ? Je te réponds ici.' }
+};
+function ligneRelance(c, msg, sous){
+  const lien = lienWa(c.telephone, msg);
+  const vu = c.derniere ? new Date(c.derniere).toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit' }) : '—';
+  return '<div class="ligne-aband" style="display:flex;gap:8px;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid var(--trait,#2a2a2a)' + (c.envoye_le && new Date(c.envoye_le) > Date.now() - 3 * 86400000 ? ';opacity:.5' : '') + '">' +
+    '<div style="min-width:0"><b>' + E(c.nom || 'Candidat') + '</b><br><span style="font-size:12px;color:var(--craie2)">' + E(c.telephone) + (c.concours ? ' · ' + E(c.concours) : '') + ' · vu le ' + vu + (sous ? ' · ' + E(sous) : '') + (c.envoye_le && new Date(c.envoye_le) > Date.now() - 3 * 86400000 ? ' · relancé' : '') + '</span></div>' +
+    '<a class="mini" data-relance="' + E(c.user_id) + '" style="display:inline-block;text-decoration:none;background:var(--laterite,#13805A);color:#fff;padding:7px 13px;border-radius:9px;font-size:13px;font-weight:600;white-space:nowrap" href="' + E(lien) + '" target="_blank" rel="noopener">' + (c.envoye_le && new Date(c.envoye_le) > Date.now() - 3 * 86400000 ? 'Renvoyer' : 'Envoyer') + '</a></div>';
+}
+function brancherRelances(zone, apres){
+  zone.querySelectorAll('[data-relance]').forEach(a => a.addEventListener('click', ev => {
+    ev.preventDefault();
+    relancerUnique(a, () => { const l = a.closest('.ligne-aband'); if(l){ l.style.opacity = '.5'; a.textContent = 'Renvoyer'; } if(apres) apres(); });
+  }));
+}
+async function vueRelanceStrategique(){
+  if(!(A.admin || A.investisseur)){ $('#vue').innerHTML = '<div class="carte"><p>Réservé à l\'administration.</p></div>'; return; }
+  $('#vue').innerHTML = `
+  <div class="entete-vue">
+    <h2>Relance stratégique</h2>
+    <p>Deux listes qui se remplissent toutes seules, chacune avec son message. Un clic ouvre WhatsApp, le message est déjà écrit avec le lien du site.</p>
+  </div>
+  <div class="onglets" id="onglets-rs"><button data-rs="avis" class="on">Volet avis</button><button data-rs="limite">Bute sur la limite</button></div>
+  <div class="carte" id="rs-zone"><p style="margin:0">Chargement…</p></div>
+  <div class="carte" id="rs-bilan" style="margin-top:12px"><h3 style="margin:0 0 6px">Bilan des relances</h3><p style="margin:0">Chargement…</p></div>`;
+  const { data, error } = await db.rpc('admin_relance_strategique');
+  const zone = document.getElementById('rs-zone'); if(!zone || A.vue !== 'relance_strategique') return;
+  if(error || !data || !data.ok){ zone.innerHTML = '<p style="margin:0">' + E((data && data.message) || (error && error.message) || 'Indisponible.') + '</p>'; return; }
+  const aff = volet => {
+    const liste = volet === 'avis' ? data.avis : data.limite;
+    const recent = c => c.envoye_le && new Date(c.envoye_le) > Date.now() - 3 * 86400000;
+    const reste = liste.filter(c => !recent(c)).length;
+    document.querySelectorAll('#onglets-rs button').forEach(b => b.classList.toggle('on', b.dataset.rs === volet));
+    zone.innerHTML = '<h3 style="margin:0 0 6px">' + (volet === 'avis' ? 'Auteurs d\'avis sans abonnement' : 'Bute sur la limite depuis 3 jours') + ' · ' + reste + ' à relancer</h3>' +
+      '<p style="margin:0 0 10px;color:var(--craie2);font-size:13px">' + (volet === 'avis'
+        ? 'Ont laissé un avis, ne sont pas abonnés, ont utilisé l\'application au moins 2 jours et sont revenus ces 7 derniers jours. Ils entrent dans la liste d\'eux-mêmes et sortent dès qu\'ils s\'abonnent.'
+        : 'Ont atteint leurs 5 corrections gratuites au moins 3 jours sur les 7 derniers, sans être abonnés. Ils entrent dans la liste d\'eux-mêmes et sortent dès qu\'ils s\'abonnent.') + '</p>' +
+      (liste.length ? liste.map(c => ligneRelance(c, volet === 'avis' ? messageAvis(c) : messageLimite(c), volet === 'avis' ? (c.nb_avis + ' avis · ' + c.jours_actifs + ' jours') : (c.jours_limite + ' jours à la limite'))).join('') : '<p style="margin:0">Personne dans cette liste pour le moment.</p>');
+    brancherRelances(zone);
+  };
+  document.getElementById('onglets-rs').addEventListener('click', e => { const b = e.target.closest('button[data-rs]'); if(b) aff(b.dataset.rs); });
+  aff('avis');
+  chargerBilanRelance();
+}
+async function chargerBilanRelance(){
+  const z = document.getElementById('rs-bilan'); if(!z) return;
+  const { data, error } = await db.rpc('admin_bilan_relance');
+  if(error || !data || !data.ok){ z.innerHTML = '<h3 style="margin:0 0 6px">Bilan des relances</h3><p style="margin:0">' + E((data && data.message) || 'Indisponible.') + '</p>'; return; }
+  const NOM = { avis:'Volet avis', limite:'Bute sur la limite' };
+  const l = data.bilan || [];
+  z.innerHTML = '<h3 style="margin:0 0 6px">Bilan des relances</h3><p style="margin:0 0 10px;color:var(--craie2);font-size:13px">Pour chaque liste, depuis le jour où la personne y est entrée : relancée ou non, abonnée, revenue sur l\'application, disparue.</p>' +
+    (l.length ? l.map(x => '<div style="padding:8px 0;border-top:1px solid var(--trait,#2a2a2a)"><b>' + E(NOM[x.volet] || x.volet) + '</b> · depuis le ' + new Date(x.depuis).toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit' }) +
+      '<br><span style="font-size:13px">' + x.total + ' personnes · ' + x.relances + ' relancées · <b>' + x.abonnes + ' abonnées</b> (dont ' + x.abonnes_relances + ' relancées) · ' + x.en_attente + ' paiement en attente · ' + x.revenus + ' revenues (dont ' + x.revenus_relances + ' relancées)' + (new Date(x.depuis) < new Date(new Date().toISOString().slice(0, 10)) ? ' · ' + x.disparus + ' sans nouvelle' : '') + '</span></div>').join('') : '<p style="margin:0">Le suivi commence ce soir : le premier bilan sera lisible demain.</p>');
+}
+
+/* =====================================================================
+   ABANDONS DE PAIEMENT — où chacun s'arrête, déduit des étapes, avec le bon message
+   ===================================================================== */
+async function vueAbandons(){
+  if(!(A.admin || A.investisseur)){ $('#vue').innerHTML = '<div class="carte"><p>Réservé à l\'administration.</p></div>'; return; }
+  $('#vue').innerHTML = `
+  <div class="entete-vue">
+    <h2>Abandons de paiement</h2>
+    <p>Ceux qui ont cliqué sur l'abonnement sans l'obtenir, regroupés selon l'étape où ils se sont arrêtés. La cause est déduite toute seule, y compris les erreurs rencontrées pendant le paiement.</p>
+  </div>
+  <div class="carte" id="ab-resume"><p style="margin:0">Chargement…</p></div>
+  <div class="carte" id="ab-liste" style="margin-top:12px"></div>`;
+  const { data, error } = await db.rpc('admin_abandons_paiement', { p_jours: 45 });
+  const r = document.getElementById('ab-resume'); if(!r || A.vue !== 'abandons') return;
+  if(error || !data || !data.ok){ r.innerHTML = '<p style="margin:0">' + E((data && data.message) || (error && error.message) || 'Indisponible.') + '</p>'; return; }
+  const total = (data.resume || []).reduce((s, x) => s + x.n, 0);
+  r.innerHTML = '<h3 style="margin:0 0 8px">' + total + ' abandons sur ' + data.jours + ' jours</h3>' +
+    (data.resume || []).map(x => '<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid var(--trait,#2a2a2a)"><span><button class="mini" data-cause="' + E(x.cause) + '" style="margin-right:6px">Voir</button>' + E((CAUSES[x.cause] || {}).titre || x.cause) + '</span><b>' + x.n + ' <span style="font-weight:400;font-size:12px;color:var(--craie2)">(' + x.actifs_7j + ' actifs cette semaine)</span></b></div>').join('');
+  const aff = cause => {
+    const L = document.getElementById('ab-liste');
+    const liste = (data.liste || []).filter(c => c.cause === cause);
+    L.innerHTML = '<h3 style="margin:0 0 6px">' + E((CAUSES[cause] || {}).titre || cause) + ' · ' + liste.length + '</h3>' +
+      (liste.length ? liste.map(c => ligneRelance(c, (CAUSES[cause] || CAUSES.ecran_paiement).msg(c), (c.formule ? (NOM_PASS[c.formule] || c.formule) : '') + (c.err_msg ? ' · erreur : ' + c.err_msg : ''))).join('') : '<p style="margin:0">Personne.</p>');
+    brancherRelances(L);
+  };
+  r.querySelectorAll('[data-cause]').forEach(b => b.onclick = () => aff(b.dataset.cause));
+  const premiere = (data.resume || [])[0]; if(premiere) aff(premiere.cause);
 }
 
 /* ---------- paiements ---------- */

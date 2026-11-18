@@ -2350,6 +2350,15 @@ async function utilisateurCourant(){
 
 /* Une réponse de révision ou de reprise est corrigée par le serveur.
    Il enregistre la tentative, le cahier d'erreurs, les points et l'assiduité. */
+/* La limite du jour est atteinte : une seule notification par personne et par jour, jamais plus (le serveur refuse le doublon). */
+function signalerLimite(){
+  try{
+    const j = aujourdhuiIso();
+    if(S._limiteSignalee === j || !base) return;
+    S._limiteSignalee = j;
+    base.rpc('signaler_limite').then(() => {}, () => {});
+  }catch(e){}
+}
 async function corrigerAuServeur(questionId, choix, contexte, tempsMs, origine){
   if(!base) return { ok:false, message:"Pas de connexion au serveur pour l'instant." };
   try{
@@ -2358,6 +2367,7 @@ async function corrigerAuServeur(questionId, choix, contexte, tempsMs, origine){
       p_temps_ms: tempsMs || null, p_session: O.session || null, p_origine: origine || null });
     if(error) throw error;
     if(origine !== 'swipe') noterCorrectionHabitue(contexte, data);
+    if(data && data.quota && data.motif === 'jour') signalerLimite();
     return data || { ok:false, message:'Réponse vide du serveur.' };
   }catch(e){
     return { ok:false, reseau:true, message:"La correction n'a pas pu être chargée. Vérifiez votre connexion et réessayez." };
@@ -10201,8 +10211,8 @@ document.addEventListener('click', ev=>{
   if(d.operateur){ S.operateur = d.operateur; S.erreur = ''; return rendre(); }
   if(d.payer){
     const tel = S.paieTel.replace(/\D/g,'');
-    if(tel.length !== 8){ S.erreur = "Saisissez le numéro qui paie, à 8 chiffres."; return rendre(); }
-    if(!S.paieNomCompte || S.paieNomCompte.trim().length < 2){ S.erreur = "Indiquez le nom du compte qui effectue le paiement."; return rendre(); }
+    if(tel.length !== 8){ S.erreur = "Saisissez le numéro qui paie, à 8 chiffres."; pister('PAYMENT_ERREUR', { etape:'numero', message:'numéro invalide' }); return rendre(); }
+    if(!S.paieNomCompte || S.paieNomCompte.trim().length < 2){ S.erreur = "Indiquez le nom du compte qui effectue le paiement."; pister('PAYMENT_ERREUR', { etape:'nom', message:'nom du compte manquant' }); return rendre(); }
     S.erreur = ''; S.paieEtape = 1; return rendre();
   }
   if(d.paiefin){
@@ -10240,7 +10250,7 @@ document.addEventListener('click', ev=>{
           p_nom_compte: S.paieNomCompte, p_preuve_chemin: chemin
         });
         if(error) throw error;
-        if(!data || !data.ok){ S.erreur = (data && data.message) || 'Envoi impossible.'; S.paieEnvoi = false; return rendre(); }
+        if(!data || !data.ok){ S.erreur = (data && data.message) || 'Envoi impossible.'; pister('PAYMENT_ERREUR', { etape:'envoi', message: String(S.erreur).slice(0, 80) }); S.paieEnvoi = false; return rendre(); }
 
         pister('PAYMENT_PROOF_SENT', { formule: S.choixFormule, operateur: S.operateur });
         pister('PAYMENT_SENT', { formule: S.choixFormule });
@@ -10249,6 +10259,7 @@ document.addEventListener('click', ev=>{
         rendre();
       }catch(e){
         S.erreur = enFrancais(e, "Envoi impossible. Vérifiez votre connexion.");
+        pister('PAYMENT_ERREUR', { etape:'envoi', message: String(S.erreur).slice(0, 80) });
         S.paieEnvoi = false; rendre();
       }
     })();
