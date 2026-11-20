@@ -3,7 +3,7 @@
    Un candidat en 2G ne doit pas repayer le chargement à chaque visite,
    et un candidat sans réseau doit pouvoir relire ses cours.
    ===================================================================== */
-const VERSION = 'mc-v198';
+const VERSION = 'mc-v208';
 const COQUE   = VERSION + '-coque';   // les fichiers de l'application
 const DONNEES = VERSION + '-donnees'; // les réponses de la base
 
@@ -141,6 +141,8 @@ self.addEventListener('notificationclick', e => {
   e.notification.close();
   const lien = (e.notification.data && e.notification.data.lien) || '/';
   e.waitUntil(clients.matchAll({ type:'window', includeUncontrolled:true }).then(liste => {
+    /* lien vers un autre site (ex. le fichier de l'application) : une fenêtre ne peut pas y être redirigée, on en ouvre une neuve */
+    try{ if(new URL(lien, self.location.origin).origin !== self.location.origin) return clients.openWindow(lien); }catch(err){}
     /* une alerte pour l'administration s'ouvre dans la fenêtre admin, jamais dans celle des candidats */
     const admin = /admin\.html/.test(lien);
     for(const c of liste){

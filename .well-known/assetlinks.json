@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.monconcoursbf.app",
+      "sha256_cert_fingerprints": [
+        "90:88:30:79:6C:9E:06:A1:6B:F4:F9:2E:80:56:66:09:73:02:87:7F:6F:B5:3B:3A:A4:5D:8A:22:39:13:B9:99"
+      ]
+    }
+  }
+]

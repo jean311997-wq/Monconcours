@@ -27,7 +27,8 @@ const CONTACT = {
      Passer à true pour tout réafficher. Tant que c'est false, on ne paie qu'avec un conseiller. */
   paiementDirect: false,
   site:     'https://monconcoursbf.com',
-  playStore: ''              /* le lien Play Store de Mon Concours, dès qu'il est publié */
+  playStore: '',             /* le lien Play Store de Mon Concours, dès qu'il est publié */
+  apk: 'https://telecharger.monconcoursbf.com/MonConcoursBF.apk'  /* l'application Android, téléchargement direct */
 };
 
 /* « Mot de passe oublié » : le message part vers l'un des deux numéros, en alternance.
@@ -554,6 +555,7 @@ function prechargerOutilsPdf(){
   });
 }
 function aller(e){
+  if(appliquerVerrou(e)) return;
   if(['resultat', 'gagnants', 'copie'].includes(S.ecran)) S.dernierResultatA = Date.now();
   if(paiementObligatoire() && !S.util.connecte && ['testIntro', 'test'].includes(e)){ S.modal = 'inscription'; S.erreur = ''; return surcouche(); }
   if(e !== 'abonnement' && S.raisonAbo) S.raisonAbo = '';
@@ -1395,7 +1397,7 @@ function fenetreAnnonce(n){
   f.setAttribute('role', 'dialog'); f.setAttribute('aria-modal', 'true');
   f.setAttribute('aria-label', n.titre || 'Message de Mon Concours');
   const [genre, idLien] = String(n.lien || '').split(':');
-  const suite = { abonnement:'Voir mon abonnement', compte:'Ouvrir mon compte', parcours:'Ouvrir mon parcours', offre:'Voir l\'offre', resultats:'Voir mes résultats', communaute:'Entrer dans la communauté', epreuve:(S.epreuve && S.epreuve.id === idLien && salleOuverte(S.epreuve) ? 'Rejoindre la salle' : 'Oui, je participe') }[genre];
+  const suite = { abonnement:'Voir mon abonnement', compte:'Ouvrir mon compte', parcours:'Ouvrir mon parcours', offre:'Voir l\'offre', resultats:'Voir mes résultats', communaute:'Entrer dans la communauté', installer:(typeof apkDispo === 'function' && apkDispo() ? 'Télécharger l\'application' : 'Installer l\'application'), epreuve:(S.epreuve && S.epreuve.id === idLien && salleOuverte(S.epreuve) ? 'Rejoindre la salle' : 'Oui, je participe') }[genre];
   const guide = String(n.lien || '') === 'annonce:guide-compo';
   const fbLien = String(n.lien || '') === 'annonce:concours-directs';
   if(guide){
@@ -1598,8 +1600,39 @@ async function notificationsDuJour(){
   }catch(e){}
 }
 const estInstallee = () => window.matchMedia && window.matchMedia('(display-mode: standalone)').matches;
+/* ---------- Application Android (APK) : téléchargement direct ---------- */
+const CLE_APK = 'mc_apk_telecharge';
+/* Ouvert depuis l'application Android elle-même ? Alors on ne propose jamais de la télécharger. */
+try{ if(/^android-app:\/\/com\.monconcoursbf\.app/.test(document.referrer || '')) sessionStorage.setItem('mc_twa', '1'); }catch(e){}
+/* chaque lancement de l'application Android est compté (une fois par ouverture), pour savoir combien de personnes l'utilisent vraiment */
+try{ if(/^android-app:\/\/com\.monconcoursbf\.app/.test(document.referrer || '')) setTimeout(() => { try{ pister('APK_APP_OUVERTE'); }catch(e){} }, 6000); }catch(e){}
+function apkDispo(){
+  if(!CONTACT.apk || !/Android/i.test(navigator.userAgent) || estInstallee()) return false;
+  try{ if(sessionStorage.getItem('mc_twa')) return false; }catch(e){}
+  return true;
+}
+function apkRecemmentTelecharge(){
+  try{ const t = +localStorage.getItem(CLE_APK) || 0; return Date.now() - t < 30 * 86400000; }catch(e){ return false; }
+}
+/* Un toucher = le téléchargement démarre. Dans WhatsApp / Facebook / Instagram, qui bloquent les fichiers, on passe par Chrome qui télécharge tout de suite. */
+function telechargerApk(){
+  try{ pister('APK_TELECHARGE_CLIC'); }catch(e){}
+  try{ localStorage.setItem(CLE_APK, String(Date.now())); }catch(e){}
+  try{ const b = document.getElementById('bandeau-appli'); if(b) b.remove(); }catch(e){}
+  const u = CONTACT.apk;
+  if(/FBAN|FBAV|FB_IAB|Instagram|WhatsApp|Line\/|Snapchat|; wv\)/i.test(navigator.userAgent)){
+    const p = new URL(u);
+    location.href = 'intent://' + p.host + p.pathname + '#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=' + encodeURIComponent(u) + ';end';
+    return;
+  }
+  const a = document.createElement('a');
+  a.href = u; a.setAttribute('download', 'MonConcoursBF.apk'); a.rel = 'noopener'; a.style.display = 'none';
+  document.body.appendChild(a); a.click(); setTimeout(() => a.remove(), 1000);
+  toast('Téléchargement lancé. Ouvrez le fichier quand il est terminé pour installer Mon Concours.', 7000);
+}
 function installerAppli(){
   if(CONTACT.playStore) return window.open(CONTACT.playStore, '_blank', 'noopener');
+  if(apkDispo()) return telechargerApk();
   if(S.installer){ const inv = S.installer; inv.prompt(); inv.userChoice.then(c => { S.installer = null; if(c && c.outcome === 'accepted') installeReussi(); }).catch(() => { S.installer = null; }); return; }
   if(estInstallee()) return toast('L\'application est déjà installée sur ce téléphone.');
   /* Pas de fenêtre d'installation : on est sans doute dans WhatsApp ou Facebook, ou sur un iPhone.
@@ -1878,7 +1911,7 @@ function rafraichirSiVisible(){
   if(['compte','cahier','aujourdhui','parcours'].includes(S.ecran)) rendre();
 }
 
-async function chargerProgression(){
+async function chargerProgression(ouverture){
   if(!base) return;
   const uid = await utilisateurCourant();
   if(!uid) return;
@@ -1886,18 +1919,23 @@ async function chargerProgression(){
 
   S.classementCharge = false;
 
-  base.rpc('mon_classement').then(({data}) => {
+  /* À l'ouverture de l'application, ce que le téléphone a déjà en copie et que l'écran ouvert n'attend pas est redemandé
+     quelques secondes plus tard : les demandes n'arrivent plus toutes ensemble sur le serveur. Partout ailleurs, rien ne change. */
+  const plusTard = (f, deja) => (ouverture === true && deja && !['compte','parcours','cahier','top'].includes(S.ecran))
+    ? setTimeout(f, 800 + Math.floor(Math.random() * 3200)) : f();
+
+  plusTard(() => base.rpc('mon_classement').then(({data}) => {
     S.classementCharge = true;
     if(data && !pareil(data, S.classement)){ S.classement = data; memoEcrire('classement', data, true); rafraichirSiVisible(); }
-  }).catch(() => { S.classementCharge = true; });
+  }).catch(() => { S.classementCharge = true; }), !!S.classement);
 
-  base.rpc('mes_stats').then(({data}) => {
+  plusTard(() => base.rpc('mes_stats').then(({data}) => {
     if(data && !pareil(data, S.stats)){ S.stats = data; memoEcrire('stats', data, true); rafraichirSiVisible(); }
     if(data) setTimeout(notificationsDuJour, 2500);
-  }).catch(() => {});
+  }).catch(() => {}), !!S.stats);
   chargerStatutGratuit();
 
-  chargerCahier();
+  plusTard(chargerCahier, !!(S.cahier && S.cahier.length));
   chargerJournee();
   chargerDetails();
   setTimeout(envoyerPack, 3000);
@@ -2080,7 +2118,7 @@ async function reprendreSession0(){
   const uid = data.session.user.id;
   S.inscritLe = data.session.user.created_at || null;
   /* la session est connue : les chiffres partent tout de suite, sans attendre le profil */
-  if(S.util.connecte){ S.progLancee = Date.now(); chargerProgression(); }
+  if(S.util.connecte){ S.progLancee = Date.now(); chargerProgression(true); }
   const { data: profil } = await base.from('profils')
     .select('nom, telephone, niveau').eq('id', uid).maybeSingle();
   if(profil){
@@ -2091,9 +2129,9 @@ async function reprendreSession0(){
     ecrireMemoire({ nom: profil.nom, tel: profil.telephone || '', niveauProfil: S.niveauProfil });
     await chargerRegleP();
     const dejaLance = S.progLancee && Date.now() - S.progLancee < 8000;
-    if(ECRANS_DECOUVERTE.includes(S.ecran)){ aller('aujourdhui'); if(!dejaLance) chargerProgression(); return; }
+    if(ECRANS_DECOUVERTE.includes(S.ecran)){ aller('aujourdhui'); if(!dejaLance) chargerProgression(true); return; }
     rendre();
-    if(!dejaLance) chargerProgression();
+    if(!dejaLance) chargerProgression(true);
   }
 }
 
@@ -6038,6 +6076,32 @@ document.addEventListener('click', ev => {
 const VAPID_PUBLIC = 'BKKwtq-pIHYWr7Ypi81KhbOYicKmCnOt27bmN_YLN8dhYzoxUHiofDHWBM7VFuOru8nTPAeV8vyWiSW2tfcOqT0';
 const OBJECTIFS = [10, 20, 50, 100];
 const enComposition = () => S.ecran === 'grille' && !S.corrige && S.compoEtat === 'pret' && S.grille.length > 0;
+/* VERROU : entre le début et la fin de la composition nationale, rien d'autre que la composition n'est accessible */
+function verrouComposition(){
+  const ep = S.epreuve; if(!ep) return null;
+  const d = Date.parse(ep.debut_le), f = Date.parse(ep.fin_le), t = Date.now();
+  return (isFinite(d) && isFinite(f) && t >= d && t < f) ? ep : null;
+}
+function appliquerVerrou(e){
+  const ep = verrouComposition();
+  if(!ep || !S.util || ['grille', 'copie', 'connexion', 'inscription'].includes(e)) return false;
+  const fini = !!(ep.moi && ep.moi.terminee) || !!S.corrige;
+  const h = new Date(ep.fin_le), heure = h.getUTCHours() + ' h' + (h.getUTCMinutes() ? ' ' + String(h.getUTCMinutes()).padStart(2, '0') : '');
+  if(fini){
+    if(e === 'aujourdhui') return false;
+    toast('La composition nationale est en cours. Les résultats arrivent à ' + heure + '.');
+    aller('aujourdhui'); return true;
+  }
+  if(S.ecran === 'grille' && !S.corrige){ toast('Termine d\'abord ta composition.'); return true; }
+  try{ pister('VERROU_COMPO'); }catch(err){}
+  toast('La composition nationale est en cours : fais la composition.');
+  entrerEnSalle(ep.id, 'verrou');
+  return true;
+}
+setInterval(() => {
+  if(document.visibilityState !== 'visible' || S.ecran === 'swipe' || !S.util || !S.util.connecte) return;
+  if(verrouComposition() && !['grille', 'copie', 'connexion', 'inscription'].includes(S.ecran)) appliquerVerrou(S.ecran);
+}, 10000);
 const heureFr = iso => new Date(iso).toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
 const jourFr = iso => new Date(iso).toLocaleDateString('fr-FR', { weekday:'long', day:'numeric', month:'long' });
 
@@ -6065,6 +6129,7 @@ async function chargerEpreuve(){
       const idSalle = S.lienSalle; S.lienSalle = null;
       if(salleOuverte(S.epreuve) && S.util.connecte && !enComposition()) return entrerEnSalle(idSalle, 'lien');
     }
+    if(appliquerVerrou(S.ecran)) return;
     if(change && ['aujourdhui','gagnants'].includes(S.ecran)) rendre();
     setTimeout(proposerNationale, Math.max(900, DELAI_NATIONALE - (Date.now() - T_OUVERTURE)));
   }catch(e){}
@@ -6166,7 +6231,14 @@ const rebours = iso => `<div class="rebours" data-rebours="${E(iso)}" aria-live=
 setInterval(() => {
   document.querySelectorAll('[data-rebours]').forEach(el => {
     const iso = el.dataset.rebours;
-    if(new Date(iso) <= Date.now()){ el.removeAttribute('data-rebours'); setTimeout(chargerEpreuve, 1500); return; }
+    if(new Date(iso) <= Date.now()){
+      el.removeAttribute('data-rebours');
+      /* fin de la composition : chaque téléphone demande les résultats à un moment différent (jusqu'à 60 s), pour que le serveur ne reçoive pas toutes les demandes à la même seconde */
+      const fin = !!(S.epreuve && S.epreuve.fin_le && Date.parse(iso) === Date.parse(S.epreuve.fin_le));
+      if(fin) el.innerHTML = '<span style="font-size:14px;font-weight:600">Les résultats s\'affichent dans un instant…</span>';
+      setTimeout(chargerEpreuve, 1500 + Math.floor(Math.random() * (fin ? 58500 : 3500)));
+      return;
+    }
     el.innerHTML = texteRebours(iso);
   });
 }, 1000);
@@ -6329,7 +6401,7 @@ const salleOuverte = ep => {
 };
 /* le Swipe est déjà ouvert quand la composition démarre : on le ferme et on envoie le candidat composer */
 setInterval(() => {
-  if(document.visibilityState !== 'visible' || S.ecran !== 'swipe' || !salleOuverte(S.epreuve)) return;
+  if(document.visibilityState !== 'visible' || S.ecran !== 'swipe' || !swipeFenetreFermee(S.epreuve)) return;
   swArreterCompte(); S.swEtat = null; aller('aujourdhui'); swipeFermePourCompo();
 }, 10000);
 async function inscrireNationale(id, depuisPopup){
@@ -6590,6 +6662,7 @@ function swEtatCharger(force){
   if(!force && S.swEtat && Date.now() - S.swEtat.t < 10 * 60000) return Promise.resolve(S.swEtat);
   return base.rpc('swipe_etat').then(({ data }) => {
     if(data && data.ok){ S.swEtat = Object.assign({}, data, { t: Date.now() }); return S.swEtat; }
+    if(data && data.ferme) S.swFermeLe = Date.now();   /* le serveur dit que le Swipe est fermé */
     return null;
   }, () => null);
 }
@@ -6604,20 +6677,41 @@ function swLotCharger(){
   return appel.then(({ data }) => Array.isArray(data) ? data : [], () => []);
 }
 function swPrecharger(){
-  const w = S.sw; if(!w || w.suivant || w.chargeSuivant) return;
+  const w = S.sw; if(!w || w.invite || w.suivant || w.chargeSuivant) return;
   w.chargeSuivant = true; w.suivantVide = false;
   const cle = (w.mode || 'alea') + '|' + (w.mat || '') + '|' + (w.niv || '');
   swLotCharger().then(l => {
     w.chargeSuivant = false;
     if(cle !== (w.mode || 'alea') + '|' + (w.mat || '') + '|' + (w.niv || '')) return;   // l'onglet a changé entre-temps
     if(l.length) w.suivant = l; else w.suivantVide = true;
+    if(S.sw === w && w.phase === 'bilan' && S.ecran === 'swipe') ecranSwipe();
   });
 }
 /* entrée dans le mode */
 /* pendant la composition nationale, le Swipe se met en retrait : on renvoie le candidat vers la composition */
+/* fenêtre de fermeture du Swipe : 1 h avant le début de la composition, jusqu'à la fin ou 23 h (heure de Ouagadougou) si c'est plus tard */
+function swipeFenetreFermee(ep){
+  if(!ep) return false;
+  const d = Date.parse(ep.debut_le), f = Date.parse(ep.fin_le), t = Date.now();
+  if(!isFinite(d) || !isFinite(f)) return false;
+  const j = new Date(d); j.setUTCHours(23, 0, 0, 0);
+  return t >= d - 60 * 60000 && t < Math.max(f, j.getTime());
+}
 function swipeFermePourCompo(){
   const ep = S.epreuve, v = document.getElementById('voile');
-  if(!v || !salleOuverte(ep)) return false;
+  /* composition en cours : le clic sur Swipe envoie directement dans la salle */
+  if(salleOuverte(ep) && S.util && S.util.connecte){ pister('SWIPE_VERS_COMPO'); entrerEnSalle(ep.id, 'swipe'); return true; }
+  if(!v || !swipeFenetreFermee(ep)) return false;
+  if(!salleOuverte(ep)){
+    S.modal = 'rappel'; v.hidden = false;
+    v.innerHTML = `<div class="panneau pop-nat" role="dialog" aria-modal="true" aria-labelledby="pr-titre">
+      <button class="pn-x" data-rappel-fermer="1" aria-label="Fermer">×</button>
+      <h3 id="pr-titre">Le mode Swipe est fermé</h3>
+      <p class="intro">Le Swipe est fermé pendant la composition nationale. Il rouvre à 23 h.</p>
+      <button class="cta" data-rappel-fermer="1">Compris</button></div>`;
+    pister('SWIPE_BLOQUE_COMPO');
+    return true;
+  }
   S.modal = 'rappel'; v.hidden = false;
   v.innerHTML = `<div class="panneau pop-nat" role="dialog" aria-modal="true" aria-labelledby="pr-titre">
     <button class="pn-x" data-rappel-fermer="1" aria-label="Fermer">×</button>
@@ -6631,7 +6725,7 @@ function swipeFermePourCompo(){
 /* Le Swipe s'ouvre sans attente : pour qui a déjà joué, l'état et la première série sont chargés en douceur
    depuis l'accueil, puis gardés quelques minutes. */
 function swPrechauffer(){
-  if(S.ecran !== 'aujourdhui' || !S.util || !S.util.connecte || S.swPreEnCours || salleOuverte(S.epreuve)) return;
+  if(S.ecran !== 'aujourdhui' || !S.util || !S.util.connecte || S.swPreEnCours || swipeFenetreFermee(S.epreuve)) return;
   if(!swLire('vu', 0) || Date.now() - T_OUV_SWIPE < 4000) return;
   if(S.swPre && Date.now() - S.swPre.t < 6 * 60000) return;
   S.swPreEnCours = true;
@@ -6651,6 +6745,7 @@ function lancerSwipe(){
   if(etat0){ S.sw.n = +etat0.n || 0; S.sw.cc = +etat0.c || 0; S.sw.jour = +etat0.mes_jour || 0; S.sw.hier = +etat0.mes_hier || 0; }
   aller('swipe');
   pister('SWIPE_OPENED');
+  swLigueCharger();
   const direct = !!swLire('vu', 0);
   if(direct && pre && etat0 && etat0.joue_aujourdhui !== false){
     swCommencerLot(pre.lot); ecranSwipe();
@@ -6660,6 +6755,7 @@ function lancerSwipe(){
   }       // déjà venu : on ne repasse l'écran d'entrée qu'au premier passage du jour
   const pe = swEtatCharger(true).then(e => {
     const w = S.sw; if(!w) return;
+    if(!e && S.swFermeLe && Date.now() - S.swFermeLe < 8000){ S.swFermeLe = 0; swArreterCompte(); S.sw = null; aller('aujourdhui'); if(!swipeFermePourCompo()) toast('Le Swipe est fermé pendant la composition. Il rouvre à 23 h.'); return; }
     if(e){ w.n = +e.n || 0; w.cc = +e.c || 0; w.jour = +e.mes_jour || 0; w.hier = +e.mes_hier || 0; }
     if(S.ecran === 'swipe' && !direct) ecranSwipe();
   });
@@ -6679,7 +6775,8 @@ function swCommencerLot(liste){
   const w = S.sw;
   w.lot = liste; w.idx = 0; w.rep = undefined; w.c = null; w.lotNum++;
   const note = swNote(w.cc, w.n);
-  w.avant = { note, rang: swRang(S.swEtat, note), t: Date.now(), justes: 0, mat: {} };
+  const kl = swLigueClassement();
+  w.avant = { note, rang: swRang(S.swEtat, note), t: Date.now(), justes: 0, mat: {}, ligueRang: kl ? kl.rang : null };
   w.phase = 'jeu'; w.t0 = Date.now();
 }
 /* changer d'onglet : on garde la série et les points, on recharge seulement le lot */
@@ -6710,12 +6807,17 @@ function swChoisirNiveau(niv){
 }
 const SW_ONGLETS = [['alea','Aléatoire'],['erreurs','Mes erreurs'],['actu','Actualité'],['cours','Mes cours']];
 function swOnglets(w){
+  if(w.invite) return w.phase === 'jeu' && w.lot ? `<div class="sw-mode-l"><span></span><span class="sw-qn">Question ${w.idx + 1} sur ${w.lot.length}</span></div>` : '';
   const niv = w.niv || niveauCand();
   const replie = w.mode === 'cours' && w.mat && !w.chipsOuverts;
   const chips = replie ? `<div class="sw-puces"><div><button class="on" data-sw-rouvrir="1">${E(w.mat)} · ${({ troisieme:'Troisième', terminale:'Terminale', licence:'Licence' })[niv] || ''} ▾</button></div></div>` : w.mode === 'cours' ? `<div class="sw-puces">
     <div>${[['troisieme','Troisième'],['terminale','Terminale'],['licence','Licence']].map(([v, l]) => `<button class="${niv === v ? 'on' : ''}" data-sw-niv="${v}">${l}</button>`).join('')}</div>
     <div>${swMatieresNiveau(niv).map(m => `<button class="${w.mat === m ? 'on' : ''}" data-sw-mat="${E(m)}">${E(m)}</button>`).join('')}</div></div>` : '';
-  return `<nav class="sw-onglets" aria-label="Quoi swiper">${SW_ONGLETS.map(([k, l]) => `<button class="${w.mode === k ? 'on' : ''}" data-sw-mode="${k}">${l}</button>`).join('')}</nav>${chips}`;
+  const nom = (SW_ONGLETS.find(o => o[0] === w.mode) || SW_ONGLETS[0])[1];
+  const lib = w.mode === 'cours' && w.mat ? w.mat : nom;
+  const qn = w.phase === 'jeu' && w.lot ? `<span class="sw-qn">Question ${(w.revue != null ? w.revue : w.idx) + 1} sur ${w.lot.length}</span>` : '';
+  const menu = w.menu ? `<div class="sw-menu">${SW_ONGLETS.map(([k, l]) => `<button class="${w.mode === k ? 'on' : ''}" data-sw-mode="${k}">${l}</button>`).join('')}</div>` : '';
+  return `<div class="sw-mode-l"><button class="sw-mode-b" data-sw-menu="1" aria-expanded="${w.menu ? 'true' : 'false'}" aria-label="Choisir le type de série">${E(lib)} <span aria-hidden="true">▾</span></button>${qn}</div>${menu}${chips}`;
 }
 function swEcranVide(w){
   return `${swHaut(w)}<div class="sw-vide">${w.phase === 'charge' ? '<div class="squelette" style="height:180px"></div>' : `<p>${E(w.msg || '')}</p>`}</div>`;
@@ -6725,6 +6827,67 @@ function swEntrer(){
   swEcrire('vu', 1);
   swCommencerLot(w.lot);
   ecranSwipe();
+}
+/* ---- Swipe invité : lien direct, questions locales, rien n'est enregistré avant la création du compte ---- */
+const SW_INVITE_MIN = 10, SW_INVITE_REP = 30;
+function swInviteMelanger(l){ const a = l.slice(); for(let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+function lancerSwipeInvite(){
+  if(S.util && S.util.connecte) return lancerSwipe();
+  swArreterCompte();
+  if(S.swInviteTimer){ clearInterval(S.swInviteTimer); S.swInviteTimer = null; }
+  S.swEtat = null; S.swPre = null; S.inviteMur = null;
+  S.sw = { invite:true, phase:'charge', lot:null, idx:0, rep:undefined, c:null, serie:0, pts:0, n:0, cc:0, jour:0, hier:0, record:0, lotNum:0, debut:Date.now(), mode:'alea', mat:null, niv:'terminale', nInvite:0 };
+  S.modalDejaVu = true;
+  aller('swipe');
+  pister('SWIPE_INVITE_OUVERT');
+  swInviteCharger();
+}
+function swInviteCharger(){
+  const w = S.sw; if(!w || !w.invite) return;
+  w.phase = 'charge'; w.msg = '';
+  fetch('lib/swipe-invite-1.json').then(r => r.ok ? r.json() : Promise.reject(new Error('http'))).then(l => {
+    if(S.sw !== w) return;
+    if(!Array.isArray(l) || !l.length) throw new Error('vide');
+    w.debut = Date.now();
+    swCommencerLot(swInviteMelanger(l).map(q => Object.assign({}, q, { contexte:'alea' })));
+    S.swInviteTimer = setInterval(swInviteVeille, 5000);
+    if(S.ecran === 'swipe') ecranSwipe();
+  }).catch(() => {
+    if(S.sw !== w) return;
+    w.phase = 'vide'; w.msg = "Les questions n'ont pas pu se charger. Vérifie ta connexion, puis recharge la page.";
+    if(S.ecran === 'swipe') ecranSwipe();
+  });
+}
+function swInviteDepasse(w){
+  return (Date.now() - w.debut) >= SW_INVITE_MIN * 60000 || w.nInvite >= SW_INVITE_REP || (!!w.lot && w.idx >= w.lot.length - 1);
+}
+function swInviteVeille(){
+  const w = S.sw;
+  if(!w || !w.invite || S.util.connecte){ if(S.swInviteTimer){ clearInterval(S.swInviteTimer); S.swInviteTimer = null; } return; }
+  if(S.ecran !== 'swipe' || document.visibilityState !== 'visible' || w.mur) return;
+  const ecoule = Date.now() - w.debut;
+  if(ecoule < SW_INVITE_MIN * 60000) return;
+  /* le temps est écoulé : on laisse finir la correction en cours, sinon on arrête après 90 s */
+  if(w.rep !== undefined ? Date.now() - (w.tRep || 0) > 2500 : ecoule >= SW_INVITE_MIN * 60000 + 90000) swInviteMur();
+}
+function swInviteMur(){
+  const w = S.sw; if(!w || !w.invite || S.util.connecte || w.mur) return;
+  w.mur = true;
+  if(S.swInviteTimer){ clearInterval(S.swInviteTimer); S.swInviteTimer = null; }
+  S.inviteMur = { n:w.nInvite };
+  S.modal = 'inscription'; S.erreur = '';
+  { const v = document.getElementById('voile'); if(v){ v.style.zIndex = '90'; v.style.background = 'rgba(8,14,11,.82)'; } }
+  pister('SWIPE_INVITE_MUR', { reponses:w.nInvite, minutes:Math.round((Date.now() - w.debut) / 60000) });
+  surcouche();
+}
+function swInviteFin(motif){
+  const w = S.sw;
+  S.inviteMur = null;
+  { const v = document.getElementById('voile'); if(v){ v.style.zIndex = ''; v.style.background = ''; } }
+  if(!w || !w.invite) return;
+  pister('SWIPE_INVITE_INSCRIT', { reponses:w.nInvite, mur:!!w.mur, motif:motif });
+  S.sw = null; S.swEtat = null; S.swPre = null;
+  if(S.swInviteTimer){ clearInterval(S.swInviteTimer); S.swInviteTimer = null; }
 }
 function swArreterCompte(){ if(S.swCompte){ clearInterval(S.swCompte); S.swCompte = null; } }
 function swQuitter(){ swArreterCompte(); S.swEtat = null; aller('aujourdhui'); }
@@ -6744,7 +6907,8 @@ function swCompter(w, q, r){
     w.serie++; w.avant.justes++; w.avant.mat[m].j++;
     w.gain = 1; w.pts += 1;
     sonJuste();
-    if(w.serie > w.record){ w.record = w.serie; swEcrire('record', w.record); w.nouveauRecord = true; }
+    if(w.serie > w.record){ w.record = w.serie; swEcrire('record', w.record); w.nouveauRecord = true; w.avant.record = w.serie; }
+    if(!w.invite){ S.swBonnes = S.swBonnes || []; S.swBonnes.push(Date.now()); }
   } else { w.serie = 0; w.gain = -1; w.pts -= 1; sonFaux(); }
   w.jour++; w.fete = swFelicite(w); swEcrire('compte', { d: aujourdhuiIso(), n: w.jour });
   compterReponse();
@@ -6765,6 +6929,7 @@ async function swRepondre(i){
   w.rep = i; w.c = local;
   if(local) swCompter(w, q, local);
   ecranSwipe();
+  if(w.invite){ w.nInvite++; w.tRep = Date.now(); if(swInviteDepasse(w)) setTimeout(swInviteMur, 2600); return; }   // invité : rien n'est envoyé au serveur
   const ctx = q.contexte === 'erreurs' ? 'erreurs' : 'revision';
   let r = await corrigerAuServeur(q.id, [i], ctx, temps, 'swipe');
   if(r && r.reseau && local){ await new Promise(ok => setTimeout(ok, 2500)); r = await corrigerAuServeur(q.id, [i], ctx, temps, 'swipe'); }
@@ -6789,6 +6954,7 @@ async function swRepondre(i){
 }
 function swSuivante(sansPalier){
   const w = S.sw; if(!w || w.revue != null) return;
+  if(w.invite && swInviteDepasse(w)) return swInviteMur();
   if(w.phase === 'jeu' && w.rep === undefined && !sansPalier) return;
   if(w.phase === 'jeu' && !sansPalier && w.c && w.c.ok && w.c.correcte && w.serie > 0 && w.serie % 10 === 0 && !w.palierVu){
     w.palierVu = true; w.phase = 'palier'; return ecranSwipe();
@@ -6796,8 +6962,12 @@ function swSuivante(sansPalier){
   w.palierVu = false;
   { const q0 = w.lot[w.idx]; if(q0){ q0._rep = w.rep; q0._corr = w.c; } }
   w.idx++; w.rep = undefined; w.c = null; w.gain = 0; w.fete = ''; w.t0 = Date.now(); w.nouveauRecord = false;
-  if(w.idx >= w.lot.length){ w.phase = 'bilan'; pister('SWIPE_LOT_DONE', { justes: w.avant.justes, n: w.lot.length }); swPrecharger(); ecranSwipe(); if(w.avant.justes === w.lot.length && !w.avant.passees) setTimeout(() => confettis(document.querySelector('.sw-bilan')), 400); return swLancerCompte(); }
+  if(w.idx >= w.lot.length){ w.phase = 'bilan'; pister('SWIPE_LOT_DONE', { justes: w.avant.justes, n: w.lot.length }); swPrecharger(); ecranSwipe(); if(w.avant.justes === w.lot.length && !w.avant.passees) setTimeout(() => confettis(document.querySelector('.sw-bilan')), 400); swLigueCharger(); return; }
   w.phase = 'jeu';
+  if(w.idx === 10 && !w.invite && !w.avant.ligueVue){
+    const kl = swLigueClassement();
+    if(kl && (w.lotNum === 1 || !w.avant.ligueRang || kl.rang < w.avant.ligueRang)){ w.avant.ligueVue = true; w.phase = 'ligue'; pister('SWIPE_LIGUE_VUE', { rang: kl.rang, total: kl.total }); }
+  }
   ecranSwipe();
   const v = document.querySelector('.sw'); if(v) v.scrollTop = 0;
 }
@@ -6848,10 +7018,21 @@ function swTableau(w){
     <div class="sw-barre"><i style="width:${pos}%"></i><u style="left:${seuil}%"></u></div>
     ${repondu ? `<div class="sw-tb3">${l3}</div>` : ''}</div>`;
 }
-function swHaut(w){
-  return `<div class="sw-haut"><button class="sw-x" data-sw-quitter="1" aria-label="Quitter le mode Swipe">✕</button>
-    <span class="sw-serie${w.serie >= 3 ? ' chaud' : ''}">${ico('flamme',14)} ${w.serie ? 'Série ' + w.serie : 'Série'}</span>
-    ${swBoutonTheme('sw-theme')}<span class="sw-pts" aria-label="Objectif du jour : 200 QCM. QCM traités aujourd'hui : ${w.jour || 0}"><span class="sw-obj">Objectif du jour : <b>200</b> QCM</span><span class="sw-trait">QCM traités aujourd'hui : <b>${nombreFr(w.jour || 0)}</b></span></span></div>${swOnglets(w)}`;
+/* ---- refonte du Swipe (19 novembre 2026) : barre du haut, séance du jour, correction, ligue, fin de série ---- */
+const SW_OBJECTIF = 200;
+const SW_COCHE = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+const SW_CROIX = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+const SW_MONTE = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>';
+const swIso = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+/* série de jours : le serveur la compte jusqu'à hier tant qu'on n'a pas joué aujourd'hui */
+function swSerieJours(w){ const e = S.swEtat || {}, s = +e.serie_jours || 0; return s + (e.joue_aujourdhui === false && (w.jour || 0) > 0 ? 1 : 0); }
+function swHaut(w, sansMode){
+  const jour = w.jour || 0, pct = Math.min(100, Math.round(100 * jour / SW_OBJECTIF)), sj = swSerieJours(w);
+  const fil = w.invite ? '' : `<span class="sw-flamme${sj ? '' : ' eteinte'}" aria-label="Série de ${sj} jour${sj > 1 ? 's' : ''}">${ico('flamme',16)} ${nombreFr(sj)} <small>jour${sj > 1 ? 's' : ''}</small></span>`;
+  return `<div class="sw-haut2"><button class="sw-x" data-sw-quitter="1" aria-label="Quitter le mode Swipe">✕</button>${fil}
+    <div class="sw-obj2" aria-label="Objectif du jour : ${SW_OBJECTIF} questions. Faites aujourd'hui : ${jour}"><div><span>Aujourd'hui</span><b>${nombreFr(jour)} / ${SW_OBJECTIF}</b></div><i><u style="width:${pct}%"></u></i></div>
+    ${swBoutonTheme('sw-theme')}</div>
+  ${w.lot && (w.phase === 'jeu' || w.phase === 'ligue') ? swPoints(w) : ''}${sansMode ? '' : swOnglets(w)}`;
 }
 function swPoints(w){
   return `<div class="sw-pts-lot">${w.lot.map((x, k) => {
@@ -6873,6 +7054,7 @@ function ecranSwipe(){
   else if(w.phase === 'palier') h = swPalier(w);
   else if(w.phase === 'recompense') h = swRecompense(w);
   else if(w.phase === 'bilan') h = swBilan(w);
+  else if(w.phase === 'ligue') h = swLigue(w);
   else if(w.phase === 'charge' || w.phase === 'vide') h = swEcranVide(w);
   else h = swJeu(w);
   const mur = w.phase === 'mur' && w.c ? swMur(w, w.c) : '';
@@ -6881,29 +7063,41 @@ function ecranSwipe(){
 }
 function swEntree(w, e){
   const premiere = !swLire('vu', 0);
-  const note = swNote(w.cc, w.n), rang = swRang(e, note);
+  const jour = w.jour || 0, reste = Math.max(0, SW_OBJECTIF - jour), s = +e.serie_jours || 0, sj = swSerieJours(w);
   const live = (e.en_ligne || 0) >= 3 ? `${nombreFr(e.en_ligne)} candidats répondent en ce moment` : (e.aujourdhui ? `${nombreFr(e.aujourdhui)} candidats ont révisé aujourd'hui` : '');
   const minuit = (() => { const d = new Date(), m = new Date(d); m.setHours(24, 0, 0, 0); const mn = Math.floor((m - d) / 60000); return Math.floor(mn / 60) + ' h ' + String(mn % 60).padStart(2, '0') + ' min'; })();
-  const prete = w.lot && w.lot.length;
-  const semaine = e.note_semaine !== null && e.note_semaine !== undefined ? Math.round((note - e.note_semaine) * 10) / 10 : null;
-  return `<button class="sw-x sw-x-seul" data-sw-quitter="1" aria-label="Quitter">✕</button>${swBoutonTheme('sw-theme-seul')}
-  <div class="sw-entree">
+  const sous = e.joue_aujourdhui === false && s > 0 && !jour ? `Ta série de ${nombreFr(s)} jour${s > 1 ? 's' : ''} s'éteint dans ${minuit}. Une bonne réponse suffit pour la garder.`
+    : (sj > 0 ? `${nombreFr(sj)} jour${sj > 1 ? 's' : ''} d'affilée. Continue.` : 'Une bonne réponse aujourd\'hui lance ta série de jours.');
+  const C = 2 * Math.PI * 40, f = Math.min(1, jour / SW_OBJECTIF);
+  const lundi = new Date(); lundi.setHours(12, 0, 0, 0); lundi.setDate(lundi.getDate() - (lundi.getDay() + 6) % 7);
+  const venus = new Set(Array.isArray(e.semaine) ? e.semaine : []), auj = swIso(new Date());
+  const jours = ['L','M','M','J','V','S','D'].map((l, k) => {
+    const d = new Date(lundi); d.setDate(lundi.getDate() + k); const iso = swIso(d);
+    const ok = venus.has(iso) || (iso === auj && jour > 0);
+    return `<div class="${ok ? 'ok' : (iso === auj ? 'auj' : '')}"><i>${ok ? SW_COCHE : ''}</i>${l}</div>`;
+  }).join('');
+  const ch = w.choix || 'alea', err = +e.erreurs || 0;
+  const cartes = [['alea','Aléatoire','Toutes les matières',''],['erreurs','Mes erreurs','À refaire jusqu\'à les réussir', err ? nombreFr(err) + ' à revoir' : ''],['actu','Actualité','Les faits des 4 dernières semaines',''],['cours','Mes cours','Une matière, à ton niveau','']];
+  const prete = ch !== 'alea' || (w.lot && w.lot.length);
+  return `<div class="sw-haut2"><button class="sw-x" data-sw-quitter="1" aria-label="Quitter le mode Swipe">✕</button><b class="sw-titre">Mode Swipe</b>${swBoutonTheme('sw-theme')}</div>
+  <div class="sw-entree2">
     ${live ? `<div class="sw-live"><i></i>${E(live)}</div>` : ''}
-    <h1>Mode<br>Swipe</h1>
-    <p class="sw-chapeau">Une question. Tu réponds, tu glisses, la suivante tombe. À chaque réponse, ta note estimée bouge.</p>
-    ${S.swEtat ? `<div class="sw-carte-note">
-      <div class="sw-tb1"><span>Ma note estimée</span>${rang ? `<span>rang <b>${nombreFr(rang)}ᵉ</b> / ${nombreFr(e.total)}</span>` : ''}</div>
-      <div class="sw-tb2"><b class="sw-note">${swFr(note)}</b><small>/20</small>${semaine ? `<i class="sw-var ${semaine > 0 ? 'up' : 'dn'}">${semaine > 0 ? '+' : '−'}${swFr(Math.abs(semaine))} en 7 jours</i>` : ''}</div>
-      <div class="sw-barre"><i style="width:${Math.max(3, note / 20 * 100)}%"></i><u style="left:${Math.min(97, (+e.barre || 13) / 20 * 100)}%"></u><em style="left:${Math.min(97, (+e.barre || 13) / 20 * 100)}%">la barre ${swFr(+e.barre || 13)}</em></div>
-    </div>` : `<div class="sw-carte-note sw-attente"><div class="squelette"></div></div>`}
-    <div class="sw-tuiles">
-      <div><b>${ico('flamme',16)} ${nombreFr(e.serie_jours || 0)} jour${(e.serie_jours || 0) > 1 ? 's' : ''}</b><span>ta série en cours</span></div>
-      <div><b>${nombreFr(w.record || 0)}</b><span>ton record d'affilée</span></div></div>
-    ${e.serie_jours > 0 && e.joue_aujourdhui === false ? `<div class="sw-minuit">${ico('flamme',15)}<span>Ta série de ${nombreFr(e.serie_jours)} jour${e.serie_jours > 1 ? 's' : ''} s'éteint à minuit. Il te reste <b>${minuit}</b>. Une bonne réponse suffit pour la garder.</span></div>` : ''}
+    <div class="sw-objectif"><div class="sw-obj-rond"><svg viewBox="0 0 96 96" width="96" height="96" aria-hidden="true"><circle cx="48" cy="48" r="40" fill="none" stroke="rgba(255,255,255,.16)" stroke-width="10"/><circle cx="48" cy="48" r="40" fill="none" stroke="#3CCB8A" stroke-width="10" stroke-linecap="round" stroke-dasharray="${(C * f).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 48 48)"/></svg><b>${nombreFr(jour)}<small>/${SW_OBJECTIF}</small></b></div>
+      <div><span>Objectif du jour</span><h2>${reste ? `Encore ${nombreFr(reste)} question${reste > 1 ? 's' : ''}` : 'Objectif atteint !'}</h2><p>${E(sous)}</p></div></div>
+    <div class="sw-semaine"><div class="sw-sem-t">${ico('flamme',20)}<b>${nombreFr(sj)} jour${sj > 1 ? 's' : ''} d'affilée</b>${w.record ? `<span>Record : ${nombreFr(w.record)} bonnes d'affilée</span>` : ''}</div><div class="sw-jours">${jours}</div></div>
+    <div class="sw-lib">Choisis ta série</div>
+    <div class="sw-choix">${cartes.map(([k, l, d, b]) => `<button class="sw-carte-m${ch === k ? ' on' : ''}" data-sw-choix="${k}" aria-pressed="${ch === k ? 'true' : 'false'}"><b>${l}</b><span>${E(d)}</span>${b ? `<em>${b}</em>` : ''}</button>`).join('')}</div>
     ${premiere ? `<ol class="sw-etapes"><li><b>1</b>Touche ta réponse, la correction tombe tout de suite.</li><li><b>2</b>Glisse vers le haut pour la question suivante.</li><li><b>3</b>Enchaîne les bonnes réponses : ta série monte, ta note aussi.</li></ol>` : ''}
-    <button class="sw-cta" data-sw-entrer="1" ${prete ? '' : 'disabled'}>${prete ? 'Entrer · ta 1re question est prête' : (w.lotErreur ? 'Pas de question pour le moment' : 'On prépare tes questions…')}</button>
-    ${w.lotErreur ? `<p class="sw-petit">Vérifie ta connexion, puis réessaie.</p>` : ''}
-  </div>`;
+  </div>
+  <div class="sw-pied"><button class="sw-cta" data-sw-commencer="1" ${prete ? '' : 'disabled'}>${prete ? 'Commencer · 20 questions' : (w.lotErreur ? 'Pas de question pour le moment' : 'On prépare tes questions…')}</button>${w.lotErreur && ch === 'alea' ? `<p class="sw-petit">Vérifie ta connexion, puis réessaie.</p>` : ''}</div>`;
+}
+function swCommencer(){
+  const w = S.sw; if(!w) return;
+  const ch = w.choix || 'alea';
+  pister('SWIPE_COMMENCER', { mode: ch });
+  if(ch === 'alea') return swPasser(swEntrer);
+  swEcrire('vu', 1); w.mode = 'alea';
+  swChanger(ch);
 }
 function swJeu(w){
   const rv = w.revue != null;
@@ -6919,39 +7113,51 @@ function swJeu(w){
   let tag = `<span class="sw-tag">${E(q.matiere || '')}</span>`;
   if(revanche) tag = `<span class="sw-tag rev">Revanche</span><span class="sw-tag">${E(q.matiere || '')}</span>`;
   if(q.etiquette === 'Actualité') tag = `<span class="sw-tag">Actualité</span>${q.raison ? `<span class="sw-source">${E(q.raison)}</span>` : ''}`;
-  const retour = !fini ? '' : (c.correcte
-    ? `<div class="sw-retour ok"><b>${revanche ? 'Revanche gagnée.' : 'Juste.'}${trouvent !== null && trouvent < 70 ? ` ${100 - trouvent} % se trompent ici. Pas toi.` : ''}</b>${c.explication ? `<span>${E(c.explication)}</span>` : ''}</div>`
-    : `<div class="sw-retour ko"><b>C'était ${E('ABCD'[bon] || '')}${q.options && q.options[bon] ? ' : ' + E(q.options[bon]) : ''}.</b>${c.explication ? `<span>${E(c.explication)}</span>` : ''}<em>Elle revient dans « Mes erreurs » jusqu'à ce qu'elle soit acquise.</em></div>`);
-  return `${swHaut(w)}${swTableau(rv ? Object.assign({}, w, { c: null }) : w)}
-  <div class="sw-q${q.annale ? ' annale' : ''}">
+  /* le piège : la mauvaise réponse que les candidats choisissent le plus */
+  let piege = '';
+  if(fini && rp && nRep >= 10){
+    let m = -1, pm = 0;
+    (q.options || []).forEach((o, k) => { if((c.bonnes || []).includes(k)) return; const p = pct(k); if(p !== null && p > pm){ pm = p; m = k; } });
+    if(m >= 0 && pm >= 25) piege = `${pm} % des candidats sont tombés dans le piège du «&nbsp;${E(q.options[m])}&nbsp;».`;
+    else if(trouvent !== null) piege = `${trouvent} % des candidats trouvent la bonne réponse.`;
+  }
+  const bandeau = !fini || rv ? '' : (c.correcte
+    ? `<div class="sw-band ok" role="status"><span class="sw-band-i">${SW_COCHE}</span><span class="sw-band-t"><b>${revanche ? 'Revanche gagnée !' : 'Bonne réponse !'}</b><small>${w.serie >= 2 ? nombreFr(w.serie) + ' bonnes d\'affilée' : 'Continue comme ça'}</small></span><span class="sw-band-p">+1</span></div>`
+    : `<div class="sw-band ko" role="status"><span class="sw-band-i">${SW_CROIX}</span><span class="sw-band-t"><b>Pas cette fois</b><small>C'était ${E('ABCD'[bon] || '')}${q.options && q.options[bon] ? ' : ' + E(q.options[bon]) : ''}</small></span><span class="sw-band-p">−1</span></div>`);
+  const garde = fini && !c.correcte && !w.invite ? `<em>Elle revient dans « Mes erreurs » jusqu'à ce qu'elle soit acquise.</em>` : '';
+  const pourquoi = !fini ? '' : (c.explication ? `<div class="sw-pourquoi"><span>Pourquoi</span><p>${E(c.explication)}</p>${garde}</div>` : (garde ? `<div class="sw-pourquoi">${garde}</div>` : ''));
+  const actions = w.invite ? '' : `<div class="sw-actions"><span>${ico('groupe',18)}${q.repondants >= 10 ? nombreFr(q.repondants) + ' candidats ont répondu' : 'Question nouvelle'}</span>
+      <button class="sw-act" data-partage-question="${E(q.id)}" aria-label="Défier un ami sur WhatsApp">${logoReseau('whatsapp')}</button>
+      <button class="sw-act" data-signaler="${E(q.id)}" aria-label="Signaler la question">${ico('drapeau',18)}</button></div>`;
+  const dernier = w.idx + 1 >= w.lot.length;
+  const pied = rv ? `<div class="sw-pied"><button class="sw-cta creux" data-sw-revenir="1">Revenir à ma question</button><p class="sw-petit">ou glisse vers le haut</p></div>`
+    : fini ? `<div class="sw-pied"><button class="sw-cta sw-suiv" data-sw-suiv="1">${dernier ? 'Voir mon bilan' : 'Question suivante'} <span aria-hidden="true">→</span></button><p class="sw-petit">ou glisse vers le haut</p></div>`
+    : (rep === undefined ? `<p class="sw-petit sw-astuce">Réponds, puis glisse vers le haut</p>` : '');
+  return `${swHaut(w)}${bandeau}
+  <div class="sw-q${q.annale ? ' annale' : ''}${fini ? ' sw-q-rep' : ''}">
     ${q.annale ? `<div class="sw-annale"><span>Tombée au concours${q.annee ? ' ' + q.annee : ''}</span><b>compte double</b></div>` : ''}
     <div class="sw-tags">${tag}</div>
-    ${revanche && q.raison ? `<p class="sw-raison">${E(q.raison)}</p>` : ''}
-    <div class="sw-enonce">${E(q.enonce)}</div>
-    <div class="sw-corps"><div class="sw-opts">
+    ${revanche && q.raison && !fini ? `<p class="sw-raison">${E(q.raison)}</p>` : ''}
+    <div class="sw-enonce${fini ? ' petit' : ''}">${E(q.enonce)}</div>
+    <div class="sw-opts">
     ${(q.options || []).map((o, k) => {
       let cl = '';
       if(fini){ if((c.bonnes || []).includes(k)) cl = 'ok'; else if(k === rep) cl = 'ko'; }
       else if(k === rep) cl = 'choisi';
       const p = fini ? pct(k) : null;
-      return `<button class="sw-opt ${cl}" ${rep !== undefined || rv ? 'disabled' : ''} data-sw-rep="${k}">${p !== null ? `<i class="sw-jauge" style="width:${p}%"></i>` : ''}<b>${cl === 'ok' ? '✓' : cl === 'ko' ? '✕' : 'ABCD'[k]}</b><span>${E(o)}</span>${p !== null ? `<small>${p} %</small>` : ''}</button>`;
+      const moi = fini && k === rep ? `<em>Ta réponse</em>` : '';
+      return `<button class="sw-opt ${cl}" ${rep !== undefined || rv ? 'disabled' : ''} data-sw-rep="${k}">${p !== null ? `<i class="sw-jauge" style="width:${p}%"></i>` : ''}<b>${cl === 'ok' ? '✓' : cl === 'ko' ? '✕' : 'ABCD'[k]}</b><span>${E(o)}${moi}</span>${p !== null ? `<small>${p} %</small>` : ''}</button>`;
     }).join('')}</div>
-    <div class="sw-rail">
-      <div class="sw-r1"><span>${ico('groupe',18)}</span><small>${trouvent !== null ? trouvent + ' %<br>trouvent' : (q.repondants >= 10 ? nombreFr(q.repondants) + '<br>réponses' : 'Nouvelle')}</small></div>
-      <button class="sw-r1" data-partage-question="${E(q.id)}"><span>${logoReseau('whatsapp')}</span><small>Défier</small></button>
-      <button class="sw-r1" data-signaler="${E(q.id)}"><span>${ico('drapeau',17)}</span><small>Signaler</small></button>
-    </div></div>
+    ${piege ? `<p class="sw-piege">${piege}</p>` : ''}
     ${rv ? `<p class="sw-petit">${fini ? 'Question déjà traitée.' : 'Question passée.'} Ta note ne bouge pas.</p>` : ''}
     ${rep !== undefined && !c && !rv ? `<p class="sw-petit">Correction…</p>` : ''}
     ${c && !c.ok && !c.quota ? `<div class="sw-retour ko"><b>Correction indisponible</b><span>${E(c.message || '')}</span></div><button class="sw-cta creux" data-sw-reessayer="1">Réessayer</button>` : ''}
-    ${retour}
-    ${fini && !rv && w.gain ? `<div class="sw-gain${w.gain < 0 ? ' dn' : ''}" aria-hidden="true">${w.gain < 0 ? '−1' : '+1'}</div>` : ''}
+    ${pourquoi}
     ${fini && !rv && w.fete ? `<p class="sw-record">${ico('flamme',14)} ${E(w.fete)}</p>` : ''}
     ${fini && !rv && w.nouveauRecord && w.serie >= 5 ? `<p class="sw-record">${ico('flamme',14)} Nouveau record : ${w.serie} d'affilée</p>` : ''}
+    ${actions}
   </div>
-  ${rv ? `<div class="sw-glisse"><span class="sw-fleche">⌃</span>Glisse vers le haut pour revenir<button data-sw-revenir="1">Revenir</button></div>` : fini ? `<div class="sw-glisse"><span class="sw-fleche">⌃</span>Glisse vers le haut<button data-sw-suiv="1">Suivante</button></div>` : (rep === undefined ? `<div class="sw-glisse discret"><span class="sw-fleche">⌃</span>Glisse pour passer cette question</div>` : '')}
-  <div class="sw-bas">${swPoints(w)}<span>Série ${w.lotNum} · question ${(rv ? w.revue : w.idx) + 1} sur ${w.lot.length}</span></div>
-  ${fini && !rv ? swApercu(w) : ''}`;
+  ${pied}`;
 }
 /* la suivante dépasse en bas de l'écran, comme la vidéo suivante sur TikTok */
 function swApercu(w){
@@ -6999,7 +7205,7 @@ function swRevenirRevue(){
 }
 function swPeutPasser(){
   const w = S.sw; if(!w) return null;
-  if(w.phase === 'entree') return w.lot && w.lot.length ? swEntrer : null;
+  if(w.phase === 'entree') return (w.choix && w.choix !== 'alea') || (w.lot && w.lot.length) ? swCommencer : null;
   if(w.phase === 'jeu'){
     if(w.revue != null) return swRevenirRevue;
     if(w.c && w.c.ok) return () => swSuivante();
@@ -7008,6 +7214,7 @@ function swPeutPasser(){
   }
   if(w.phase === 'palier') return swApresPalier;
   if(w.phase === 'bilan') return w.suivant ? swSerieSuivante : null;
+  if(w.phase === 'ligue') return swLigueFin;
   return null;
 }
 function swPalier(w){
@@ -7033,27 +7240,92 @@ function swBilan(w){
   const mats = Object.entries(a.mat).filter(([, v]) => v.n >= 1);
   const fort = mats.slice().sort((x, y) => (y[1].j / y[1].n) - (x[1].j / x[1].n) || y[1].n - x[1].n)[0];
   const faible = mats.slice().sort((x, y) => (x[1].j / x[1].n) - (y[1].j / y[1].n) || y[1].n - x[1].n)[0];
-  const min = Math.max(1, Math.round((Date.now() - a.t) / 60000));
-  const passes = a.rang && rang ? a.rang - rang : 0;
-  const texte = 'J\'ai fait ' + a.justes + ' sur ' + (w.lot.length - (a.passees || 0)) + ' en mode Swipe sur Mon Concours. Ma note estimée : ' + swFr(note) + '/20. Tu fais mieux ? ' + CONTACT.site;
-  return `<div class="sw-bilan">
-    ${swOnglets(w)}
-    <div class="sw-eyebrow">${a.justes === w.lot.length && !a.passees ? 'Sans faute' : 'Série ' + w.lotNum + ' terminée'}</div>
-    <h1>${a.justes} sur ${w.lot.length - (a.passees || 0)}</h1>${a.justes === w.lot.length && !a.passees ? `<p class="sw-fete-txt">Félicitations, vous avez fait ${w.lot.length} sur ${w.lot.length} !</p>` : ''}${a.passees ? `<p class="sw-petit" style="margin:-10px 0 14px">${a.passees} question${a.passees > 1 ? 's passées' : ' passée'}</p>` : ''}
-    <div class="sw-carte-note">
-      <div class="sw-tb1"><span>Ma note estimée</span>${rang ? '<span>Mon rang</span>' : ''}</div>
-      <div class="sw-avap"><b>${swFr(a.note)} → <span class="${note >= a.note ? 'sw-v' : 'sw-r'}">${swFr(note)}</span></b>${rang && a.rang ? `<b>${nombreFr(a.rang)}ᵉ → <span class="${rang <= a.rang ? 'sw-v' : 'sw-r'}">${nombreFr(rang)}ᵉ</span></b>` : ''}</div>
-      <div class="sw-barre"><i style="width:${Math.max(3, note / 20 * 100)}%"></i><u style="left:${Math.min(97, (+e.barre || 13) / 20 * 100)}%"></u><em style="left:${Math.min(97, (+e.barre || 13) / 20 * 100)}%">la barre ${swFr(+e.barre || 13)}</em></div>
-      ${passes > 0 ? `<p>Tu as dépassé <b>${nombreFr(passes)} candidat${passes > 1 ? 's' : ''}</b> en ${min} minute${min > 1 ? 's' : ''}.</p>` : (passes < 0 ? `<p>${nombreFr(-passes)} candidat${passes < -1 ? 's sont passés' : ' est passé'} devant toi. La série suivante sert à les reprendre.</p>` : '')}
+  const dur = Math.max(1, Math.round((Date.now() - a.t) / 1000));
+  const faites = w.lot.length - (a.passees || 0), j = a.justes, fautes = Math.max(0, faites - j);
+  const sansFaute = j === w.lot.length && !a.passees, r = faites ? j / faites : 0;
+  const titre = sansFaute ? 'Sans faute !' : r >= .8 ? 'Très bonne série !' : r >= .6 ? 'Bonne série !' : r >= .4 ? 'Ça progresse' : 'Chaque erreur t\'apprend quelque chose';
+  const dNote = Math.round((note - a.note) * 10) / 10, passes = a.rang && rang ? a.rang - rang : 0;
+  const sujet = mats.length === 1 ? mats[0][0] : nombreFr(mats.length) + ' matières';
+  const C = 2 * Math.PI * 62, f = faites ? j / faites : 0;
+  const texte = 'J\'ai eu ' + j + '/' + faites + (mats.length === 1 ? ' en ' + mats[0][0].toLowerCase() : '') + ' sur Mon Concours. Tu fais mieux ? ' + CONTACT.site + '/?swipe=1';
+  const signe = x => x > 0 ? '+' : (x < 0 ? '−' : '');
+  const kl = swLigueClassement();
+  const tuile2 = rang ? `<div><b>${nombreFr(rang)}ᵉ</b><span>Ton rang</span><em class="${passes > 0 ? '' : (passes < 0 ? 'dn' : 'neutre')}">${passes ? signe(passes) + nombreFr(Math.abs(passes)) + ' place' + (Math.abs(passes) > 1 ? 's' : '') : 'stable'}</em></div>`
+    : (kl ? `<div><b>${nombreFr(kl.rang)}ᵉ</b><span>Ligue</span><em class="neutre">sur ${nombreFr(kl.total)}</em></div>` : '');
+  const prochain = a.record ? (Math.floor(a.record / 5) + 1) * 5 : 0;
+  const vide = w.mode === 'erreurs' ? 'Tu as fait le tour de tes erreurs. Bravo.' : (w.mode === 'actu' ? "Tu as fait le tour des questions d'actualité du moment." : 'Tu as fait le tour des questions neuves ici.');
+  return `<div class="sw-haut2"><button class="sw-x" data-sw-quitter="1" aria-label="Quitter le mode Swipe">✕</button><span class="sw-fin-t">Série ${w.lotNum} terminée</span><span class="sw-place"></span></div>
+  <div class="sw-bilan sw-fin">
+    <div class="sw-rond2"><svg viewBox="0 0 148 148" width="148" height="148" aria-hidden="true"><circle cx="74" cy="74" r="62" fill="none" style="stroke:var(--st)" stroke-width="12"/><circle cx="74" cy="74" r="62" fill="none" style="stroke:var(--sv)" stroke-width="12" stroke-linecap="round" stroke-dasharray="${(C * f).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 74 74)"/></svg><b>${j}/${faites}</b></div>
+    <h1>${titre}</h1>
+    <p class="sw-fin-sous">${E(sujet)} · ${Math.floor(dur / 60)} min ${String(dur % 60).padStart(2, '0')} s${a.passees ? ` · ${a.passees} passée${a.passees > 1 ? 's' : ''}` : ''}</p>
+    <div class="sw-tuiles3">
+      <div><b>${swFr(note)}</b><span>Ta note</span><em class="${dNote > 0 ? '' : (dNote < 0 ? 'dn' : 'neutre')}">${dNote ? signe(dNote) + swFr(Math.abs(dNote)) : 'stable'}</em></div>
+      ${tuile2}
+      <div><b>${nombreFr(fautes)}</b><span>Erreur${fautes > 1 ? 's' : ''}</span><em class="neutre">${fautes ? 'à revoir' : 'aucune'}</em></div>
     </div>
-    ${fort && faible && fort[0] !== faible[0] ? `<div class="sw-duo"><div><span>Ton point fort</span><b class="sw-v">${E(fort[0])}</b></div><div><span>À travailler</span><b class="sw-o">${E(faible[0])}</b></div></div>` : ''}
-    <div class="sw-suite">
-      <div class="sw-rond"><svg viewBox="0 0 96 96" width="88" height="88"><circle cx="48" cy="48" r="42" fill="none" stroke="#1E2A25" stroke-width="6"/><circle class="sw-anneau" cx="48" cy="48" r="42" fill="none" stroke="#2FC285" stroke-width="6" stroke-linecap="round" stroke-dasharray="264" transform="rotate(-90 48 48)"/></svg><b id="sw-compte">${w.suivant ? (w.compte || 3) : '…'}</b></div>
-      <p><b>La série ${w.lotNum + 1} démarre</b>${faible && faible[1].j < faible[1].n ? `<span>Elle reprend tes points faibles</span>` : ''}</p>
-      <button class="sw-cta" data-sw-serie="1">Continuer maintenant</button>
-    </div>
-    <div class="sw-deux"><a class="sw-cta creux" href="https://wa.me/?text=${encodeURIComponent(texte)}" target="_blank" rel="noopener">${logoReseau('whatsapp')} Partager</a><button class="sw-cta creux" data-sw-quitter="1">Pause</button></div>
+    ${a.record ? `<div class="sw-badge">${ico('flamme',26)}<div><b>Nouveau record : ${a.record} bonnes d'affilée</b><span>Prochain palier : ${prochain}</span></div></div>`
+      : (fort && faible && fort[0] !== faible[0] ? `<div class="sw-duo"><div><span>Ton point fort</span><b class="sw-v">${E(fort[0])}</b></div><div><span>À travailler</span><b class="sw-o">${E(faible[0])}</b></div></div>` : '')}
+    <div class="sw-defi"><span>Ton défi WhatsApp</span><p>${E(texte)}</p></div>
+  </div>
+  <div class="sw-pied">
+    ${w.suivantVide ? `<p class="sw-petit" style="margin-bottom:10px">${E(vide)}</p><button class="sw-cta" data-sw-quitter="1">Revenir à l'accueil</button>`
+      : `<button class="sw-cta" data-sw-serie="1" ${w.suivant ? '' : 'disabled'}>${w.suivant ? 'Série suivante' : 'On prépare la série suivante…'}</button>`}
+    <div class="sw-deux">${fautes && !w.invite ? `<button class="sw-cta creux" data-sw-voir-erreurs="1">Mes ${nombreFr(fautes)} erreur${fautes > 1 ? 's' : ''}</button>` : `<button class="sw-cta creux" data-sw-quitter="1">Pause</button>`}<a class="sw-cta creux sw-wa" href="https://wa.me/?text=${encodeURIComponent(texte)}" target="_blank" rel="noopener" data-sw-defi="1">${logoReseau('whatsapp')} Défier un ami</a></div>
   </div>`;
+}
+/* la ligue de la semaine : les bonnes réponses en Swipe depuis lundi (le serveur recalcule toutes les 10 minutes ;
+   les bonnes réponses données depuis sont ajoutées ici, sur le téléphone) */
+function swLigueCharger(force){
+  if(!base || !S.util || !S.util.connecte) return;
+  if(!force && S.swLigue && Date.now() - S.swLigue.t < 10 * 60000) return;
+  base.rpc('swipe_ligue').then(({ data }) => { if(data && data.ok) S.swLigue = Object.assign({}, data, { t: Date.now() }); }, () => {});
+}
+function swLigueClassement(){
+  const L = S.swLigue; if(!L || !Array.isArray(L.liste)) return null;
+  const maj = Date.parse(L.maj || '') || 0;
+  const moi = (+L.moi || 0) + (S.swBonnes || []).filter(t => t > maj).length;
+  if(moi <= 0) return null;
+  const liste = L.liste.filter(x => !x.moi).map(x => ({ nom: x.nom || 'Candidat', pts: +x.pts || 0 }))
+    .concat([{ nom: 'Toi', pts: moi, moi: true }])
+    .sort((x, y) => y.pts - x.pts || (x.moi ? -1 : (y.moi ? 1 : 0)));
+  liste.forEach((x, k) => { x.rang = k + 1; });
+  const rang = liste.findIndex(x => x.moi) + 1;
+  return { liste, rang, moi, total: Math.max((+L.total || 0) + (+L.moi ? 0 : 1), liste.length) };
+}
+function swInitiales(n){
+  const m = String(n || '').replace(/[^A-Za-zÀ-ÿ ]/g, ' ').trim().split(/\s+/).filter(Boolean);
+  if(!m.length) return '?';
+  return (m.length > 1 ? m[0][0] + m[1][0] : m[0].slice(0, 2)).toUpperCase();
+}
+function swLigue(w){
+  const k = swLigueClassement(); if(!k) return swJeu(w);
+  const L = k.liste, i = k.rang - 1, avant = w.avant.ligueRang;
+  const monte = avant ? avant - k.rang : 0, entre = !avant;
+  const dessus = i > 0 ? L[i - 1] : null;
+  const ord = n => n === 1 ? '1ᵉʳ' : nombreFr(n) + 'ᵉ';
+  const titre = monte > 0 ? `+${nombreFr(monte)} place${monte > 1 ? 's' : ''} dans la ligue de la semaine` : `Tu es ${ord(k.rang)} sur ${nombreFr(k.total)} cette semaine`;
+  let sous = 'Tu es en tête de la semaine. Garde ta place.';
+  if(k.rang > 10 && L[9]){ const m = L[9].pts - k.moi + 1; sous = `Encore ${nombreFr(m)} bonne${m > 1 ? 's' : ''} réponse${m > 1 ? 's' : ''} pour entrer dans le top 10.`; }
+  else if(dessus){ const m = dessus.pts - k.moi + 1; sous = `Encore ${nombreFr(m)} bonne${m > 1 ? 's' : ''} réponse${m > 1 ? 's' : ''} pour passer devant ${dessus.nom}.`; }
+  const debut = w.ligueTout ? 0 : Math.max(0, Math.min(i - 3, L.length - 6));
+  const vues = w.ligueTout ? L : L.slice(debut, debut + 6);
+  const ligne = x => `<div class="sw-lg-l${x.moi ? ' moi' : ''}"><span class="sw-lg-r">${x.rang}</span><span class="sw-lg-a" aria-hidden="true">${E(x.moi ? 'TOI' : swInitiales(x.nom))}</span><b>${E(x.nom)}</b>${x.moi && monte > 0 ? `<em>${SW_MONTE}${nombreFr(monte)}</em>` : ''}<span class="sw-lg-p">${nombreFr(x.pts)} pts</span></div>`;
+  const lignes = vues.map(x => ligne(x) + (x.rang === 10 && L.length > 10 && vues[vues.length - 1] !== x ? `<div class="sw-lg-sep"><i></i>TOP 10 DE LA SEMAINE<i></i></div>` : '')).join('');
+  return `${swHaut(w, true)}
+  <div class="sw-ligue">
+    <span class="sw-lg-chip">${monte > 0 ? SW_MONTE + 'Tu montes' : (entre ? 'Tu entres dans la ligue' : 'Ligue de la semaine')}</span>
+    <h2>${titre}</h2>
+    <p class="sw-lg-sous">${E(sous)}</p>
+    <div class="sw-lg-carte${w.ligueTout ? ' sw-lg-tout' : ''}"><div class="sw-lg-t"><b>Ligue de la semaine</b><span>${nombreFr(k.total)} candidats · finit dimanche</span></div>${lignes}</div>
+    <p class="sw-lg-note">Les points : tes bonnes réponses en Swipe depuis lundi. Chaque lundi, tout le monde repart à zéro.</p>
+  </div>
+  <div class="sw-pied"><button class="sw-cta" data-sw-ligue-ok="1">Continuer la série</button>${!w.ligueTout && L.length > 6 ? `<button class="sw-cta creux" data-sw-ligue-tout="1">Voir toute la ligue</button>` : ''}</div>`;
+}
+function swLigueFin(){
+  const w = S.sw; if(!w) return;
+  w.phase = 'jeu'; w.ligueTout = false; w.t0 = Date.now();
+  ecranSwipe();
 }
 function swMur(w, c){
   const e = S.swEtat || {}, note = swNote(w.cc, w.n), barre = +e.barre || 13, manque = Math.round((barre - note) * 10) / 10;
@@ -7138,7 +7410,7 @@ setInterval(() => {
   document.addEventListener('contextmenu', e => { if(e.target.closest && e.target.closest('.sw-bulle')) e.preventDefault(); });
 })();
 document.addEventListener('click', ev => {
-  const t = ev.target.closest('[data-swipe],[data-sw-entrer],[data-sw-rep],[data-sw-suiv],[data-sw-revenir],[data-sw-theme],[data-sw-quitter],[data-sw-palier],[data-sw-jouer],[data-sw-serie],[data-sw-reessayer],[data-sw-mode],[data-sw-mat],[data-sw-niv],[data-sw-rouvrir]');
+  const t = ev.target.closest('[data-swipe],[data-sw-entrer],[data-sw-rep],[data-sw-suiv],[data-sw-revenir],[data-sw-theme],[data-sw-quitter],[data-sw-palier],[data-sw-jouer],[data-sw-serie],[data-sw-reessayer],[data-sw-mode],[data-sw-mat],[data-sw-niv],[data-sw-rouvrir],[data-sw-menu],[data-sw-choix],[data-sw-commencer],[data-sw-ligue-ok],[data-sw-ligue-tout],[data-sw-voir-erreurs]');
   if(!t) return;
   const d = t.dataset;
   if(d.swipe) return lancerSwipe();
@@ -7151,7 +7423,13 @@ document.addEventListener('click', ev => {
   if(d.swPalier) return swPasser(swApresPalier);
   if(d.swJouer) return swPasser(() => { S.sw.phase = 'jeu'; swSuivante(true); });
   if(d.swRouvrir){ S.sw.chipsOuverts = true; return ecranSwipe(); }
-  if(d.swMode){ if(S.sw) S.sw.chipsOuverts = false; return swChanger(d.swMode); }
+  if(d.swMenu){ S.sw.menu = !S.sw.menu; return ecranSwipe(); }
+  if(d.swChoix){ S.sw.choix = d.swChoix; return ecranSwipe(); }
+  if(d.swCommencer) return swCommencer();
+  if(d.swLigueOk) return swPasser(swLigueFin);
+  if(d.swLigueTout){ S.sw.ligueTout = true; pister('SWIPE_LIGUE_TOUT'); return ecranSwipe(); }
+  if(d.swVoirErreurs){ pister('SWIPE_BILAN_ERREURS'); S.sw.menu = false; return swChanger('erreurs'); }
+  if(d.swMode){ if(S.sw){ S.sw.chipsOuverts = false; S.sw.menu = false; if(S.sw.mode === d.swMode){ S.sw.chipsOuverts = d.swMode === 'cours'; return ecranSwipe(); } } return swChanger(d.swMode); }
   if(d.swMat){ S.sw.chipsOuverts = false; if(S.sw.mat === d.swMat && S.sw.mode === 'cours'){ return ecranSwipe(); } S.sw.mode = 'x'; return swChanger('cours', d.swMat); }
   if(d.swNiv) return swChoisirNiveau(d.swNiv);
   if(d.swSerie) return swPasser(swSerieSuivante);
@@ -7452,6 +7730,7 @@ function ecranCorrectionNat(){
     <h1 class="titre" style="margin:0 0 4px">Correction générale</h1>
     <p class="cg-sous">${cl ? 'Composition nationale · ' + E(cl.concours || cl.titre || '') + (cl.debut_le ? ' · ' + E(jourFr(cl.debut_le)) : '') : 'Composition nationale'}</p>
     <div class="cg-stats"><div><b class="num">${nq}</b><span>question${nq > 1 ? 's' : ''}</span></div><div><b class="num">${nombreFr(c.participants || 0)}</b><span>candidat${(c.participants||0)>1?'s':''}</span></div>${cl && cl.moyenne !== null && cl.moyenne !== undefined ? `<div><b class="num">${String(cl.moyenne).replace('.', ',')}/${cl.sur}</b><span>moyenne</span></div>` : ''}</div>
+    <button class="cta" data-resultats-pdf="1" style="margin-top:14px">${ico('telecharger',16)} Télécharger la correction en PDF</button>
     <div style="height:16px"></div>
     <div class="libelle">Feuille de réponses</div>
     <div class="carte"><div class="cg-grille">${grille}</div><p class="sous" style="margin:10px 0 0;font-size:12px"><span class="cg-b on" style="display:inline-grid;width:16px;height:16px;font-size:9px">✓</span> Réponse attendue</p></div>
@@ -8098,7 +8377,7 @@ function fenetreInstaller(){
     <button class="pn-x" data-rappel-fermer="1" aria-label="Fermer">×</button>
     <h3 id="pr-titre">${dejaLa ? 'Application déjà installée' : 'Installer Mon Concours'}</h3>
     <p class="intro">${dejaLa ? 'Elle est sur votre téléphone.' : 'Elle s\'ouvre comme une application, même avec peu de réseau.'}${notif ? ' Activez aussi les notifications pour ne rien manquer.' : ''}</p>
-    ${dejaLa ? '' : '<button class="cta" data-installer-lien="1">Installer l\'application</button>'}
+    ${dejaLa ? '' : '<button class="cta" data-installer-lien="1">' + (apkDispo() ? 'Télécharger l\'application' : 'Installer l\'application') + '</button>'}
     ${notif ? '<button class="cta" style="margin-top:10px" data-notifs-lien="1">Activer les notifications</button>' : ''}
     <button class="lien" style="display:block;margin:12px auto 0" data-rappel-fermer="1">Fermer</button></div>`;
   pister('INSTALL_LINK_OPENED');
@@ -8222,6 +8501,14 @@ async function lancerFautes(){
   pister('LAST_FAULTS_STARTED', { n: Math.min(10, liste.length) });
   aller('cahier');
 }
+/* Liens publics, sans compte : ?correction=ID ouvre la correction de la composition ; ?pdf=ID ouvre la correction et lance le PDF */
+async function lienCorrection(id, pdf){
+  for(let i = 0; i < 40 && !base; i++) await new Promise(r => setTimeout(r, 250));
+  try{ pister(pdf ? 'LIEN_PDF_CORRECTION' : 'LIEN_CORRECTION'); }catch(e){}
+  await Promise.all([chargerCorrectionNat(id), chargerClassement(id)]);
+  if(!pdf) return;
+  if(S.corrNat && S.corrNat.ok && S.corrNat.publie) resultatsPdf();
+}
 function ouvrirLienDirect(){
   window.__origine = origineVisite();
   const p = new URLSearchParams(location.search);
@@ -8230,6 +8517,11 @@ function ouvrirLienDirect(){
   let cible = null;
   if(p.get('q') === 'jour') cible = 'qdj';
   else if(/^[0-9a-f-]{36}$/i.test(p.get('question') || '')){ cible = 'question'; S.lienQuestion = p.get('question'); S.qp = null; }
+  else if(/^[0-9a-f-]{36}$/i.test(p.get('correction') || p.get('pdf') || '')){
+    const id = p.get('correction') || p.get('pdf');
+    cible = 'correctionnat'; S.corrNat = { id, charge:false }; S.classementEp = null;
+    setTimeout(() => lienCorrection(id, !p.get('correction')), 300);
+  }
   else if(/^[0-9a-f-]{36}$/i.test(p.get('epreuve') || '')){ cible = 'gagnants'; S.lienEpreuve = p.get('epreuve'); S.classementEp = null; S.lienSalle = p.get('epreuve'); }
   else if(/^[0-9a-f-]{36}$/i.test(p.get('defi') || '')){ cible = 'defi'; S.lienDefi = p.get('defi'); S.defi = { etat:'chargement', id:p.get('defi') }; }
   else if(/^[0-9a-f-]{36}$/i.test(p.get('copie') || '')){ const id = p.get('copie'); setTimeout(() => feuilleArchive(id), 1500); }
@@ -8239,6 +8531,7 @@ function ouvrirLienDirect(){
   else if(p.has('avis') || p.has('annonce')) setTimeout(() => chargerNotifications(), 1200);
   else if(p.has('communaute')){ cible = 'communaute'; if(/^[0-9a-f-]{36}$/i.test(p.get('communaute') || '')) S.commFocus = p.get('communaute'); }
   else if(p.has('installer')){ S.modalDejaVu = true; setTimeout(fenetreInstaller, 1200); }
+  else if(p.has('swipe')){ S.modalDejaVu = true; pister('SWIPE_LIEN_OUVERT', { connecte: !!(S.util && S.util.connecte) }); setTimeout(() => { if(S.util.connecte) lancerSwipe(); else lancerSwipeInvite(); }, 250); }
   else if(p.has('compte')) cible = 'compte';
   else if(p.has('abonnement')) cible = 'abonnement';
   else if(p.has('parcours')) cible = 'parcours';
@@ -8255,6 +8548,7 @@ try{ history.replaceState({ ecran: S.ecran }, ''); }catch(e){}
 window.addEventListener('popstate', ev => {
   const v = document.getElementById('voile');
   /* un panneau ouvert se ferme d'abord */
+  if(S.inviteMur && !S.util.connecte){ try{ history.pushState({ ecran:S.ecran }, ''); }catch(e){} return; }
   if(v && !v.hidden){
     v.hidden = true; v.innerHTML = ''; S.modal = null;
     try{ history.pushState({ ecran:S.ecran }, ''); }catch(e){}
@@ -8433,7 +8727,7 @@ async function chargerDetails(){
 const NIVEAUX_C = [
   { nom:'Débutant', crit:() => [] },
   { nom:'Confirmé', crit:() => [['questions', 500, 'questions résolues (QCM)', 'questions'], ['compos', 150, 'compositions', 'compositions']] },
-  { nom:'Prêt pour le concours', crit:v => [['questions', 4000, 'questions résolues (QCM)', 'questions'], ['compos', 1500, 'compositions', 'compositions'], ['cours', v.coursTotal, 'cours de votre niveau lus', 'cours lus']] }
+  { nom:'Prêt pour le concours', crit:v => [['questions', 10000, 'questions résolues (QCM)', 'questions'], ['compos', 2000, 'compositions', 'compositions'], ['cours', v.coursTotal, 'cours de votre niveau lus', 'cours lus']] }
 ];
 function valeursNiveau(){
   const st = S.stats || {}, dt = S.details || {};
@@ -9828,7 +10122,7 @@ setTimeout(() => { try{ majInvitSwipe(); }catch(e){} }, 12500);
 /* ---------- bandeau « Télécharger l'application » : toujours visible, sous l'en-tête ---------- */
 const CLE_BANDEAU = 'mc_bandeau_appli_ferme';
 function bandeauAppliRecemmentFerme(){
-  try{ const t = +localStorage.getItem(CLE_BANDEAU) || 0; return Date.now() - t < 3 * 86400000; }catch(e){ return false; }
+  try{ const t = +localStorage.getItem(CLE_BANDEAU) || 0; return Date.now() - t < (apkDispo() ? 1 : 3) * 86400000; }catch(e){ return false; }
 }
 function fermerBandeauAppli(){
   try{ localStorage.setItem(CLE_BANDEAU, String(Date.now())); }catch(e){}
@@ -9839,7 +10133,7 @@ function fermerBandeauAppli(){
 function majBandeauAppli(){
   let b = document.getElementById('bandeau-appli');
   const visible = S.ecran === 'aujourdhui' && !estInstallee() && !enComposition() && !S.modal &&
-    (!S.appliLa && !bandeauAppliRecemmentFerme());
+    (!S.appliLa && !bandeauAppliRecemmentFerme() && !(apkDispo() && apkRecemmentTelecharge()));
   if(!visible){ if(b) b.remove(); return; }
   if(!b){
     b = document.createElement('div');
@@ -9850,14 +10144,14 @@ function majBandeauAppli(){
       telechargerAppli();
     };
     document.getElementById('apptete').insertAdjacentElement('afterend', b);
-    setTimeout(() => fermerBandeauAppli(), 10000);
+    setTimeout(() => fermerBandeauAppli(), apkDispo() ? 15000 : 10000);
   }
   { const n = document.getElementById('nav');
     b.style.setProperty('--nav-h', ((n && n.offsetHeight) || 64) + 'px');
   }
   b.innerHTML = `<img class="ba-ico" src="/icone-192.png" alt="" width="46" height="46">
-    <span class="ba-txt"><b>Mon Concours</b><small>Gratuit · moins de 2 Mo</small></span>
-    <button type="button" class="bandeau-appli-go">Installer</button>
+    <span class="ba-txt">${apkDispo() ? '<b>Nouveauté · Application Android</b><small>Téléchargez Mon Concours, gratuit</small>' : '<b>Mon Concours</b><small>Gratuit · moins de 2 Mo</small>'}</span>
+    <button type="button" class="bandeau-appli-go">${apkDispo() ? 'Télécharger' : 'Installer'}</button>
     <button type="button" class="bandeau-appli-x" data-appli-x="1" aria-label="Fermer">×</button>`;
 }
 document.addEventListener('click', ev => { if(ev.target.closest('[data-appli-dl]')) telechargerAppli(); });
@@ -9893,6 +10187,7 @@ function installeReussi(){
 async function telechargerAppli(){
   try{ pister('APPLI_BANDEAU_CLIC'); }catch(e){}
   if(S.appliLa) return ouvrirAppli();
+  if(apkDispo()) return telechargerApk();            // Android : l'APK, directement
   if(!S.installer) return installerAppli();          // pas de téléchargement direct : on guide la personne
   const invite = S.installer;
   invite.prompt();
@@ -9907,6 +10202,7 @@ async function telechargerAppli(){
 
 function surcouche(){
   const v = document.getElementById('voile');
+  if(S.inviteMur && !S.util.connecte && S.modal !== 'connexion' && S.modal !== 'oubli') S.modal = 'inscription';   // mur d'inscription du Swipe invité : on ne le ferme pas
   /* les autres panneaux (partage, notifications, signalement, sortie
      d'épreuve) se gèrent eux-mêmes : un rendu ne doit pas les fermer */
   if(S.modal && !['inscription','connexion','oubli'].includes(S.modal)) return;
@@ -9915,7 +10211,7 @@ function surcouche(){
   const mode = S.modal;                       // inscription · connexion · oubli
   const titres = { inscription:'Crée ton compte gratuitement en 30 secondes', connexion:'Connexion', oubli:'Mot de passe oublié' };
   const intros = {
-    inscription:"",
+    inscription: S.inviteMur ? `Bravo, tu as répondu à ${S.inviteMur.n} question${S.inviteMur.n > 1 ? 's' : ''}. Crée ton compte gratuit pour continuer : ta note, ton rang et ta progression seront enregistrés.` : "",
     connexion:"Entre ton numéro et ton mot de passe pour retrouver ta progression.",
     oubli:"Donne ton numéro et la couleur choisie à l'inscription, puis choisis un nouveau mot de passe. Trois essais au plus : ensuite, l'administrateur s'en occupe sur WhatsApp."
   };
@@ -10034,7 +10330,7 @@ function retirerFacade(){
 
 function rendre(){
   if(bloqueParPartenaire() && !ECRANS_AVANT_PAIEMENT.includes(S.ecran)) S.ecran = 'abonnement';
-  else if(paiementObligatoire() && !S.util.connecte && !ECRANS_VISITEUR_PARTENAIRE.includes(S.ecran)) S.ecran = 'engagement';
+  else if(paiementObligatoire() && !S.util.connecte && !ECRANS_VISITEUR_PARTENAIRE.includes(S.ecran) && !(S.sw && S.sw.invite && S.ecran === 'swipe')) S.ecran = 'engagement';
   appliquerTheme();
   retirerFacade();
   if(typeof pister === 'function' && S.ecran !== O.dernierEcran){
@@ -10120,6 +10416,7 @@ document.addEventListener('click', ev=>{
         noterParcoursCompte();
         ecrireReglage('compteLe', Date.now());
         if(!estXX1() && !estE2()) setTimeout(() => invitationNotifsApresInscription(), 7000);
+        swInviteFin('inscription');
         S.modal = null; chargerProgression();
         if(paiementObligatoire()){ chargerAbonnement(); S.choixFormule = S.choixFormule || 'annuelle'; return aller('abonnement'); }
         if(S.defi && S.defi.etat === 'connexion') ouvrirDefi(S.defi.id);
@@ -10159,6 +10456,7 @@ document.addEventListener('click', ev=>{
       S.bloque = false;
       S.erreur = ''; S.util = { nom:'Candidat', tel:tel, pin:'', connecte:true };
       ecrireMemoire({ nom:'Candidat', tel:tel, niveau:S.niveau });
+      swInviteFin('connexion');
       S.modal = null;
       await reprendreSession();
       await chargerProgression();
@@ -10569,7 +10867,7 @@ function planifierInvitations(){
     fenetreInvitation(Object.assign({ cle }, config));
   }, delai);
   /* installation : vers 1 minute, sans bouton « Plus tard » ; si le téléphone refuse, on redemande après 1 heure */
-  essayer(180000, 'install', () => !estInstallee() && !CONTACT.playStore,
+  essayer(180000, 'install', () => !estInstallee() && !CONTACT.playStore && !(apkDispo() && apkRecemmentTelecharge()),
     { icone:'telecharger', titre:'Installer Mon Concours', texte:'Installez l\'application sur votre téléphone : elle s\'ouvre comme une application, même avec peu de réseau.',
       oui:'Installer l\'application', obligatoire:true, sansFait:true, action: () => installerAppli() }, 3600000);
   /* communauté WhatsApp : 2 minutes, 10 minutes, 1 heure ; plus jamais une fois rejointe */
@@ -10589,7 +10887,51 @@ function planifierInvitations(){
         action: () => activerRappel(18, 0) }, 120000);
   });
 }
+/* Partage : le candidat qui a donné un avis positif, 30 minutes après avoir reçu notre réponse, est invité à recommander l'application (une seule fois) */
+function fenetrePartage(){
+  const f = document.createElement('div');
+  f.className = 'fenetre-evt annonce'; f.id = 'fenetre-partage'; f.setAttribute('role', 'dialog'); f.setAttribute('aria-modal', 'true');
+  f.setAttribute('aria-label', 'Recommander Mon Concours');
+  f.innerHTML = `<div class="fe-carte">
+    <div class="fe-badge" aria-hidden="true">💚</div>
+    <div class="fe-marque">Mon Concours</div>
+    <h2 class="fe-titre">Vous aimez Mon Concours ? Recommandez-le !</h2>
+    <p class="fe-texte">Un ami, un parent ou un collègue prépare un concours ? Envoyez-lui l'application : QCM, cours et compositions nationales, gratuit.</p>
+    <button type="button" class="cta" data-pa="wa">Partager sur WhatsApp</button>
+    <button type="button" class="cta creux" style="margin-top:10px" data-pa="fb">Partager sur Facebook</button>
+    <button type="button" class="lien" style="display:block;margin:12px auto 0" data-pa="non">Plus tard</button></div>`;
+  const fermer = () => {
+    ecrireReglage('partageVu', true);
+    try{ base.rpc('partage_avis_vu').then(() => {}, () => {}); }catch(e){}
+    f.classList.remove('vu'); setTimeout(() => f.remove(), 300);
+  };
+  f.addEventListener('click', e => {
+    const b = e.target.closest('[data-pa]');
+    if(b && b.dataset.pa === 'wa'){
+      pister('SHARE_APP_WHATSAPP', {});
+      window.open('https://wa.me/?text=' + encodeURIComponent('Je recommande l\'application Mon Concours pour préparer les concours directs du Burkina : QCM, cours et compositions nationales, gratuit 👉 ' + CONTACT.site), '_blank', 'noopener');
+      fermer();
+    } else if(b && b.dataset.pa === 'fb'){
+      pister('SHARE_APP_FACEBOOK', {});
+      window.open('https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(CONTACT.site), '_blank', 'noopener');
+      fermer();
+    } else if((b && b.dataset.pa === 'non') || e.target === f){ pister('SHARE_APP_LATER', {}); fermer(); }
+  });
+  document.body.appendChild(f);
+  setTimeout(() => { f.classList.add('vu'); const b = f.querySelector('button'); if(b) b.focus(); }, 30);
+  pister('SHARE_APP_SHOWN', {});
+}
+function proposerPartage(essais){
+  if(!base || !S.util || !S.util.connecte || lireReglages().partageVu) return;
+  if(!peutInviter() || verrouComposition()){ essais = (essais || 0) + 1; if(essais < 20) setTimeout(() => proposerPartage(essais), 20000); return; }
+  /* une seule vérification par heure et par téléphone */
+  const r = lireReglages();
+  if(r.partageVerif && Date.now() - r.partageVerif < 3600000) return;
+  ecrireReglage('partageVerif', Date.now());
+  base.rpc('partage_avis_etat').then(({ data }) => { if(data && data.afficher && peutInviter() && !verrouComposition()) fenetrePartage(); }).catch(() => {});
+}
 planifierInvitations();
+setTimeout(() => proposerPartage(0), 50000);
 /* Juste après la création du compte, quand l'envie est la plus forte : la demande d'autorisation des notifications.
    C'est ce qui permet à Mon Concours d'apparaître par-dessus Facebook ou WhatsApp. */
 function invitationNotifsApresInscription(){
