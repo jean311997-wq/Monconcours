@@ -2714,3 +2714,14 @@ body.copie-bloc #mt-banniere, body.copie-bloc .sw-bulle, body.copie-bloc #fab-ca
 /* la page de question peut grandir (menu ouvert, longue question) : rien ne se chevauche */
 .sw-page.sw-fixe{height:auto;min-height:100%}
 .sw-page.sw-fixe .sw-q{flex:1 0 auto}
+
+/* Offre de lancement : un trait de lumière fait le tour de l'annonce pour qu'on la lise */
+.of-urgent{position:relative;isolation:isolate;overflow:hidden;margin:12px 0 0;padding:12px 14px;border-radius:14px;
+  text-align:center;font-size:13.5px;line-height:1.5;color:var(--or)}
+.of-urgent b{font-weight:700}
+.of-urgent::before{content:'';position:absolute;z-index:-2;left:50%;top:50%;width:200%;aspect-ratio:1;translate:-50% -50%;
+  background:conic-gradient(from 0deg,transparent 0 62%,rgba(245,183,49,.35) 72%,#F5B731 82%,#FFF1C2 86%,#F5B731 90%,transparent 100%);
+  animation:ofTour 2.8s linear infinite}
+.of-urgent::after{content:'';position:absolute;z-index:-1;inset:2px;border-radius:12px;background:var(--ardoise)}
+@keyframes ofTour{to{rotate:1turn}}
+@media (prefers-reduced-motion:reduce){.of-urgent::before{animation:none;background:#F5B731}}

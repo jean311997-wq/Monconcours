@@ -3103,6 +3103,10 @@ const nomFormule = f => ({ semaine:'Abonnement Semaine', mensuelle:'Abonnement M
    (2 000 F le mois, 8 000 F l'année) s'appliquent tout seuls, ici comme dans la base (tarifs). */
 const FIN_LANCEMENT = Date.parse('2026-12-01T00:00:00Z');
 const enLancement = () => Date.now() < FIN_LANCEMENT;
+const resteLancement = () => {
+  const ms = FIN_LANCEMENT - Date.now(), j = Math.floor(ms / 86400000), h = Math.floor(ms / 3600000) % 24;
+  return j >= 2 ? 'plus que ' + j + ' jours' : j === 1 ? 'plus que 1 jour et ' + h + ' h' : h >= 1 ? 'dernier jour, plus que ' + h + ' h' : 'dernières minutes';
+};
 const FORMULES = enLancement() ? {
   mensuelle:{ cle:'mensuelle', n:'Abonnement Mois',    prix:'1 000 FCFA', montant:1000, ancien:'2 000 FCFA', per:'30 jours', jour:'33 F par jour', reco:false },
   annuelle: { cle:'annuelle', n:'Abonnement Année',   prix:'4 000 FCFA', montant:4000, ancien:'8 000 FCFA', per:'12 mois',  jour:'11 F par jour', reco:true }
@@ -3241,7 +3245,7 @@ function choixOffre(point){
         <i class="of-rad" aria-hidden="true"></i><span class="of-n"><b>Mois</b><small>30 jours</small></span>
         <span class="of-p"><b>${E(mo.prix.replace(' FCFA', ' F'))}</b>${mo.ancien ? `<s>${E(mo.ancien.replace(' FCFA', ' F'))}</s>` : ''}</span></button>
     </div>
-    ${enLancement() ? `<p class="flash-reste" style="text-align:center;margin:10px 0 0">Offre de lancement −50 % jusqu'au 30 novembre.<br>Ensuite : Mois 2 000 F, Année 8 000 F.</p>` : ''}
+    ${enLancement() ? `<div class="of-urgent" role="note"><b>Offre de lancement −50 %</b> · ${E(resteLancement())}<br>Le 1er décembre : Mois 2 000 F, Année 8 000 F.</div>` : ''}
     <button type="button" class="cta vert of-go" data-offre-go="1">${logoReseau('whatsapp')}<span class="of-go-t">Continuer avec l'Année</span><small>Un conseiller t'aide à payer sur WhatsApp</small></button>
     <p class="of-rass">${rass}</p>
     ${CONTACT.paiementDirect ? `<button type="button" class="lien-mini" data-pass="annuelle" data-offre-direct="1">Payer moi-même</button>` : ''}
