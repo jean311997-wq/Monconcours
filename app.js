@@ -6274,12 +6274,15 @@ function carteEpreuve(){
       : `<button class="cta" style="margin-top:12px" data-inscrire-nat="${E(ep.id)}">M'inscrire à la composition</button>`;
   } else if(ep.etat === 'en_cours'){
     const finis = Math.max(0, (ep.participants || 0) - (ep.composent || 0));
-    corps = `<p class="cn-quand"><span class="cn-direct"><i></i>En cours</span> fin à ${heureH(ep.fin_le)}</p>
-      ${rebours(ep.fin_le)}
+    const entreeFin = ep.entree_fin_le || ep.fin_le, entreeOuverte = Date.now() < Date.parse(entreeFin);
+    corps = `<p class="cn-quand"><span class="cn-direct"><i></i>En cours</span> ${entreeOuverte && ep.entree_fin_le ? 'entrée jusqu\'à ' + heureH(entreeFin) + ' · résultats à ' + heureH(ep.fin_le) : 'fin à ' + heureH(ep.fin_le)}</p>
+      ${rebours(entreeOuverte ? entreeFin : ep.fin_le)}
       <p class="sous cn-faits">${faits}${ep.composent > 0 ? ` · <span class="num">${ep.composent}</span> en salle` : ''}${finis > 0 ? ` · <span class="num">${finis}</span> ${finis > 1 ? 'ont' : 'a'} déjà fini` : ''}</p>`;
     bouton = moi && moi.terminee
       ? `<p class="sous" style="margin-top:8px">Copie remise. Les résultats sont publiés à ${heureH(ep.fin_le)}.</p>`
-      : `<button class="cta" style="margin-top:12px" data-rejoindre="${E(ep.id)}">Entrer en salle de composition</button>`;
+      : entreeOuverte
+        ? `<button class="cta" style="margin-top:12px" data-rejoindre="${E(ep.id)}">Entrer en salle de composition</button>${ep.entree_fin_le ? `<p class="sous" style="margin-top:8px">Chacun a ${Math.round((ep.duree || 2400) / 60)} minutes à partir de son entrée, jusqu'à ${heureH(entreeFin)} au plus tard.</p>` : ''}`
+        : `<p class="sous" style="margin-top:8px">L'entrée en salle est fermée. Les résultats sont publiés à ${heureH(ep.fin_le)}.</p>`;
   } else {
     const absent = ep.inscrit && !(moi && moi.terminee);
     corps = `<p class="cn-quand">${absent ? 'Terminée sans vous' : 'Résultats publiés'}</p>
