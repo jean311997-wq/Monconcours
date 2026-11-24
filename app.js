@@ -3239,8 +3239,9 @@ function choixOffre(point){
         <span class="of-p"><b>${E(an.prix.replace(' FCFA', ' F'))}</b>${ancien ? `<s>${E(ancien.replace(' FCFA', ' F'))}</s>` : ''}</span></button>
       <button type="button" class="of" role="radio" aria-checked="false" data-offre-f="mensuelle">
         <i class="of-rad" aria-hidden="true"></i><span class="of-n"><b>Mois</b><small>30 jours</small></span>
-        <span class="of-p"><b>${E(mo.prix.replace(' FCFA', ' F'))}</b></span></button>
+        <span class="of-p"><b>${E(mo.prix.replace(' FCFA', ' F'))}</b>${mo.ancien ? `<s>${E(mo.ancien.replace(' FCFA', ' F'))}</s>` : ''}</span></button>
     </div>
+    ${enLancement() ? `<p class="flash-reste" style="text-align:center;margin:10px 0 0">Offre de lancement −50 % jusqu'au 30 novembre.<br>Ensuite : Mois 2 000 F, Année 8 000 F.</p>` : ''}
     <button type="button" class="cta vert of-go" data-offre-go="1">${logoReseau('whatsapp')}<span class="of-go-t">Continuer avec l'Année</span><small>Un conseiller t'aide à payer sur WhatsApp</small></button>
     <p class="of-rass">${rass}</p>
     ${CONTACT.paiementDirect ? `<button type="button" class="lien-mini" data-pass="annuelle" data-offre-direct="1">Payer moi-même</button>` : ''}
