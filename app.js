@@ -2638,6 +2638,11 @@ async function chargerActualites(){
 /* Seules les actualités publiées en base sont affichées : pas de bulletin
    de secours écrit à l'avance, qui passerait pour une information vérifiée. */
 const ACTU = [];
+/* Page d'accueil : les 3 dernières actualités nationales d'abord ; l'international se lit en ouvrant la rubrique. */
+function actuAccueil(){
+  const nat = ACTU.filter(a => a.c === 'national');
+  return (nat.length >= 3 ? nat : nat.concat(ACTU.filter(a => a.c !== 'national'))).slice(0, 3);
+}
 
 function dateCourteFr(iso){
   if(!iso) return '';
@@ -2839,7 +2844,7 @@ function ecranAujourdhui(){
     <div>
     <div class="bloc">
       <div class="carte">
-        ${ACTU.length ? ACTU.slice(0,3).map((a,k)=>carteActu(a,k===0)).join('') : blocActuVide()}
+        ${ACTU.length ? actuAccueil().map((a,k)=>carteActu(a,k===0)).join('') : blocActuVide()}
       </div>
       ${ACTU.length > 3 ? `<button class="voir-tout" data-go="actualite"><span>Voir les ${ACTU.length} informations</span><b aria-hidden="true">→</b></button>` : ''}
     </div>
