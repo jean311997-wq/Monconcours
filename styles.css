@@ -2725,3 +2725,27 @@ body.copie-bloc #mt-banniere, body.copie-bloc .sw-bulle, body.copie-bloc #fab-ca
 .of-urgent::after{content:'';position:absolute;z-index:-1;inset:2px;border-radius:12px;background:var(--ardoise)}
 @keyframes ofTour{to{rotate:1turn}}
 @media (prefers-reduced-motion:reduce){.of-urgent::before{animation:none;background:#F5B731}}
+
+/* Discussion : réponse citée, @mentions, message épinglé, modifier (25 nov.) */
+.msg-d .d-pied{flex-wrap:wrap;row-gap:2px}
+.msg-d .d-act{background:none;border:0;padding:2px 4px;font-size:11.5px;font-weight:600;color:var(--craie2);cursor:pointer}
+.msg-d .d-act.d-epi{color:var(--or-texte)}
+.msg-d .d-mod{font-style:italic}
+.msg-d.pin-on .d-bulle{border-color:var(--or-bord)}
+.d-cite{display:block;border-left:3px solid var(--vert-bord);background:rgba(127,127,127,.08);border-radius:6px;padding:4px 8px;margin:2px 0 6px;font-size:12.5px;color:var(--craie2);overflow-wrap:anywhere}
+.d-cite i{display:block;font-style:normal;font-weight:700;font-size:11.5px;color:var(--vert-texte)}
+.arob{color:var(--vert-texte);font-weight:700}
+.disc-epingle>div:empty{display:none}
+#disc-epingle .disc-epingle{display:flex;gap:10px;align-items:flex-start;margin-top:12px;padding:10px 12px;border:1px solid var(--or-bord);background:var(--or-fond);border-radius:14px}
+#disc-epingle .pin{font-size:15px;line-height:1.3}
+#disc-epingle b{display:block;font-size:11.5px;color:var(--or-texte);margin-bottom:2px}
+#disc-epingle span{font-size:13.5px;line-height:1.4;color:var(--craie)}
+#disc-epingle .d-act{background:none;border:0;color:var(--craie2);font-size:11.5px;text-decoration:underline;margin-top:4px;padding:0;display:block}
+.disc-ctx{margin-right:66px;position:sticky;bottom:72px;z-index:6;display:flex;align-items:center;gap:8px;margin-top:6px;background:var(--ardoise);border:1px solid var(--trait);border-radius:14px;padding:8px 12px;font-size:12.5px;color:var(--craie2)}
+.disc-ctx[hidden],.disc-sugg[hidden]{display:none}
+.disc-ctx b{color:var(--vert-texte)}
+.disc-ctx button{margin-left:auto;background:none;border:0;color:var(--craie2);font-size:16px;padding:2px 6px}
+.disc-sugg{margin-right:66px;position:sticky;bottom:120px;z-index:7;margin-top:6px;background:var(--ardoise);border:1px solid var(--trait);border-radius:14px;overflow:hidden;box-shadow:0 8px 24px -8px rgba(0,0,0,.45)}
+.disc-sugg small{display:block;font-size:11px;color:var(--craie2);padding:8px 12px 2px}
+.disc-sugg button{display:flex;width:100%;gap:10px;align-items:center;padding:8px 12px;font:inherit;font-size:14px;color:var(--craie);background:none;border:0;border-top:1px solid var(--trait);text-align:left}
+.disc-sugg .d-av{width:28px;height:28px;border-radius:50%;background:var(--vert-fond);border:1px solid var(--vert-bord);color:var(--vert-texte);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;flex:none}

@@ -7822,17 +7822,56 @@ function ouvrirDiscussion(id){
   chargerDiscussion(id, false); chargerStatsGroupe(id);
   pister('DISCUSSION_OUVERTE');
 }
+function discMentions(t){
+  // le texte arrive déjà échappé ; on colore les @Nom des personnes connues, puis les autres @mot
+  const noms = ((S.disc && S.disc.auteurs) || []).concat((S.disc && S.disc.messages || []).map(m => m.nom)).filter(Boolean)
+    .filter((n, i, a) => a.indexOf(n) === i).sort((a, b) => b.length - a.length);
+  let x = t; const marque = [];
+  noms.forEach(n => { const en = '@' + E(n); if(x.includes(en)){ x = x.split(en).join('\u0001' + marque.length + '\u0002'); marque.push(en); } });
+  x = x.replace(/@([A-Za-zÀ-ÿ][\wÀ-ÿ'-]*)/g, '<span class="arob">@$1</span>');
+  return x.replace(/\u0001(\d+)\u0002/g, (_, i) => '<span class="arob">' + marque[+i] + '</span>');
+}
+function blocEpingle(){
+  const d = S.disc, p = d && d.ok && d.epingle;
+  if(!p) return '';
+  return `<div class="disc-epingle"><span class="pin" aria-hidden="true">📌</span><div><b>Message épinglé · ${E(p.nom)}</b><span>${discMentions(E(p.texte))}</span>
+    ${d.equipe ? `<button class="d-act" data-disc-epingler="${E(p.id)}" data-on="0">Désépingler</button>` : ''}</div></div>`;
+}
 function lignesDiscussion(){
   const d = S.disc;
   if(!d || !d.charge) return '<div class="squelette"></div><div class="squelette"></div>';
   if(!d.ok) return `<p class="sous">${E(d.message || LIB_DISC.indispo)}</p>`;
   if(!d.messages.length) return '<p class="sous" style="text-align:center;margin:18px 0">Aucun message pour l\'instant. Écrivez le premier.</p>';
-  return d.messages.map(m => `<div class="msg-d${m.moi ? ' moi' : ''}">
+  const ecrire = d.peut_ecrire !== false;
+  return d.messages.map(m => `<div class="msg-d${m.moi ? ' moi' : ''}${m.epingle ? ' pin-on' : ''}">
       <span class="d-av${m.equipe ? ' eq' : ''}">${E(initialesPseudo(m.nom))}</span>
-      <div class="d-co"><div class="d-bulle"><b>${E(m.nom)}${m.equipe ? ' · équipe' : ''}</b>${E(m.texte)}</div>
+      <div class="d-co"><div class="d-bulle"><b>${E(m.nom)}${m.equipe ? ' · équipe' : ''}</b>${m.reponse ? `<span class="d-cite"><i>${E(m.reponse.nom)}</i>${E(m.reponse.extrait)}${(m.reponse.extrait || '').length >= 90 ? '…' : ''}</span>` : ''}${discMentions(E(m.texte))}</div>
         <div class="d-pied"><button class="d-coeur${m.aime ? ' on' : ''}" data-disc-aimer="${E(m.id)}" aria-pressed="${!!m.aime}">${m.aime ? '❤️' : '🤍'}${m.coeurs ? ' ' + m.coeurs : ''}</button>
-        <span>${E(heureH(m.cree_le))}</span>${m.moi || d.equipe ? `<button class="d-suppr" data-disc-suppr="${E(m.id)}">Supprimer</button>` : ''}</div></div>
+        <span>${E(heureH(m.cree_le))}</span>${m.modifie ? '<span class="d-mod">modifié</span>' : ''}
+        ${ecrire ? `<button class="d-act" data-disc-repondre="${E(m.id)}">Répondre</button>` : ''}
+        ${m.moi ? `<button class="d-act" data-disc-modifier="${E(m.id)}">Modifier</button>` : ''}
+        ${d.equipe ? `<button class="d-act d-epi" data-disc-epingler="${E(m.id)}" data-on="${m.epingle ? 0 : 1}">${m.epingle ? 'Désépingler' : '📌 Épingler'}</button>` : ''}
+        ${m.moi || d.equipe ? `<button class="d-suppr" data-disc-suppr="${E(m.id)}">Supprimer</button>` : ''}</div></div>
     </div>`).join('');
+}
+function discContexte(){
+  const z = document.getElementById('disc-ctx'); if(!z) return;
+  const r = S.discRep, e = S.discEdit;
+  z.hidden = !(r || e);
+  z.innerHTML = e ? `<span>✎ Modification de votre message</span><button type="button" data-disc-annuler aria-label="Annuler">✕</button>`
+    : r ? `<span>↩︎ Réponse à <b>${E(r.nom)}</b></span><button type="button" data-disc-annuler aria-label="Annuler">✕</button>` : '';
+}
+function discSuggestions(champ){
+  const z = document.getElementById('disc-sugg'); if(!z || !champ) return;
+  const avant = champ.value.slice(0, champ.selectionStart == null ? champ.value.length : champ.selectionStart);
+  const m = avant.match(/(^|\s)@([^@\n]{0,30})$/);
+  const auteurs = (S.disc && S.disc.auteurs) || [];
+  if(!m || !auteurs.length){ z.hidden = true; z.innerHTML = ''; return; }
+  const q = m[2].toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const liste = auteurs.filter(n => n.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes(q)).slice(0, 6);
+  if(!liste.length){ z.hidden = true; z.innerHTML = ''; return; }
+  z.hidden = false;
+  z.innerHTML = '<small>Ont déjà écrit dans la discussion</small>' + liste.map(n => `<button type="button" data-disc-mention="${E(n)}"><span class="d-av">${E(initialesPseudo(n))}</span><span>${E(n)}</span></button>`).join('');
 }
 function texteEcrivent(){
   const e = (S.disc && S.disc.ecrivent) || [], v = (S.disc && S.disc.voient) || 0;
@@ -7855,6 +7894,7 @@ function majDiscussionDom(){
   const zone = vue();
   const bas = (zone.scrollTop + zone.clientHeight) >= zone.scrollHeight - 160;
   fil.innerHTML = lignesDiscussion();
+  const pin = document.getElementById('disc-epingle'); if(pin) pin.innerHTML = blocEpingle();
   const e = document.getElementById('disc-ecrit'); if(e) e.innerHTML = texteEcrivent();
   const n = document.getElementById('disc-total'); if(n) n.textContent = (S.disc && S.disc.total ? S.disc.total : 0) + ' message' + (S.disc && S.disc.total > 1 ? 's' : '');
   const g = document.getElementById('disc-stats'); if(g) g.innerHTML = blocStatsGroupe();
@@ -7875,11 +7915,14 @@ function ecranDiscussion(){
     ${fel}
     <div id="disc-stats">${blocStatsGroupe()}</div>
     <div class="libelle" style="margin-top:18px">Discussion<span class="num" id="disc-total">${S.disc && S.disc.total ? S.disc.total + ' message' + (S.disc.total > 1 ? 's' : '') : ''}</span></div>
+    <div id="disc-epingle">${blocEpingle()}</div>
     <div id="disc-fil" class="disc-fil">${lignesDiscussion()}</div>
     <div id="disc-ecrit" class="disc-ecrit">${texteEcrivent()}</div>
     ${lectureSeule ? `<div class="disc-invite"><b>Pour écrire, il faut être inscrit à la composition.</b>
       <span>Vous pouvez lire toute la discussion. Pour participer à la prochaine, inscrivez-vous.</span>
-      ${S.epreuve && S.epreuve.etat === 'a_venir' ? `<button class="cta" data-inscrire-nat="${E(S.epreuve.id)}">M'inscrire à la prochaine composition</button>` : ''}</div>` : `<form class="disc-saisie" id="disc-form" autocomplete="off">
+      ${S.epreuve && S.epreuve.etat === 'a_venir' ? `<button class="cta" data-inscrire-nat="${E(S.epreuve.id)}">M'inscrire à la prochaine composition</button>` : ''}</div>` : `<div class="disc-sugg" id="disc-sugg" hidden></div>
+    <div class="disc-ctx" id="disc-ctx" hidden></div>
+    <form class="disc-saisie" id="disc-form" autocomplete="off">
       <input id="disc-champ" type="text" maxlength="500" placeholder="Écrire un message…" value="${E(S.discBrouillon || '')}" enterkeyhint="send">
       <button type="submit" class="disc-envoi" aria-label="Envoyer">➤</button>
     </form>`}
@@ -7887,8 +7930,10 @@ function ecranDiscussion(){
   const champ = document.getElementById('disc-champ'), form = document.getElementById('disc-form');
   if(!champ || !form) return;
   let dernierSignal = 0;
+  discContexte();
   champ.addEventListener('input', () => {
     S.discBrouillon = champ.value;
+    discSuggestions(champ);
     const t = Date.now();
     if(champ.value.trim() && t - dernierSignal > 5000 && base){ dernierSignal = t; base.rpc('discussion_ecrit', { p_epreuve: id }).then(() => {}, () => {}); }
   });
@@ -7897,16 +7942,58 @@ function ecranDiscussion(){
     const texte = champ.value.trim(); if(!texte || !base) return;
     const bouton = form.querySelector('button'); bouton.disabled = true;
     try{
-      const { data } = await base.rpc('discussion_envoyer', { p_epreuve: id, p_texte: texte });
-      if(data && data.ok){ champ.value = ''; S.discBrouillon = ''; pister('DISCUSSION_MESSAGE'); await chargerDiscussion(id, false); vue().scrollTo({ top: vue().scrollHeight, behavior:'smooth' }); }
+      const edit = S.discEdit, rep = S.discRep;
+      const { data } = edit
+        ? await base.rpc('discussion_modifier', { p_message: edit, p_texte: texte })
+        : await base.rpc('discussion_envoyer', { p_epreuve: id, p_texte: texte, p_reponse: rep ? rep.id : null });
+      if(data && data.ok){
+        champ.value = ''; S.discBrouillon = ''; S.discEdit = null; S.discRep = null; discContexte(); discSuggestions(champ);
+        pister(edit ? 'DISCUSSION_MODIFIE' : rep ? 'DISCUSSION_REPONSE' : 'DISCUSSION_MESSAGE');
+        await chargerDiscussion(id, false); if(!edit) vue().scrollTo({ top: vue().scrollHeight, behavior:'smooth' });
+      }
       else toast((data && data.message) || 'Message non envoyé.');
     }catch(e){ toast('Message non envoyé : vérifiez votre connexion.'); }
     bouton.disabled = false;
   });
 }
 document.addEventListener('click', async ev => {
-  const b = ev.target.closest('[data-discussion],[data-disc-aimer],[data-disc-suppr]'); if(!b) return;
+  const b = ev.target.closest('[data-discussion],[data-disc-aimer],[data-disc-suppr],[data-disc-repondre],[data-disc-modifier],[data-disc-epingler],[data-disc-mention],[data-disc-annuler]'); if(!b) return;
   if(b.dataset.discussion){ ev.preventDefault(); return ouvrirDiscussion(b.dataset.discussion); }
+  const champ = document.getElementById('disc-champ');
+  const msg = k => S.disc && S.disc.messages ? S.disc.messages.find(x => x.id === k) : null;
+  if(b.hasAttribute('data-disc-annuler')){
+    if(S.discEdit && champ){ champ.value = ''; S.discBrouillon = ''; }
+    S.discEdit = null; S.discRep = null; discContexte(); return;
+  }
+  if(b.dataset.discRepondre){
+    const m = msg(b.dataset.discRepondre); if(!m || !champ) return;
+    S.discEdit = null; S.discRep = { id: m.id, nom: m.nom };
+    const tag = '@' + m.nom + ' ';
+    if(!champ.value.startsWith(tag)) champ.value = tag + champ.value.replace(/^@[^\s]*\s?/, '');
+    S.discBrouillon = champ.value; discContexte(); champ.focus(); champ.setSelectionRange(champ.value.length, champ.value.length);
+    return;
+  }
+  if(b.dataset.discModifier){
+    const m = msg(b.dataset.discModifier); if(!m || !champ) return;
+    S.discRep = null; S.discEdit = m.id; champ.value = m.texte; S.discBrouillon = m.texte; discContexte(); champ.focus();
+    return;
+  }
+  if(b.dataset.discMention && champ){
+    const pos = champ.selectionStart == null ? champ.value.length : champ.selectionStart;
+    const avant = champ.value.slice(0, pos).replace(/@([^@\n]{0,30})$/, '@' + b.dataset.discMention + ' ');
+    champ.value = avant + champ.value.slice(pos); S.discBrouillon = champ.value;
+    discSuggestions(champ); champ.focus(); champ.setSelectionRange(avant.length, avant.length);
+    return;
+  }
+  if(b.dataset.discEpingler){
+    const on = b.dataset.on === '1';
+    try{
+      const { data } = await base.rpc('discussion_epingler', { p_message: b.dataset.discEpingler, p_on: on });
+      if(data && data.ok){ toast(on ? 'Message épinglé.' : 'Message désépinglé.'); if(S.discId) await chargerDiscussion(S.discId, false); }
+      else toast((data && data.message) || 'Action non enregistrée.');
+    }catch(e){ toast('Action non enregistrée.'); }
+    return;
+  }
   if(b.dataset.discAimer && S.disc && S.disc.messages){
     const m = S.disc.messages.find(x => x.id === b.dataset.discAimer); if(!m) return;
     m.aime = !m.aime; m.coeurs = Math.max(0, (m.coeurs || 0) + (m.aime ? 1 : -1)); majDiscussionDom();
