@@ -897,7 +897,7 @@ function ouvrirPopupPaiementD(){
     <p style="color:var(--sous);margin:0 0 20px;font-size:14px;line-height:1.5">Accède à toutes les révisions, compositions et ton plan personnalisé. Résilie à tout moment.</p>
     <div style="display:grid;gap:10px;margin-bottom:18px">
       <button class="cta" style="margin:0" data-go="abonnement" data-paiement-plus-tard-close="1">
-        Voir les offres<small>À partir de 1 000 FCFA par mois</small>
+        Voir les offres<small>${enLancement() ? '1 000 FCFA par mois au lieu de 2 000, jusqu\'au 30 novembre' : 'À partir de 2 000 FCFA par mois'}</small>
       </button>
       <button class="lien" style="display:block;text-align:center;padding:12px 0" data-paiement-plus-tard="1">
         Plus tard
@@ -1433,13 +1433,15 @@ function fenetreAnnonce(n){
     }, 1000);
   } else if(genre === 'bilan'){
     const toutes = String(n.message || '').split('\n').map(l => l.split('|')).filter(l => l.length === 2);
-    const sem = toutes.find(l => l[0] === 'Semaine');
-    const lignes = toutes.filter(l => l[0] !== 'Semaine');
+    const niveau = idLien === 'niveau';
+    const sem = toutes.find(l => l[0] === 'Semaine' || l[0] === 'Message');
+    const lignes = toutes.filter(l => l[0] !== 'Semaine' && l[0] !== 'Message');
     const place = lignes.find(l => l[0] === 'Ta place');
+    if(niveau) f.classList.add('carte-niveau');
     f.innerHTML = `<div class="fe-carte">
-      <div class="fe-marque">Mon Concours · Ta semaine</div>
-      <h2 class="fe-titre">Ta semaine sur Mon Concours</h2>
-      <p class="fe-texte" style="margin-bottom:10px">${sem ? E(sem[1]) + '.' : 'Tes 7 derniers jours, en chiffres.'}</p>
+      <div class="fe-marque">Mon Concours · ${niveau ? 'Ton niveau' : 'Ta semaine'}</div>
+      <h2 class="fe-titre">${E(niveau ? (n.titre || 'Ton niveau') : 'Ta semaine sur Mon Concours')}</h2>
+      <p class="fe-texte" style="margin-bottom:10px">${sem ? E(sem[1]) + (niveau ? '' : '.') : 'Tes 7 derniers jours, en chiffres.'}</p>
       <div class="bilan-lignes">${lignes.map(l => `<div class="bilan-l"><span>${E(l[0])}</span><b class="num">${E(l[1])}</b></div>`).join('')}</div>
       <button class="cta" data-fe="partager-bilan">Partager mon bilan sur WhatsApp</button>
       <button class="cta creux" style="margin-top:10px" data-fe="suite-erreurs">Voir mes erreurs</button>
@@ -1468,7 +1470,9 @@ function fenetreAnnonce(n){
     if(b && b.dataset.fe === 'inscrire'){ fermer(false); S.sansInvitation = notifsAEncourager(); inscrireNationale(idLien, false).finally(() => { S.sansInvitation = false; }); }
     else if(b && b.dataset.fe === 'partager-bilan'){
       const l = f._bilan || [], g = k => (l.find(x => x[0] === k) || [])[1] || '';
-      const t = `Ma semaine sur Mon Concours : ${g('Jours travaillés')} jours travaillés, ${g('Questions faites')} questions, ${g('Bonnes réponses')} de bonnes réponses, ${g('Erreurs refermées')} erreurs refermées. ${g('Ta place')}. Prépare ton concours avec moi : ${CONTACT.site}`;
+      const t = idLien === 'niveau'
+        ? `Mon niveau sur Mon Concours : ${g('Ton niveau')}${g('Bonnes réponses') ? ', ' + g('Bonnes réponses') + ' de bonnes réponses' : ''}${g('Point fort') ? '. Point fort : ' + g('Point fort') : ''}. Prépare ton concours avec moi : ${CONTACT.site}`
+        : `Ma semaine sur Mon Concours : ${g('Jours travaillés')} jours travaillés, ${g('Questions faites')} questions, ${g('Bonnes réponses')} de bonnes réponses, ${g('Erreurs refermées')} erreurs refermées. ${g('Ta place')}. Prépare ton concours avec moi : ${CONTACT.site}`;
       pister('WEEK_REPORT_SHARED', {});
       window.open('https://wa.me/?text=' + encodeURIComponent(t), '_blank', 'noopener');
     }
@@ -3095,9 +3099,16 @@ function ecranConnexion(){
    ===================================================================== */
 const nomFormule = f => ({ semaine:'Abonnement Semaine', mensuelle:'Abonnement Mois', annuelle:'Abonnement Année', essai:'Essai gratuit' })[f] || 'Abonnement';
 /* Trois abonnements, jamais quatre. Aucun chiffre inventé : le prix par jour est un simple calcul. */
-const FORMULES = {
-  mensuelle:{ cle:'mensuelle', n:'Abonnement Mois',    prix:'1 000 FCFA', montant:1000, per:'30 jours', jour:'33 F par jour', reco:false },
-  annuelle: { cle:'annuelle', n:'Abonnement Année',   prix:'4 000 FCFA', montant:4000, per:'12 mois',  jour:'11 F par jour', reco:true }
+/* Offre de lancement : −50 % jusqu'au 30 novembre 2026 à minuit. Le 1er décembre, les prix réels
+   (2 000 F le mois, 8 000 F l'année) s'appliquent tout seuls, ici comme dans la base (tarifs). */
+const FIN_LANCEMENT = Date.parse('2026-12-01T00:00:00Z');
+const enLancement = () => Date.now() < FIN_LANCEMENT;
+const FORMULES = enLancement() ? {
+  mensuelle:{ cle:'mensuelle', n:'Abonnement Mois',    prix:'1 000 FCFA', montant:1000, ancien:'2 000 FCFA', per:'30 jours', jour:'33 F par jour', reco:false },
+  annuelle: { cle:'annuelle', n:'Abonnement Année',   prix:'4 000 FCFA', montant:4000, ancien:'8 000 FCFA', per:'12 mois',  jour:'11 F par jour', reco:true }
+} : {
+  mensuelle:{ cle:'mensuelle', n:'Abonnement Mois',    prix:'2 000 FCFA', montant:2000, per:'30 jours', jour:'67 F par jour', reco:false },
+  annuelle: { cle:'annuelle', n:'Abonnement Année',   prix:'8 000 FCFA', montant:8000, per:'12 mois',  jour:'22 F par jour', reco:true }
 };
 const OPERATEURS = {
   orange:{ nom:'Orange Money', pastille:'OM', cls:'om' },
@@ -3183,11 +3194,11 @@ function carteFormule(k, sous){
     ? (f.ancien ? '12 mois sans limite' : '12 mois sans limite' + (douze > f.montant ? ', <s>au lieu de ' + E(fmtFcfa(douze)) + '</s> en payant mois par mois' : ''))
     : '30 jours sans limite';
   return `<div class="formule ${an ? 'reco' : ''} ${f.ancien ? 'flash' : ''}">
-    ${f.ancien ? '<span class="ruban">promotion</span>' : an ? '<span class="ruban">recommandé</span>' : ''}
+    ${f.ancien ? '<span class="ruban">' + (S.promo ? 'promotion' : '−50 %') + '</span>' : an ? '<span class="ruban">recommandé</span>' : ''}
     <div class="haut"><span class="nom">${E(f.n)}</span>
       <span class="prix">${f.ancien ? `<s class="barre">${E(f.ancien)}</s> ` : ''}${E(f.prix)}</span></div>
     <p class="sous" style="margin:4px 0 0">${sous || sousDef}</p>
-    ${f.ancien ? `<div class="flash-reste">${E(S.promo ? promoFin() : '')}</div>` : ''}
+    ${f.ancien ? `<div class="flash-reste">${E(S.promo ? promoFin() : (enLancement() ? 'Offre de lancement jusqu\'au 30 novembre, puis ' + (an ? '8 000' : '2 000') + ' FCFA' : ''))}</div>` : ''}
     <button class="cta${an ? '' : ' creux'}" style="margin-top:12px" data-pass="${k}">${an ? 'Choisir l\'année' : 'Choisir le mois'}</button>
   </div>`;
 }

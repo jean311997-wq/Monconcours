@@ -1,3 +1,6 @@
+/* Prix affichés dans les messages : offre de lancement jusqu'au 30 novembre 2026, prix réels ensuite. */
+const LANCEMENT_ADMIN = () => Date.now() < Date.parse('2026-12-01T00:00:00Z');
+const PRIX_M = () => LANCEMENT_ADMIN() ? '1 000' : '2 000', PRIX_A = () => LANCEMENT_ADMIN() ? '4 000' : '8 000';
 /* ============================================================
    MON CONCOURS · administration
    Encapsulé : aucun conflit possible avec un autre script.
@@ -318,7 +321,7 @@ function lienWa(tel, texte){
 function messageRenouvellement(c){
   const prenom = (c.nom || '').trim().split(/\s+/)[0];
   const fin = new Date(c.fin_le).toLocaleDateString('fr-FR', { day:'numeric', month:'long' });
-  return 'Bonjour ' + prenom + ', c\'est Mon Concours. Ton abonnement se termine le ' + fin + (c.concours ? ' et tu prépares le concours ' + c.concours : '') + '. Pour continuer sans coupure, tu peux le renouveler dans l\'application : Mois 1 000 F, Année 4 000 F. Je t\'aide si tu veux.';
+  return 'Bonjour ' + prenom + ', c\'est Mon Concours. Ton abonnement se termine le ' + fin + (c.concours ? ' et tu prépares le concours ' + c.concours : '') + '. Pour continuer sans coupure, tu peux le renouveler dans l\'application : Mois ' + PRIX_M() + ' F, Année ' + PRIX_A() + ' F. Je t\'aide si tu veux.';
 }
 function messageInactif(c){
   const prenom = (c.nom || '').trim().split(/\s+/)[0];
@@ -545,9 +548,9 @@ function messageRenouvellement(c){
   const prenom = (c.nom || '').trim().split(/\s+/)[0];
   const reste = Math.ceil((new Date(c.fin_le) - Date.now()) / 86400000);
   const debut = 'Bonjour ' + prenom + ', c\'est l\'équipe Mon Concours. ';
-  if(reste <= 0) return debut + 'Ton abonnement est terminé. Tu veux le renouveler pour retrouver l\'accès complet ? Je peux t\'aider à payer en deux minutes. L\'Abonnement Année (4 000 F) couvre toute la saison.';
+  if(reste <= 0) return debut + 'Ton abonnement est terminé. Tu veux le renouveler pour retrouver l\'accès complet ? Je peux t\'aider à payer en deux minutes. L\'Abonnement Année (' + PRIX_A() + ' F) couvre toute la saison.';
   if(reste <= 1) return debut + 'Ton abonnement se termine demain. Je peux t\'aider à le renouveler en deux minutes, pour ne pas perdre ton rythme.';
-  return debut + 'Ton abonnement se termine dans ' + reste + ' jours. Pour continuer sans limite, tu peux le renouveler, ou passer à l\'Abonnement Année (4 000 F) qui couvre toute la saison. Je t\'aide si tu veux.';
+  return debut + 'Ton abonnement se termine dans ' + reste + ' jours. Pour continuer sans limite, tu peux le renouveler, ou passer à l\'Abonnement Année (' + PRIX_A() + ' F) qui couvre toute la saison. Je t\'aide si tu veux.';
 }
 async function chargerRenouvellements(){
   const zone = $('#pai-renouv'); if(!zone) return;
@@ -591,7 +594,7 @@ async function vueRelancesPaiement(){
    ===================================================================== */
 const SITE = 'https://monconcoursbf.com';
 const prenomDe = c => (c.nom || '').trim().split(/\s+/)[0] || '';
-const PRIX = 'Semaine 500 F, Mois 1 000 F, Année 4 000 F (Orange Money, Moov Money ou Wave)';
+const PRIX = 'Semaine 500 F, Mois ' + PRIX_M() + ' F, Année ' + PRIX_A() + ' F' + (LANCEMENT_ADMIN() ? ' jusqu\'au 30 novembre (−50 %), puis Mois 2 000 F et Année 8 000 F' : '') + ' (Orange Money, Moov Money ou Wave)';
 function messageAvis(c){
   return 'Bonjour ' + prenomDe(c) + ', c\'est l\'équipe Mon Concours. Merci pour ton avis, on le lit vraiment. ' +
     'Je vois que tu t\'entraînes' + (c.concours ? ' pour le concours ' + c.concours : '') + ' : avec l\'abonnement, plus aucun blocage, corrections et compositions sans limite. ' +
@@ -710,7 +713,7 @@ async function vuePaiements(){
     <p style="margin:0 0 10px;color:var(--craie2);font-size:13px">Quand un proche a payé pour le candidat : indiquez le numéro de son compte Mon Concours et l'abonnement payé.</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <input id="act-tel" type="tel" inputmode="numeric" placeholder="Numéro du compte (8 chiffres)" maxlength="12" style="min-width:200px">
-      <select id="act-formule"><option value="mensuelle" selected>Abonnement Mois · 1 000 F</option><option value="annuelle">Abonnement Année · 4 000 F</option></select>
+      <select id="act-formule"><option value="mensuelle" selected>Abonnement Mois · ${PRIX_M()} F</option><option value="annuelle">Abonnement Année · ${PRIX_A()} F</option></select>
       <input id="act-note" type="text" placeholder="Note (qui a payé ?)" style="min-width:180px">
       <button class="mini" id="act-go">Activer</button>
     </div>
