@@ -3693,18 +3693,18 @@ function ecranRevisions(){
       return `<div class="mat-rev">
         <div class="mr-tete">
           <span class="ic">${E(sigle(nom))}</span>
-          <div class="mr-co"><b>${E(nom)}</b>
+          <div class="mr-co"><b>${E(nom)}${nb ? `<em class="mr-pct">${pc} %</em>` : ''}</b>
             ${nb ? `<span class="bar"><i style="width:${pc}%"></i></span>
             <span class="pc">${faites} sur ${nb} question${nb>1?'s':''} travaillée${nb>1?'s':''}${p && p.faites ? ' · ' + Math.round(100 * p.reussies / Math.max(1, p.faites)) + ' % de réussite' : ''}</span>
             ${limiteMatiere ? `<span class="pc gratuit-reste">${faites >= LIMITE_MATIERE ? 'Abonnement gratuit terminé' : 'Gratuit : ' + faites + ' sur ' + LIMITE_MATIERE + ' questions'}</span>` : ''}` : ''}
-            ${chap.length ? `<span class="pc">${chap.length} chapitre${chap.length>1?'s':''} de cours${S.util.connecte ? ' · ' + nLus + ' lu' + (nLus>1?'s':'') : ''}</span>` : ''}
+            ${chap.length ? `<span class="pc${S.util.connecte && nLus >= chap.length ? ' mr-fini' : ''}">${S.util.connecte && nLus >= chap.length ? '✓ Cours terminé · ' + chap.length + ' chapitre' + (chap.length>1?'s':'') : chap.length + ' chapitre' + (chap.length>1?'s':'') + ' de cours' + (S.util.connecte ? ' · ' + nLus + ' lu' + (nLus>1?'s':'') : '')}</span>` : ''}
           </div>
         </div>
         <div class="mr-actions">
-          ${chap.length ? `<button data-matiere="${encodeURIComponent(nom)}">${ico('lire',16)}<span>${lecturePos()[nom] ? 'Reprendre le cours' : 'Lire le cours'}</span></button>` : ''}
+          ${chap.length ? `<button data-matiere="${encodeURIComponent(nom)}">${ico('lire',16)}<span>${S.util.connecte && nLus >= chap.length ? 'Revoir le cours' : lecturePos()[nom] ? 'Reprendre le cours' : nLus ? 'Lire le cours' : 'Commencer le cours'}</span></button>` : ''}
           ${nb ? (limiteMatiere && faites >= LIMITE_MATIERE
             ? `<button class="plein verrou" data-abo-matiere="${E(nom)}">${ico('cadenas',16)}<span>Débloquer la suite</span></button>`
-            : `<button class="plein" data-mat="${E(nom)}">${ico('revisions',16)}<span>${faites > 0 ? 'Continuer' : 'Faire les QCM'}</span></button>`) : ''}
+            : `<button class="plein" data-mat="${E(nom)}">${ico('revisions',16)}<span>${faites > 0 ? 'Continuer le QCM' : 'Faire les QCM'}</span></button>`) : ''}
         </div>
       </div>`;
     }).join('')}
@@ -4675,8 +4675,9 @@ function ecranLecture(){
 
       <div class="carte" style="margin-top:16px">
         <div class="libelle" style="margin-bottom:8px">Sommaire</div>
-        ${lot.map((r,i)=>`<button class="lien" style="display:block;text-align:left;padding:7px 0"
-           data-vers="chap-${i}"><span class="num">${i+1}.</span> ${E(r.titre)}</button>`).join('')}
+        ${(() => { const dej = S.lus || [], pos = lecturePos()[S.matiereOuverte], enCours = pos && pos.chap;
+          return lot.map((r,i)=>{ const lu = dej.includes(r.id);
+            return `<button class="lien som-l${lu ? ' lu' : ''}" data-vers="chap-${i}"><i class="som-n">${lu ? '✓' : i+1}</i><span>${E(r.titre)}</span>${!lu && enCours === i ? '<small>en cours</small>' : ''}</button>`; }).join(''); })()}
       </div>
 
       ${lot.map((r,i)=>`
@@ -4684,6 +4685,7 @@ function ecranLecture(){
           <div class="eyebrow">Chapitre ${i+1} sur ${lot.length}${r.theme ? ' · ' + E(r.theme) : ''}</div>
           <h2 class="titre" style="font-size:21px;margin:6px 0 0">${E(r.titre)}</h2>
           <div class="carte lecon" style="margin-top:12px">${miseEnPage(r.texte)}</div>
+          <div class="fin-chap">${i < lot.length - 1 ? `<button class="creux" data-vers="chap-${i+1}">Chapitre suivant</button>` : ''}<button class="plein" data-cible="${E(S.matiereOuverte)}">Faire les QCM</button></div>
         </div>`).join('')}
 
       <div class="carte" style="margin-top:26px;text-align:center">

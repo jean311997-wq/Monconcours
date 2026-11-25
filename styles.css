@@ -2800,3 +2800,24 @@ body:not([data-theme="clair"]) .cg-no{color:var(--craie2);font-size:9px}
 body:not([data-theme="clair"]) .cg-b{border-color:#6F8279;color:#B8C6BE;font-size:7px}
 body:not([data-theme="clair"]) .cg-b.on{background:#2FC285;border-color:#2FC285;color:#06150E}
 body:not([data-theme="clair"]) .cg-mats .cg-m{border-bottom-color:var(--trait)}
+
+/* Mes cours : liste et lecture plus nettes */
+.mr-co b{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.mr-pct{font-style:normal;font-family:var(--d);font-weight:800;font-size:15px;color:var(--cachet)}
+.mr-co .pc.mr-fini{color:var(--cachet);font-weight:600}
+.lecon{line-height:1.65}
+.lecon p{margin:0 0 11px}
+.lecon .bloc{padding:14px 15px 4px;margin-bottom:14px}
+.lecon ol li{margin-bottom:10px}
+.som-l{display:flex!important;align-items:center;gap:11px;width:100%;text-align:left;padding:9px 0!important;border-bottom:1px solid var(--trait)}
+.som-l:last-child{border-bottom:0}
+.som-l span{flex:1}
+.som-n{flex:none;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:12px;font-weight:700;background:var(--ardoise2);color:var(--craie2)}
+.som-l.lu .som-n{background:var(--cachet);color:#fff}
+.som-l small{font-size:11px;color:var(--or);font-weight:600}
+.fin-chap{display:flex;gap:8px;margin-top:12px}
+.fin-chap button{flex:1;min-height:44px;border-radius:12px;border:1px solid var(--trait);font-size:13.5px;font-weight:600;color:var(--craie);background:none}
+.fin-chap button.plein{background:var(--cachet);border-color:var(--cachet);color:#fff}
+.som-l{text-decoration:none!important;color:var(--craie)!important;font-size:14.5px}
+.som-l span{text-decoration:none!important;border:0!important}
+.som-l:not(.lu) span{color:var(--craie)}
