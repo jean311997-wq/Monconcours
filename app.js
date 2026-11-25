@@ -7858,13 +7858,18 @@ function blocEpingle(){
   return `<div class="disc-epingle"><span class="pin" aria-hidden="true">📌</span><div><b>Message épinglé · ${E(p.nom)}</b><span>${discMentions(E(p.texte))}</span>
     ${d.equipe ? `<button class="d-act" data-disc-epingler="${E(p.id)}" data-on="0">Désépingler</button>` : ''}</div></div>`;
 }
+function etiquetteJour(iso){
+  const cle = x => new Date(x).toISOString().slice(0, 10), j = cle(iso), auj = cle(Date.now()), hier = cle(Date.now() - 86400000);
+  return j === auj ? 'Aujourd\'hui' : j === hier ? 'Hier' : new Date(iso).toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric', timeZone:'UTC' });
+}
 function lignesDiscussion(){
   const d = S.disc;
   if(!d || !d.charge) return '<div class="squelette"></div><div class="squelette"></div>';
   if(!d.ok) return `<p class="sous">${E(d.message || LIB_DISC.indispo)}</p>`;
   if(!d.messages.length) return '<p class="sous" style="text-align:center;margin:18px 0">Aucun message pour l\'instant. Écrivez le premier.</p>';
   const ecrire = d.peut_ecrire !== false;
-  return d.messages.map(m => `<div class="msg-d${m.moi ? ' moi' : ''}${m.epingle ? ' pin-on' : ''}">
+  let jourPrec = '';
+  return d.messages.map(m => { const jour = String(m.cree_le).slice(0, 10), sep = jour !== jourPrec ? `<div class="d-jour"><span>${E(etiquetteJour(m.cree_le))}</span></div>` : ''; jourPrec = jour; return sep + `<div class="msg-d${m.moi ? ' moi' : ''}${m.epingle ? ' pin-on' : ''}">
       <span class="d-av${m.equipe ? ' eq' : ''}">${E(initialesPseudo(m.nom))}</span>
       <div class="d-co"><div class="d-bulle"><b>${E(m.nom)}${m.equipe ? ' · équipe' : ''}</b>${m.reponse ? `<span class="d-cite"><i>${E(m.reponse.nom)}</i>${E(m.reponse.extrait)}${(m.reponse.extrait || '').length >= 90 ? '…' : ''}</span>` : ''}${discMentions(E(m.texte))}</div>
         <div class="d-pied"><button class="d-coeur${m.aime ? ' on' : ''}" data-disc-aimer="${E(m.id)}" aria-pressed="${!!m.aime}">${m.aime ? '❤️' : '🤍'}${m.coeurs ? ' ' + m.coeurs : ''}</button>
@@ -7873,7 +7878,7 @@ function lignesDiscussion(){
         ${m.moi ? `<button class="d-act" data-disc-modifier="${E(m.id)}">Modifier</button>` : ''}
         ${d.equipe ? `<button class="d-act d-epi" data-disc-epingler="${E(m.id)}" data-on="${m.epingle ? 0 : 1}">${m.epingle ? 'Désépingler' : '📌 Épingler'}</button>` : ''}
         ${m.moi || d.equipe ? `<button class="d-suppr" data-disc-suppr="${E(m.id)}">Supprimer</button>` : ''}</div></div>
-    </div>`).join('');
+    </div>`; }).join('');
 }
 function discContexte(){
   const z = document.getElementById('disc-ctx'); if(!z) return;
