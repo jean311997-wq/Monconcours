@@ -2787,3 +2787,6 @@ body.copie-bloc #mt-banniere, body.copie-bloc .sw-bulle, body.copie-bloc #fab-ca
 .disc-pre button{font:inherit;font-size:13px;padding:6px 11px;border-radius:99px;background:var(--ardoise);border:1px solid var(--trait);color:var(--craie)}
 .d-jour{text-align:center;margin:6px 0 0}
 .d-jour span{display:inline-block;font-size:12px;font-weight:600;color:var(--craie2);background:var(--ardoise);border:1px solid var(--trait);padding:5px 12px;border-radius:99px}
+
+/* note du podium : figée (la règle globale .note est sticky) */
+.marche .note{position:static;top:auto}

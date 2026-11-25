@@ -7837,7 +7837,7 @@ function blocDiscussionApercu(id){
   </div>`;
 }
 function ouvrirDiscussion(id){
-  S.discId = id;
+  S.discId = id; S.discPreFin = Date.now() + 60000;
   if(!(S.disc && S.disc.id === id)) S.disc = null;
   aller('discussion');
   chargerDiscussion(id, false); chargerStatsGroupe(id);
@@ -7946,7 +7946,7 @@ function ecranDiscussion(){
     <div id="disc-ecrit" class="disc-ecrit">${texteEcrivent()}</div>
     ${lectureSeule ? `<div class="disc-invite"><b>Pour écrire, il faut être inscrit à la composition.</b>
       <span>Vous pouvez lire toute la discussion. Pour participer à la prochaine, inscrivez-vous.</span>
-      ${S.epreuve && S.epreuve.etat === 'a_venir' ? `<button class="cta" data-inscrire-nat="${E(S.epreuve.id)}">M'inscrire à la prochaine composition</button>` : ''}</div>` : `<div class="disc-pre" id="disc-pre"><button type="button" data-disc-pre="Bravo 👏">👏 Bravo</button><button type="button" data-disc-pre="Courage 💪">💪 Courage</button><button type="button" data-disc-pre="Merci 🙏">🙏 Merci</button></div>
+      ${S.epreuve && S.epreuve.etat === 'a_venir' ? `<button class="cta" data-inscrire-nat="${E(S.epreuve.id)}">M'inscrire à la prochaine composition</button>` : ''}</div>` : `${Date.now() < (S.discPreFin || 0) ? `<div class="disc-pre" id="disc-pre"><button type="button" data-disc-pre="Bravo 👏">👏 Bravo</button><button type="button" data-disc-pre="Courage 💪">💪 Courage</button><button type="button" data-disc-pre="Merci 🙏">🙏 Merci</button></div>` : ''}
     <div class="disc-sugg" id="disc-sugg" hidden></div>
     <div class="disc-ctx" id="disc-ctx" hidden></div>
     <form class="disc-saisie" id="disc-form" autocomplete="off">
@@ -7957,6 +7957,8 @@ function ecranDiscussion(){
   const champ = document.getElementById('disc-champ'), form = document.getElementById('disc-form');
   if(!champ || !form) return;
   let dernierSignal = 0;
+  const resteMs = (S.discPreFin || 0) - Date.now();
+  if(resteMs > 0) setTimeout(() => { const z = document.getElementById('disc-pre'); if(z) z.remove(); }, resteMs);
   discContexte();
   champ.addEventListener('input', () => {
     S.discBrouillon = champ.value;
