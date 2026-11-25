@@ -2790,3 +2790,13 @@ body.copie-bloc #mt-banniere, body.copie-bloc .sw-bulle, body.copie-bloc #fab-ca
 
 /* note du podium : figée (la règle globale .note est sticky) */
 .marche .note{position:static;top:auto}
+
+/* correction générale : lisible en mode sombre */
+body:not([data-theme="clair"]) .cg-stats div{background:var(--ardoise);border-color:var(--trait);color:var(--craie)}
+body:not([data-theme="clair"]) .cg-stats b{color:var(--craie)}
+body:not([data-theme="clair"]) .cg-stats span,body:not([data-theme="clair"]) .cg-sous,body:not([data-theme="clair"]) .cg-tete span:not(.cg-sceau){color:var(--craie2)}
+body:not([data-theme="clair"]) .cg-tete{border-bottom-color:var(--trait)}
+body:not([data-theme="clair"]) .cg-no{color:var(--craie2);font-size:9px}
+body:not([data-theme="clair"]) .cg-b{border-color:#6F8279;color:#B8C6BE;font-size:7px}
+body:not([data-theme="clair"]) .cg-b.on{background:#2FC285;border-color:#2FC285;color:#06150E}
+body:not([data-theme="clair"]) .cg-mats .cg-m{border-bottom-color:var(--trait)}
