@@ -1,0 +1,2 @@
+-- 25 novembre 2026 — discussion_charger renvoie aussi 'participants' (candidats distincts, équipe exclue) et 'recents' (4 derniers noms).
+-- Appliquée via apply_migration (discussion_participants_resume) ; voir 20261125_01 pour le reste de la fonction.

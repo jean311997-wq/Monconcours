@@ -6239,6 +6239,19 @@ function jourCourtNat(iso){
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
 /* la prochaine composition, en toutes lettres, quand on la connaît */
+const jourProchaineNat = c => {
+  // mardi → samedi, samedi → dimanche, dimanche → mardi
+  const d = new Date(c.debut_le), dec = { 2: 4, 6: 1, 0: 2 }[d.getUTCDay()];
+  if(dec === undefined) return '';
+  const n = new Date(d.getTime() + dec * 86400000);
+  return 'le ' + dateLongue(n.toISOString()) + ' à ' + heureH(n.toISOString());
+};
+const messageFelic = c => {
+  const m = (c.message || '').trim(), phrase = /\s*La prochaine composition nationale est annoncée dans l'application\.?/i;
+  if(!phrase.test(m)) return m;
+  const j = jourProchaineNat(c);
+  return (m.replace(phrase, '').trim() + (j ? ' La prochaine composition nationale a lieu ' + j + '.' : '')).trim();
+};
 const prochaineNat = () => { const e = S.epreuve; return e && e.etat === 'a_venir' && e.debut_le ? dateLongue(e.debut_le) + ' à ' + heureH(e.debut_le) : ''; };
 function texteRebours(iso){
   let s = Math.max(0, Math.floor((new Date(iso) - Date.now()) / 1000));
@@ -7790,6 +7803,13 @@ async function chargerStatsGroupe(id){
     if(S.ecran === 'discussion') majDiscussionDom();
   }catch(e){}
 }
+function blocParticipants(d){
+  const n = d && d.participants ? d.participants : 0, rec = (d && d.recents) || [];
+  if(!n || !rec.length) return '';
+  const plus = n - rec.length;
+  const txt = plus > 0 ? '+ ' + plus + ' candidat' + (plus > 1 ? 's ont participé' : ' a participé') : n + ' candidat' + (n > 1 ? 's ont participé' : ' a participé');
+  return `<div class="disc-part"><div>${rec.map(x => `<span>${E(initialesPseudo(x))}</span>`).join('')}</div><em>${txt}</em></div>`;
+}
 function blocDiscussionApercu(id){
   const d = S.disc && S.disc.id === id ? S.disc : null;
   if(d && !d.ok) return '';   // pas inscrit : on ne propose rien
@@ -7809,6 +7829,7 @@ function blocDiscussionApercu(id){
       <div class="disc-tt"><b>La discussion est ouverte</b><span>${total ? total + ' message' + (total > 1 ? 's' : '') : 'Soyez le premier à écrire'}${voient ? ' · ' + voient + ' en ligne' : ''}</span></div>
       <span class="disc-pill"><i></i>En direct</span>
     </div>
+    ${blocParticipants(d)}
     ${msgs.length ? `<div class="disc-fil-ap">${msgs.map(m => `<div class="disc-ligne"><span class="d-av">${E(initialesPseudo(m.nom))}</span><div><b>${E(m.nom)}</b><span>${E(m.texte)}</span></div></div>`).join('')}</div>` : '<p class="sous" style="margin:10px 0 0">Comparez vos réponses, posez vos questions aux autres candidats.</p>'}
     ${ligneEcrit}
     ${reste ? `<button type="button" class="disc-reste" data-discussion="${E(id)}">Voir les ${reste} autre${reste > 1 ? 's' : ''} message${reste > 1 ? 's' : ''}</button>` : ''}
@@ -7920,7 +7941,8 @@ function ecranDiscussion(){
     <div id="disc-ecrit" class="disc-ecrit">${texteEcrivent()}</div>
     ${lectureSeule ? `<div class="disc-invite"><b>Pour écrire, il faut être inscrit à la composition.</b>
       <span>Vous pouvez lire toute la discussion. Pour participer à la prochaine, inscrivez-vous.</span>
-      ${S.epreuve && S.epreuve.etat === 'a_venir' ? `<button class="cta" data-inscrire-nat="${E(S.epreuve.id)}">M'inscrire à la prochaine composition</button>` : ''}</div>` : `<div class="disc-sugg" id="disc-sugg" hidden></div>
+      ${S.epreuve && S.epreuve.etat === 'a_venir' ? `<button class="cta" data-inscrire-nat="${E(S.epreuve.id)}">M'inscrire à la prochaine composition</button>` : ''}</div>` : `<div class="disc-pre" id="disc-pre"><button type="button" data-disc-pre="Bravo 👏">👏 Bravo</button><button type="button" data-disc-pre="Courage 💪">💪 Courage</button><button type="button" data-disc-pre="Merci 🙏">🙏 Merci</button></div>
+    <div class="disc-sugg" id="disc-sugg" hidden></div>
     <div class="disc-ctx" id="disc-ctx" hidden></div>
     <form class="disc-saisie" id="disc-form" autocomplete="off">
       <input id="disc-champ" type="text" maxlength="500" placeholder="Écrire un message…" value="${E(S.discBrouillon || '')}" enterkeyhint="send">
@@ -7957,13 +7979,18 @@ function ecranDiscussion(){
   });
 }
 document.addEventListener('click', async ev => {
-  const b = ev.target.closest('[data-discussion],[data-disc-aimer],[data-disc-suppr],[data-disc-repondre],[data-disc-modifier],[data-disc-epingler],[data-disc-mention],[data-disc-annuler]'); if(!b) return;
+  const b = ev.target.closest('[data-discussion],[data-disc-aimer],[data-disc-suppr],[data-disc-repondre],[data-disc-modifier],[data-disc-epingler],[data-disc-mention],[data-disc-annuler],[data-disc-pre]'); if(!b) return;
   if(b.dataset.discussion){ ev.preventDefault(); return ouvrirDiscussion(b.dataset.discussion); }
   const champ = document.getElementById('disc-champ');
   const msg = k => S.disc && S.disc.messages ? S.disc.messages.find(x => x.id === k) : null;
   if(b.hasAttribute('data-disc-annuler')){
     if(S.discEdit && champ){ champ.value = ''; S.discBrouillon = ''; }
     S.discEdit = null; S.discRep = null; discContexte(); return;
+  }
+  if(b.dataset.discPre && champ){
+    const t = b.dataset.discPre, v = champ.value.trim();
+    champ.value = v ? v + ' ' + t : t; S.discBrouillon = champ.value; champ.focus(); champ.setSelectionRange(champ.value.length, champ.value.length);
+    return;
   }
   if(b.dataset.discRepondre){
     const m = msg(b.dataset.discRepondre); if(!m || !champ) return;
@@ -8053,27 +8080,29 @@ function ecranGagnants(){
     </div>`;
   }
   const maCompo = S.epreuve && S.epreuve.id === c.id && S.epreuve.moi && S.epreuve.moi.composition;
-  const ligne = l => `<div class="ligne-rang${l.moi ? ' moi' : ''}">
-      <span class="p num">${l.rang}</span>
-      <span class="n">${E(l.nom)}${l.moi ? ' (vous)' : ''}<em>${mmssLong(l.duree)}</em></span>
-      <span class="s num">${l.score}/${l.sur}</span>
+  const maxS = Math.max(1, ...liste.map(l => Number(l.sur) || 0));
+  const ligne = (l, att) => `<div class="rang-l${l.moi ? ' moi' : ''}${att ? ' att' : ''}${l.rang <= 3 && !att ? ' g' + l.rang : ''}">
+      <span class="rk">${l.rang}</span>
+      <span class="nm">${E(l.nom)}${l.moi ? ' <span class="toi">TOI</span>' : ''}<small>${mmssLong(l.duree)}</small></span>
+      <span class="sc"><b>${l.score}</b><small>/${l.sur}</small><i><u style="width:${Math.max(2, Math.round(100 * l.score / (Number(l.sur) || maxS)))}%"></u></i></span>
     </div>`;
   vue().innerHTML = `
   <div class="pad">
     ${tete}
     <div class="eyebrow">Composition nationale <small class="sim">(simulation)</small> · ${E(jourFr(c.debut_le))}</div>
     <h1 class="titre">Résultats · ${E(c.concours || c.titre)}</h1>
-    <p class="sous" style="margin-top:6px"><span class="num">${c.participants}</span> candidat${c.participants>1?'s':''} · ${c.places} postes à pourvoir · moyenne <span class="num">${c.moyenne ?? '—'}/${c.sur}</span></p>
     ${statut}
-    <div class="trio" style="margin-top:14px">
-      <div><b class="num">${c.admis}</b><span>admis</span></div>
-      <div><b class="num">${c.attente}</b><span>liste d'attente</span></div>
-      <div><b class="num">${c.echoues}</b><span>non admis</span></div>
+    <div class="cases-res">
+      <div class="c2"><b class="num">${c.participants}</b><span>participant${c.participants > 1 ? 's' : ''}</span></div>
+      <div class="c2"><b class="num">${c.places}</b><span>nombre de postes à pourvoir</span></div>
+      <div class="vert"><b class="num">${c.admis}</b><span>admis</span></div>
+      <div class="or"><b class="num">${c.attente}</b><span>liste d'attente</span></div>
+      <div><b class="num">${String(c.moyenne ?? '—').replace('.', ',')}</b><span>moyenne /${c.sur}</span></div>
     </div>
     ${podium.length ? `<div class="felicitations">
       <div class="eyebrow" style="color:var(--or)">Félicitations</div>
       <p>Bravo à <b>${E(podium[0].nom)}</b>, major de la composition avec <b class="num">${podium[0].score}/${podium[0].sur}</b>${c.recompense ? `. ${E(c.recompense)} lui revient` : ''}.${podium.length > 1 ? ' Bravo aussi à ' + podium.slice(1).map(l => '<b>' + E(l.nom) + '</b> (' + l.rang + 'e)').join(' et ') + '.' : ''}</p>
-      ${c.message ? `<p style="margin-top:8px">${E(c.message)}</p>` : ''}
+      ${messageFelic(c) ? `<p style="margin-top:8px">${E(messageFelic(c))}</p>` : ''}
     </div>
     <div class="podium">
       ${podium.map(l => `<div class="marche r${l.rang}${l.moi ? ' moi' : ''}">
@@ -8096,8 +8125,8 @@ function ecranGagnants(){
     ${m && peutProposer(4) ? `<div class="carte" style="margin-top:12px;text-align:left"><p class="sous" style="margin:0 0 10px">${m.rang ? 'Vous êtes ' + r(Number(m.rang)) + ' sur ' + E(c.participants) + '. ' : ''}Pour monter à la prochaine nationale, entraînez-vous sans limite :</p>
       ${offreDeuxPrix()}</div>` : ''}
 
-    ${admis.length ? `<div class="bloc"><div class="libelle">Liste des admis<span class="num">${admis.length}</span></div><div class="carte">${admis.map(ligne).join('')}</div></div>` : ''}
-    ${attente.length ? `<div class="bloc"><div class="libelle">Liste d'attente<span class="num">${attente.length}</span></div><div class="carte">${attente.map(ligne).join('')}</div></div>` : ''}
+    ${admis.length ? `<div class="bloc"><div class="lib-liste"><h2>Liste des admis</h2><span class="pill-v">${admis.length} admis</span></div><div class="liste-rang">${admis.map(l => ligne(l, false)).join('')}</div></div>` : ''}
+    ${attente.length ? `<div class="bloc"><div class="lib-liste"><h2>Liste d'attente</h2><span class="pill-o">${attente.length} en attente</span></div><div class="liste-rang">${attente.map(l => ligne(l, true)).join('')}</div></div>` : ''}
     ${c.echoues ? `<p class="sous" style="margin-top:12px">${c.echoues} candidat${c.echoues>1?'s ne sont pas admis':' n\'est pas admis'} cette semaine. Leurs noms ne sont pas publiés.</p>` : ''}
     <p class="sous" style="margin-top:14px;font-size:12px">Classement par ordre de mérite. À note égale, le candidat le plus rapide passe devant. Un candidat qui a refusé l'affichage de son nom apparaît comme « Candidat anonyme ».</p>
   </div>`;
